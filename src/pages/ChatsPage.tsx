@@ -2,9 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
+import { useLocation } from 'react-router-dom'; // ДОБАВИЛИ ДЛЯ ПЕРЕХВАТА ССЫЛОК
 import { 
   MessageSquare, Send, Search, X, ShieldCheck, 
-  Loader2, Clock, Image as ImageIcon, Heart
+  Loader2, Clock, Image as ImageIcon, Heart 
 } from 'lucide-react';
 
 interface UserProfile {
@@ -24,7 +25,6 @@ interface Message {
   createdAt: any;
 }
 
-// Утилита для загрузки изображений на ImgBB
 const uploadToImgBB = async (file: File): Promise<string> => {
   const formData = new FormData();
   formData.append('image', file);
@@ -45,28 +45,26 @@ const uploadToImgBB = async (file: File): Promise<string> => {
 
 export default function ChatsPage() {
   const { user } = useAuthStore();
+  const location = useLocation(); // ЧИТАЕМ ПАРАМЕТРЫ ПЕРЕХОДА ИЗ РАДАРА
+  
   const [contacts, setContacts] = useState<UserProfile[]>([]);
   const [selectedContact, setSelectedContact] = useState<UserProfile | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Состояния для отправки фото
   const [attachedImage, setAttachedImage] = useState<string>('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // Состояния загрузки
   const [isLoadingContacts, setIsLoadingContacts] = useState(true);
   const [isSending, setIsSending] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 1. Подписка на контакты (REAL-TIME)
+  // 1. Загрузка контактов (REAL-TIME)
   useEffect(() => {
     setIsLoadingContacts(true);
-    
-    // Вместо getDocs используем onSnapshot для живого обновления списка
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
       const loadedContacts: UserProfile[] = [];
       snapshot.forEach((doc) => {
@@ -84,7 +82,17 @@ export default function ChatsPage() {
     return () => unsubscribe();
   }, [user]);
 
-  // 2. Подписка на сообщения (REAL-TIME)
+  // 2. АВТОМАТИЧЕСКИЙ ВЫБОР ДИАЛОГА (При клике "Написать" из Радара)
+  useEffect(() => {
+    if (contacts.length > 0 && location.state?.selectedUserId) {
+      const contactToSelect = contacts.find(c => c.id === location.state.selectedUserId);
+      if (contactToSelect && selectedContact?.id !== contactToSelect.id) {
+        setSelectedContact(contactToSelect);
+      }
+    }
+  }, [contacts, location.state]);
+
+  // 3. Подписка на сообщения
   useEffect(() => {
     if (!user || !selectedContact) return;
 
@@ -109,12 +117,10 @@ export default function ChatsPage() {
     return () => unsubscribe();
   }, [user, selectedContact]);
 
-  // Умный автоскролл
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // ОБРАБОТЧИК ЗАГРУЗКИ ФОТО
   const handleImageAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -132,7 +138,6 @@ export default function ChatsPage() {
     }
   };
 
-  // 3. Отправка сообщения
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !selectedContact || (!newMessage.trim() && !attachedImage) || isSending || isUploadingImage) return;
@@ -165,7 +170,6 @@ export default function ChatsPage() {
     }
   };
 
-  // 4. Лайк сообщения
   const handleLikeMessage = async (msgId: string, currentLikes: string[] = []) => {
     if (!user) return;
     const msgRef = doc(db, 'messages', msgId);
@@ -195,9 +199,8 @@ export default function ChatsPage() {
   return (
     <div className="flex flex-col md:flex-row h-full w-full overflow-hidden select-none bg-white md:bg-[#FAFAFA]">
       
-      {/* ЛЕВАЯ ПАНЕЛЬ: КОНТАКТЫ */}
+      {/* ЛЕВАЯ ПАНЕЛЬ */}
       <div className="w-full md:w-[320px] shrink-0 md:border-r border-b border-gray-100 flex flex-col bg-white md:shadow-[1px_0_10px_rgba(0,0,0,0.01)] z-20">
-        
         <div className="p-3 md:p-5 shrink-0 flex items-center justify-between md:block">
           <div className="flex items-center justify-between md:mb-5 w-full md:w-auto">
             <h2 className="text-xl md:text-2xl font-black text-gray-950 tracking-tight">Чаты</h2>
@@ -205,7 +208,6 @@ export default function ChatsPage() {
               <span className="text-xs font-bold">{contacts.length}</span>
             </div>
           </div>
-          
           <div className="hidden md:flex relative items-center bg-gray-50 rounded-xl border border-gray-200/60 focus-within:border-gray-300 focus-within:bg-white focus-within:shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all">
             <Search className="absolute left-3.5 text-gray-400" size={16} />
             <input 
@@ -216,9 +218,7 @@ export default function ChatsPage() {
               className="w-full bg-transparent pl-10 pr-10 py-3 text-xs focus:outline-none text-gray-900 placeholder-gray-400 font-semibold"
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-3 text-gray-400 hover:text-gray-600 transition-colors">
-                <X size={14} />
-              </button>
+              <button onClick={() => setSearchQuery('')} className="absolute right-3 text-gray-400 hover:text-gray-600 transition-colors"><X size={14} /></button>
             )}
           </div>
         </div>
@@ -255,9 +255,7 @@ export default function ChatsPage() {
                         : 'w-14 h-14 md:w-12 md:h-12 rounded-[18px] md:rounded-xl border-gray-100'
                     }`} 
                   />
-                  {contact.type === 'business' && (
-                    <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-amber-500 rounded-full border-[2.5px] border-white" />
-                  )}
+                  {contact.type === 'business' && <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-amber-500 rounded-full border-[2.5px] border-white" />}
                 </div>
                 
                 <div className="md:hidden w-16 text-center">
@@ -287,7 +285,7 @@ export default function ChatsPage() {
         </div>
       </div>
       
-      {/* ПРАВАЯ ПАНЕЛЬ: ОКНО ЧАТА */}
+      {/* ПРАВАЯ ПАНЕЛЬ */}
       <div className="flex-1 flex flex-col bg-white relative min-h-0">
         {selectedContact ? (
           <>
@@ -327,47 +325,34 @@ export default function ChatsPage() {
                   return (
                     <div key={msg.id} className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'} ${isSequential ? 'mt-1' : 'mt-4'}`}>
                       <div className="group relative max-w-[85%] md:max-w-[75%]">
-                        
                         <div className={`relative px-4 py-2.5 text-[13px] font-medium tracking-wide flex flex-col gap-1.5 shadow-sm transition-all ${
                           isMine 
                             ? 'bg-gray-950 text-white rounded-2xl rounded-tr-sm' 
                             : 'bg-white border border-gray-100 text-gray-900 rounded-2xl rounded-tl-sm shadow-[0_2px_10px_rgba(0,0,0,0.02)]'
                         }`}>
-                          {/* Картинка, если есть */}
                           {msg.imageUrl && (
                             <div className="w-full max-w-[250px] rounded-xl overflow-hidden mb-1 border border-white/10">
                               <img src={msg.imageUrl} alt="attachment" className="w-full h-auto object-cover" />
                             </div>
                           )}
-                          
-                          {/* Текст сообщения */}
-                          {msg.text && (
-                            <span className="leading-relaxed whitespace-pre-wrap break-words">{msg.text}</span>
-                          )}
-                          
+                          {msg.text && <span className="leading-relaxed whitespace-pre-wrap break-words">{msg.text}</span>}
                           <span className={`text-[9px] font-bold self-end select-none mt-1 ${isMine ? 'text-white/50' : 'text-gray-400'}`}>
                             {formatTime(msg.createdAt)}
                           </span>
 
-                          {/* Кнопка лайка (появляется при наведении или если уже есть лайки) */}
                           <div className={`absolute ${isMine ? '-left-8' : '-right-8'} bottom-1 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity`}>
-                            <button 
-                              onClick={() => handleLikeMessage(msg.id, msg.likes)}
-                              className="p-1.5 rounded-full bg-white border border-gray-100 shadow-sm text-gray-400 hover:text-pink-500 hover:bg-pink-50 transition-colors"
-                            >
+                            <button onClick={() => handleLikeMessage(msg.id, msg.likes)} className="p-1.5 rounded-full bg-white border border-gray-100 shadow-sm text-gray-400 hover:text-pink-500 hover:bg-pink-50 transition-colors">
                               <Heart size={14} className={isLikedByMe ? "fill-pink-500 text-pink-500" : ""} />
                             </button>
                           </div>
                         </div>
 
-                        {/* Отображение лайков под сообщением */}
                         {hasLikes && (
                           <div className={`absolute -bottom-3 ${isMine ? 'right-2' : 'left-2'} bg-white border border-gray-100 shadow-sm rounded-full px-2 py-0.5 flex items-center gap-1 z-10 animate-fade-in`}>
                             <Heart size={10} className="fill-pink-500 text-pink-500" />
                             <span className="text-[9px] font-black text-gray-600">{msg.likes?.length}</span>
                           </div>
                         )}
-                        
                       </div>
                     </div>
                   );
@@ -376,7 +361,6 @@ export default function ChatsPage() {
               <div ref={messagesEndRef} className="h-4" />
             </div>
             
-            {/* Предпросмотр прикрепленного фото перед отправкой */}
             {attachedImage && (
               <div className="absolute bottom-[72px] md:bottom-[90px] left-4 md:left-8 z-20 animate-fade-in">
                 <div className="relative w-24 h-24 bg-white rounded-xl shadow-lg border border-gray-200 p-1">
@@ -388,18 +372,10 @@ export default function ChatsPage() {
               </div>
             )}
 
-            {/* Панель ввода */}
             <div className="p-3 md:p-6 bg-white border-t border-gray-100 shrink-0">
               <form onSubmit={handleSendMessage} className="flex gap-2 md:gap-3 max-w-4xl mx-auto items-end">
-                
-                {/* Кнопка скрепки (загрузка фото) */}
                 <input type="file" ref={fileInputRef} onChange={handleImageAttach} accept="image/*" className="hidden" />
-                <button 
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploadingImage}
-                  className="w-[44px] h-[44px] md:w-[52px] md:h-[52px] shrink-0 bg-gray-50 text-gray-500 rounded-[14px] md:rounded-2xl flex items-center justify-center hover:bg-gray-100 hover:text-brand transition-all border border-gray-200/60"
-                >
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploadingImage} className="w-[44px] h-[44px] md:w-[52px] md:h-[52px] shrink-0 bg-gray-50 text-gray-500 rounded-[14px] md:rounded-2xl flex items-center justify-center hover:bg-gray-100 hover:text-brand transition-all border border-gray-200/60">
                   {isUploadingImage ? <Loader2 size={18} className="animate-spin" /> : <ImageIcon size={20} />}
                 </button>
 
@@ -408,10 +384,7 @@ export default function ChatsPage() {
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendMessage(e);
-                      }
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); }
                     }}
                     placeholder="Написать сообщение..." 
                     className="w-full bg-transparent px-4 md:px-5 py-3.5 md:py-4 text-[13px] md:text-sm focus:outline-none text-gray-900 placeholder-gray-400 font-medium resize-none max-h-24 md:max-h-32 min-h-[44px] md:min-h-[52px] scrollbar-none"
@@ -419,11 +392,7 @@ export default function ChatsPage() {
                   />
                 </div>
 
-                <button 
-                  type="submit"
-                  disabled={(!newMessage.trim() && !attachedImage) || isSending || isUploadingImage}
-                  className="w-[44px] h-[44px] md:w-[52px] md:h-[52px] shrink-0 bg-gray-950 text-white rounded-[14px] md:rounded-2xl flex items-center justify-center hover:bg-gray-800 transition-all disabled:opacity-50 disabled:hover:bg-gray-950 shadow-md active:scale-95"
-                >
+                <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isSending || isUploadingImage} className="w-[44px] h-[44px] md:w-[52px] md:h-[52px] shrink-0 bg-gray-950 text-white rounded-[14px] md:rounded-2xl flex items-center justify-center hover:bg-gray-800 transition-all disabled:opacity-50 disabled:hover:bg-gray-950 shadow-md active:scale-95">
                   {isSending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} className="ml-0.5" />}
                 </button>
               </form>

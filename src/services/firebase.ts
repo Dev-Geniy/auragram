@@ -5,7 +5,7 @@ import { getStorage } from 'firebase/storage';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyChHiBebIPnMxRAV8Qc78GlmhIQDYGo61Y",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: "auragram-enterprise.firebaseapp.com",
   projectId: "auragram-enterprise",
   storageBucket: "auragram-enterprise.firebasestorage.app",

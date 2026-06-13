@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
-import { User, Briefcase, Heart, Users, Plus, X, Save, Sparkles, CheckCircle2 } from 'lucide-react';
+import { User, Briefcase, Users, X, Save, Sparkles, CheckCircle2 } from 'lucide-react';
 
 interface ProfilePageProps {
   currentSync: 'all' | 'business' | 'personal';

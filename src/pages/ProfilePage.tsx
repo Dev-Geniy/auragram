@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, auth, storage } from '../services/firebase';
+import { db, auth } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { 
   User, Briefcase, Users, X, Save, CheckCircle2, 
   Settings, Phone, Mail, Globe, Package, 
-  Plus, Trash2, Image as ImageIcon, Eye, Search, Camera, Bell, Loader2
+  Plus, Trash2, Image as ImageIcon, Eye, Search, Camera, Bell, Loader2, UploadCloud
 } from 'lucide-react';
 
 interface ProfilePageProps {
@@ -25,6 +24,26 @@ interface Product {
   imageUrl: string;
 }
 
+// Утилита для загрузки изображений на ImgBB
+const uploadToImgBB = async (file: File): Promise<string> => {
+  const formData = new FormData();
+  formData.append('image', file);
+  // Ваш API ключ ImgBB
+  const API_KEY = '22de10db6eb1f3ec3fca012dcc566961';
+  
+  const res = await fetch(`https://api.imgbb.com/1/upload?key=${API_KEY}`, {
+    method: 'POST',
+    body: formData,
+  });
+  
+  const data = await res.json();
+  if (data.success) {
+    return data.data.url; // Прямая ссылка на картинку
+  } else {
+    throw new Error('Ошибка загрузки ImgBB');
+  }
+};
+
 export default function ProfilePage({ currentSync, setSync, gender, setGender }: ProfilePageProps) {
   const { user, setUser } = useAuthStore();
   
@@ -33,9 +52,12 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
   const [showSuccess, setShowSuccess] = useState(false);
   const [skillInput, setSkillInput] = useState('');
   
-  // Состояния загрузки файлов
+  // Состояния загрузки фото
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingProductImg, setIsUploadingProductImage] = useState(false);
+  
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const productImgInputRef = useRef<HTMLInputElement>(null);
   
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -68,7 +90,6 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
           setProfile({ 
             ...profile, 
             ...data,
-            // Если в БД нет аватарки, берем из Google Auth
             avatar: data.avatar || user.photoURL || '',
             isPublic: data.isPublic !== undefined ? data.isPublic : true,
             contacts: data.contacts || { phone: '', email: '', website: '' },
@@ -90,45 +111,58 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
     fetchProfile();
   }, [user]);
 
-  // ФУНКЦИЯ ЗАГРУЗКИ АВАТАРКИ В STORAGE
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ОБРАБОТЧИК ЗАГРУЗКИ АВАТАРКИ (ImgBB)
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user) return;
-
+    if (!file) return;
+    
     setIsUploadingAvatar(true);
     try {
-      // Создаем уникальное имя файла
-      const storageRef = ref(storage, `avatars/${user.uid}_${Date.now()}`);
-      await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(storageRef);
-      
-      setProfile(prev => ({ ...prev, avatar: downloadURL }));
+      const url = await uploadToImgBB(file);
+      setProfile(prev => ({ ...prev, avatar: url }));
     } catch (error) {
-      console.error('Ошибка загрузки изображения:', error);
-      alert('Не удалось загрузить изображение. Проверьте настройки Firebase Storage.');
+      console.error(error);
+      alert('Не удалось загрузить фото. Попробуйте файл меньшего размера.');
     } finally {
       setIsUploadingAvatar(false);
     }
   };
 
+  // ОБРАБОТЧИК ЗАГРУЗКИ ФОТО ТОВАРА (ImgBB)
+  const handleProductImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setIsUploadingProductImage(true);
+    try {
+      const url = await uploadToImgBB(file);
+      setNewProduct(prev => ({ ...prev, imageUrl: url }));
+    } catch (error) {
+      console.error(error);
+      alert('Не удалось загрузить изображение товара.');
+    } finally {
+      setIsUploadingProductImage(false);
+    }
+  };
+
+  // ГЛАВНОЕ СОХРАНЕНИЕ
   const handleSaveProfile = async () => {
     if (!user) return;
     setIsSaving(true);
     try {
-      // 1. Сохраняем в Firestore
+      // 1. Сохраняем в Базу Данных
       await setDoc(doc(db, 'users', user.uid), {
         ...profile,
         updatedAt: new Date().toISOString()
       }, { merge: true });
 
-      // 2. ГЛОБАЛЬНЫЙ ФИКС: Обновляем профиль в Firebase Auth, чтобы меню и шапка обновились сразу!
+      // 2. ФИКС: Обновляем Auth-объект, чтобы фото сразу сменилось в левом меню
       if (auth.currentUser) {
         await updateProfile(auth.currentUser, {
           displayName: profile.name,
           photoURL: profile.avatar
         });
-        // Обновляем локальный стейт (Zustand), чтобы React перерисовал интерфейс
-        setUser({ ...auth.currentUser }); 
+        setUser({ ...auth.currentUser }); // Принудительно обновляем глобальный стейт
       }
 
       setShowSuccess(true);
@@ -193,31 +227,20 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
       {isPreviewMode && (
         <div className="fixed inset-0 z-50 bg-gray-950/40 backdrop-blur-md flex items-center justify-center p-4 md:p-10 overflow-y-auto animate-fade-in">
           <div className="bg-white w-full max-w-md rounded-[2rem] overflow-hidden shadow-2xl relative my-auto">
-            <button 
-              onClick={() => setIsPreviewMode(false)}
-              className="absolute top-4 right-4 w-10 h-10 bg-black/50 hover:bg-black/70 backdrop-blur-md text-white rounded-full flex items-center justify-center transition-colors z-10"
-            >
-              <X size={20} />
-            </button>
+            <button onClick={() => setIsPreviewMode(false)} className="absolute top-4 right-4 w-10 h-10 bg-black/50 hover:bg-black/70 backdrop-blur-md text-white rounded-full flex items-center justify-center transition-colors z-10"><X size={20} /></button>
             <div className="relative h-64 bg-gray-100 overflow-hidden">
               <img src={profile.avatar} alt="Avatar" className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-gray-950/90 to-transparent"></div>
               <div className="absolute bottom-6 left-6 right-6">
                 <div className="flex gap-2 mb-2">
-                  <span className={`text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-lg shadow-sm backdrop-blur-md ${profile.type === 'business' ? 'bg-amber-500 text-white' : 'bg-brand text-white'}`}>
-                    {profile.type === 'business' ? 'Бизнес' : 'Личный'}
-                  </span>
+                  <span className={`text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-lg shadow-sm backdrop-blur-md ${profile.type === 'business' ? 'bg-amber-500 text-white' : 'bg-brand text-white'}`}>{profile.type === 'business' ? 'Бизнес' : 'Личный'}</span>
                 </div>
                 <h3 className="font-black text-2xl text-white drop-shadow-md truncate">{profile.name || 'Без имени'}</h3>
               </div>
             </div>
             <div className="p-6 md:p-8 flex flex-col gap-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
               <p className="text-[15px] text-gray-600 font-medium leading-relaxed whitespace-pre-wrap">{profile.role || 'Описание отсутствует...'}</p>
-              {profile.skills.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {profile.skills.map(skill => <span key={skill} className="text-[11px] font-bold bg-gray-100 text-gray-600 px-3 py-1.5 rounded-xl">{skill}</span>)}
-                </div>
-              )}
+              {profile.skills.length > 0 && <div className="flex flex-wrap gap-2">{profile.skills.map(skill => <span key={skill} className="text-[11px] font-bold bg-gray-100 text-gray-600 px-3 py-1.5 rounded-xl">{skill}</span>)}</div>}
               {profile.type === 'business' && (
                 <div className="space-y-6 pt-4 border-t border-gray-100">
                   <div className="flex flex-col gap-3">
@@ -262,7 +285,7 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
             <div className="w-12 h-12 rounded-2xl bg-gray-950 text-white flex items-center justify-center"><Search size={22} /></div>
             <div>
               <h2 className="text-xl font-black text-gray-900 tracking-tight">Настройки поиска</h2>
-              <p className="text-[13px] text-gray-500 font-medium mt-0.5">Настройте алгоритм выдачи в Радаре Aura</p>
+              <p className="text-[13px] text-gray-500 font-medium mt-0.5">Настройте алгоритм выдачи в Радаре</p>
             </div>
           </div>
           <div className="space-y-8">
@@ -299,22 +322,22 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
 
           <div className="space-y-8">
             
-            {/* Загрузка Аватарки через Storage */}
+            {/* Аватар с загрузкой ImgBB */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-6 bg-gray-50 p-6 rounded-[2rem] border border-gray-200/60">
               <div className="relative shrink-0 group">
                 <img src={profile.avatar} alt="Avatar" className="w-24 h-24 rounded-3xl object-cover shadow-md bg-white border-2 border-white" />
                 
-                {/* Скрытый инпут для выбора файла */}
+                {/* Скрытый инпут файла */}
                 <input 
                   type="file" 
-                  ref={fileInputRef}
-                  onChange={handleAvatarUpload}
+                  ref={avatarInputRef}
+                  onChange={handleAvatarChange}
                   accept="image/png, image/jpeg, image/webp" 
                   className="hidden" 
                 />
                 
                 <button 
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => avatarInputRef.current?.click()}
                   disabled={isUploadingAvatar}
                   className="absolute -bottom-2 -right-2 w-10 h-10 bg-gray-950 hover:bg-brand text-white rounded-xl flex items-center justify-center shadow-lg transition-colors"
                 >
@@ -323,14 +346,14 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
               </div>
               <div className="flex-1">
                 <h4 className="text-[15px] font-bold text-gray-900">Фотография профиля</h4>
-                <p className="text-xs text-gray-500 font-medium mt-1 mb-3">Нажмите на иконку камеры, чтобы загрузить изображение с устройства. Максимальный размер 5MB.</p>
+                <p className="text-xs text-gray-500 font-medium mt-1 mb-3">Нажмите на иконку камеры, чтобы загрузить изображение. Или вставьте URL ниже.</p>
                 <div className="relative">
                   <input
                     type="text"
                     value={profile.avatar}
                     onChange={(e) => setProfile({...profile, avatar: e.target.value})}
-                    className={`${inputClass} py-3 text-xs text-gray-400`}
-                    placeholder="Или вставьте прямую ссылку на фото (URL)"
+                    className={`${inputClass} py-3 text-xs`}
+                    placeholder="Прямая ссылка на фото (URL)"
                   />
                 </div>
               </div>
@@ -419,6 +442,7 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
                   <label className={labelClass + " mb-0"}>Витрина товаров ({profile.products.length})</label>
                   <button onClick={() => setIsAddingProduct(!isAddingProduct)} className="bg-amber-100 text-amber-800 hover:bg-amber-500 hover:text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5">{isAddingProduct ? <X size={16} /> : <Plus size={16} />} {isAddingProduct ? 'Скрыть' : 'Добавить'}</button>
                 </div>
+
                 {isAddingProduct && (
                   <div className="bg-amber-50/50 border border-amber-200/60 rounded-3xl p-6 mb-6 animate-fade-in">
                     <div className="space-y-4">
@@ -426,12 +450,29 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
                         <input type="text" placeholder="Название товара" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} className={inputClass} />
                         <input type="text" placeholder="Цена (100 $)" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} className={inputClass} />
                       </div>
-                      <div className="relative"><div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400"><ImageIcon size={20} /></div><input type="text" placeholder="Ссылка на фото (URL)" value={newProduct.imageUrl} onChange={e => setNewProduct({...newProduct, imageUrl: e.target.value})} className={`${inputClass} pl-14`} /></div>
+                      
+                      {/* ЗАГРУЗКА ФОТО ТОВАРА ImgBB */}
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="flex-1 relative">
+                          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400"><ImageIcon size={20} /></div>
+                          <input type="text" placeholder="Ссылка на фото (URL)" value={newProduct.imageUrl} onChange={e => setNewProduct({...newProduct, imageUrl: e.target.value})} className={`${inputClass} pl-14`} />
+                        </div>
+                        <input type="file" ref={productImgInputRef} onChange={handleProductImageChange} accept="image/*" className="hidden" />
+                        <button 
+                          onClick={() => productImgInputRef.current?.click()}
+                          disabled={isUploadingProductImg}
+                          className="bg-white border border-gray-200/60 text-gray-950 px-6 py-4 rounded-2xl text-[15px] font-bold hover:bg-gray-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shrink-0"
+                        >
+                          {isUploadingProductImg ? <Loader2 size={18} className="animate-spin" /> : <UploadCloud size={18} />} Загрузить
+                        </button>
+                      </div>
+
                       <textarea placeholder="Краткое описание товара..." value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} className={`${inputClass} h-24 resize-none`} />
                       <button onClick={handleAddProduct} disabled={!newProduct.name || !newProduct.price} className="bg-amber-500 text-white px-8 py-4 rounded-xl text-[15px] font-bold uppercase w-full hover:bg-amber-600 disabled:opacity-50 transition-colors">Сохранить в витрину</button>
                     </div>
                   </div>
                 )}
+
                 {profile.products.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {profile.products.map(product => (

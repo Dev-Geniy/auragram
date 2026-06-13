@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Link } from 'react-router-dom';
-import { Store, Search, Building2, MapPin, Briefcase, ShoppingBag, ArrowRight, Package, X } from 'lucide-react';
+import { Store, Search, Building2, ArrowRight, Package, X } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -18,12 +18,12 @@ interface BusinessProfile {
   name: string;
   role: string;
   avatar: string;
-  products: Product[];
-  category?: string; // Добавим категорию
+  type: string;
+  category?: string;
   createdAt?: any;
+  products: Product[];
 }
 
-// Фиксированные категории (Константы)
 export const BUSINESS_CATEGORIES = [
   'Все категории',
   'IT & Разработка',
@@ -51,13 +51,16 @@ export default function MarketPage() {
         const loadedBusinesses: BusinessProfile[] = [];
         
         querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          loadedBusinesses.push({ 
-            id: doc.id, 
-            ...data,
-            products: data.products || [],
-            category: data.category || 'Другое'
-          } as BusinessProfile);
+          // ИСПРАВЛЕНО: Скрываем магазин самого пользователя из общей выдачи
+          if (doc.id !== user?.uid) {
+            const data = doc.data();
+            loadedBusinesses.push({ 
+              id: doc.id, 
+              ...data,
+              products: data.products || [],
+              category: data.category || 'Другое'
+            } as BusinessProfile);
+          }
         });
         
         setBusinesses(loadedBusinesses);
@@ -69,9 +72,8 @@ export default function MarketPage() {
     };
 
     fetchMarketData();
-  }, []);
+  }, [user]);
 
-  // 1. СОРТИРОВКА МАГАЗИНОВ (По популярности: кол-во товаров + новизна)
   const topShops = useMemo(() => {
     return [...businesses].sort((a, b) => {
       const aScore = (a.products?.length || 0);
@@ -84,7 +86,6 @@ export default function MarketPage() {
     });
   }, [businesses]);
 
-  // 2. АГРЕГАЦИЯ ВСЕХ ТОВАРОВ В ЕДИНУЮ СЕТКУ
   const allProducts = useMemo(() => {
     const productsList: (Product & { shopId: string; shopName: string; shopAvatar: string; shopCategory: string })[] = [];
     
@@ -102,11 +103,9 @@ export default function MarketPage() {
       }
     });
 
-    // Сортируем от новых к старым (по ID товара, который мы задавали как Date.now())
     return productsList.sort((a, b) => Number(b.id) - Number(a.id));
   }, [businesses]);
 
-  // 3. ФИЛЬТРАЦИЯ ТОВАРОВ
   const filteredProducts = useMemo(() => {
     return allProducts.filter(item => {
       const matchCategory = activeCategory === 'Все категории' || item.shopCategory === activeCategory;
@@ -176,7 +175,7 @@ export default function MarketPage() {
 
       <div className="max-w-7xl mx-auto p-6 md:p-10 space-y-12">
 
-        {/* 1. КАРУСЕЛЬ МАГАЗИНОВ (STORIES STYLE) */}
+        {/* 1. КАРУСЕЛЬ МАГАЗИНОВ */}
         {topShops.length > 0 && (
           <section>
             <div className="flex items-center justify-between mb-5">
@@ -233,7 +232,6 @@ export default function MarketPage() {
               {filteredProducts.map(product => (
                 <div key={product.id} className="bg-white border border-gray-200/60 rounded-3xl overflow-hidden shadow-[0_2px_10px_rgba(0,0,0,0.01)] hover:shadow-[0_10px_30px_rgba(245,158,11,0.08)] hover:border-amber-200 transition-all duration-300 group flex flex-col">
                   
-                  {/* Изображение товара */}
                   <div className="relative h-48 md:h-56 bg-gray-100 overflow-hidden">
                     <img 
                       src={product.imageUrl} 
@@ -245,7 +243,6 @@ export default function MarketPage() {
                     </div>
                   </div>
                   
-                  {/* Описание товара */}
                   <div className="p-4 md:p-5 flex flex-col flex-1">
                     <h3 className="font-bold text-gray-900 text-sm md:text-base leading-tight line-clamp-2 mb-2 group-hover:text-amber-600 transition-colors">
                       {product.name}
@@ -254,7 +251,6 @@ export default function MarketPage() {
                       {product.description || 'Описание отсутствует'}
                     </p>
                     
-                    {/* Автор/Магазин */}
                     <div className="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between">
                       <Link to={`/shop/${product.shopId}`} className="flex items-center gap-2 group/shop min-w-0">
                         <img src={product.shopAvatar} alt={product.shopName} className="w-6 h-6 rounded-md object-cover border border-gray-200 shrink-0" />
@@ -263,7 +259,6 @@ export default function MarketPage() {
                         </span>
                       </Link>
                       
-                      {/* Кнопка "В магазин" */}
                       <Link to={`/shop/${product.shopId}`} className="w-8 h-8 rounded-xl bg-gray-50 text-gray-900 flex items-center justify-center group-hover:bg-amber-500 group-hover:text-white transition-colors shrink-0">
                         <ArrowRight size={14} />
                       </Link>

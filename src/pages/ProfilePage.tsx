@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
-import { User, Briefcase, Users, X, Save, Sparkles, CheckCircle2 } from 'lucide-react';
+import { User, Briefcase, Users, X, Save, Sparkles, CheckCircle2, Settings, ShieldCheck, Info } from 'lucide-react';
 
 interface ProfilePageProps {
   currentSync: 'all' | 'business' | 'personal';
@@ -14,7 +14,6 @@ interface ProfilePageProps {
 export default function ProfilePage({ currentSync, setSync, gender, setGender }: ProfilePageProps) {
   const { user } = useAuthStore();
   
-  // Состояния для анкеты пользователя
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -29,7 +28,6 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
     avatar: ''
   });
 
-  // Загрузка данных профиля из Firestore при открытии страницы
   useEffect(() => {
     const fetchProfile = async () => {
       if (!user) return;
@@ -41,24 +39,23 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
         if (docSnap.exists()) {
           setProfile({ ...profile, ...docSnap.data() });
         } else {
-          // Если профиля еще нет в базе, заполняем дефолтными данными из Auth
           setProfile(prev => ({
             ...prev,
             name: user.displayName || '',
-            avatar: user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName || 'User'}&background=random`
+            avatar: user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'User')}&background=random`
           }));
         }
       } catch (error) {
         console.error('Ошибка при загрузке профиля:', error);
       } finally {
-        setIsLoading(false);
+        // Искусственная задержка для плавности анимации скелетона
+        setTimeout(() => setIsLoading(false), 400);
       }
     };
 
     fetchProfile();
   }, [user]);
 
-  // Сохранение данных в Firestore
   const handleSaveProfile = async () => {
     if (!user) return;
     setIsSaving(true);
@@ -70,7 +67,7 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
       }, { merge: true });
       
       setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
+      setTimeout(() => setShowSuccess(false), 4000);
     } catch (error) {
       console.error('Ошибка при сохранении профиля:', error);
     } finally {
@@ -81,8 +78,9 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
   const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && skillInput.trim()) {
       e.preventDefault();
-      if (!profile.skills.includes(skillInput.trim()) && profile.skills.length < 10) {
-        setProfile({ ...profile, skills: [...profile.skills, skillInput.trim()] });
+      const newSkill = skillInput.trim();
+      if (!profile.skills.includes(newSkill) && profile.skills.length < 10) {
+        setProfile({ ...profile, skills: [...profile.skills, newSkill] });
       }
       setSkillInput('');
     }
@@ -96,73 +94,109 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
   };
 
   if (isLoading) {
-    return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand"></div></div>;
+    return (
+      <div className="flex-1 overflow-y-auto bg-[#FAFAFA] p-6 md:p-10">
+        <div className="max-w-4xl mx-auto space-y-8">
+          <div className="h-10 w-48 bg-gray-200/60 rounded-lg animate-pulse mb-10" />
+          
+          <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm animate-pulse">
+            <div className="h-8 w-64 bg-gray-200/60 rounded-lg mb-8" />
+            <div className="space-y-4">
+              <div className="h-12 w-full bg-gray-100 rounded-xl" />
+              <div className="h-12 w-full bg-gray-100 rounded-xl" />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm animate-pulse">
+            <div className="flex justify-between items-center mb-8">
+              <div className="h-8 w-48 bg-gray-200/60 rounded-lg" />
+              <div className="w-16 h-16 bg-gray-200/60 rounded-2xl" />
+            </div>
+            <div className="space-y-6">
+              <div className="h-12 w-full bg-gray-100 rounded-xl" />
+              <div className="grid grid-cols-2 gap-5">
+                <div className="h-12 w-full bg-gray-100 rounded-xl" />
+                <div className="h-12 w-full bg-gray-100 rounded-xl" />
+              </div>
+              <div className="h-24 w-full bg-gray-100 rounded-xl" />
+              <div className="h-12 w-full bg-gray-100 rounded-xl" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#F8FAFC]">
-      <div className="max-w-3xl mx-auto p-6 md:p-8 space-y-8">
+    <div className="flex-1 overflow-y-auto bg-[#FAFAFA] p-6 md:p-10 select-none">
+      <div className="max-w-4xl mx-auto space-y-8">
         
-        {/* БЛОК 1: НАСТРОЙКИ АЛГОРИТМА (РАДАРА) */}
-        <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100">
+        {/* Заголовок страницы */}
+        <div className="flex items-center gap-3 mb-2">
+          <Settings size={28} className="text-gray-950" />
+          <h1 className="text-3xl font-black text-gray-950 tracking-tight">Настройки профиля</h1>
+        </div>
+
+        {/* БЛОК 1: НАСТРОЙКИ РАДАРА */}
+        <section className="bg-white rounded-3xl p-7 md:p-9 shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-200/60">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 rounded-xl bg-brand/10 text-brand flex items-center justify-center">
-              <Sparkles size={20} />
+              <Sparkles size={20} className="animate-pulse" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Настройки AuraSync</h2>
-              <p className="text-sm text-gray-500">Кого вы ищете на радаре прямо сейчас?</p>
+              <h2 className="text-xl font-black text-gray-900 tracking-tight">Фильтры AuraSync</h2>
+              <p className="text-xs text-gray-500 font-medium mt-0.5">Настройте алгоритм выдачи в Радаре</p>
             </div>
           </div>
 
           <div className="space-y-6">
             {/* Режим поиска */}
             <div>
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 block">Режим поиска</label>
-              <div className="flex bg-gray-50 p-1.5 rounded-2xl">
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 block">Кого вы ищете?</label>
+              <div className="flex bg-gray-50/80 p-1.5 rounded-2xl border border-gray-100">
                 <button
                   onClick={() => setSync('all')}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${currentSync === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all duration-200 ${currentSync === 'all' ? 'bg-white text-gray-950 shadow-sm border border-gray-200/60' : 'text-gray-500 hover:bg-gray-100/50 hover:text-gray-900'}`}
                 >
-                  <Users size={16} /> Все
+                  <Users size={16} /> По всем
                 </button>
                 <button
                   onClick={() => setSync('personal')}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${currentSync === 'personal' ? 'bg-white text-brand shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all duration-200 ${currentSync === 'personal' ? 'bg-white text-brand shadow-sm border border-gray-200/60' : 'text-gray-500 hover:bg-gray-100/50 hover:text-gray-900'}`}
                 >
                   <User size={16} /> Люди
                 </button>
                 <button
                   onClick={() => setSync('business')}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${currentSync === 'business' ? 'bg-amber-500 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all duration-200 ${currentSync === 'business' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'text-gray-500 hover:bg-gray-100/50 hover:text-gray-900'}`}
                 >
                   <Briefcase size={16} /> Бизнес
                 </button>
               </div>
             </div>
 
-            {/* Фильтр по полу (показываем только если не выбран бизнес) */}
+            {/* Фильтр по полу */}
             {currentSync !== 'business' && (
-              <div className="animate-fade-in">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 block">Пол собеседника</label>
-                <div className="flex bg-gray-50 p-1.5 rounded-2xl max-w-sm">
+              <div className="animate-fade-in transition-all">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 block">Предпочтительный пол</label>
+                <div className="flex bg-gray-50/80 p-1.5 rounded-2xl max-w-md border border-gray-100">
                   <button
                     onClick={() => setGender('all')}
-                    className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${gender === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${gender === 'all' ? 'bg-white text-gray-950 shadow-sm border border-gray-200/60' : 'text-gray-500 hover:bg-gray-100/50 hover:text-gray-900'}`}
                   >
                     Любой
                   </button>
                   <button
                     onClick={() => setGender('male')}
-                    className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${gender === 'male' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${gender === 'male' ? 'bg-blue-50 text-blue-700 shadow-sm border border-blue-100/50' : 'text-gray-500 hover:bg-gray-100/50 hover:text-gray-900'}`}
                   >
-                    Мужской
+                    Мужчины
                   </button>
                   <button
                     onClick={() => setGender('female')}
-                    className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${gender === 'female' ? 'bg-pink-50 text-pink-600 shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${gender === 'female' ? 'bg-pink-50 text-pink-700 shadow-sm border border-pink-100/50' : 'text-gray-500 hover:bg-gray-100/50 hover:text-gray-900'}`}
                   >
-                    Женский
+                    Женщины
                   </button>
                 </div>
               </div>
@@ -170,103 +204,146 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
           </div>
         </section>
 
-        {/* БЛОК 2: АНКЕТА ПОЛЬЗОВАТЕЛЯ (FIREBASE) */}
-        <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100 relative overflow-hidden">
-          <div className="flex items-center justify-between mb-8">
+        {/* БЛОК 2: АНКЕТА ПОЛЬЗОВАТЕЛЯ */}
+        <section className="bg-white rounded-3xl p-7 md:p-9 shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-200/60 relative">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8 pb-8 border-b border-gray-100">
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Ваша анкета</h2>
-              <p className="text-sm text-gray-500">Эта информация видна другим пользователям</p>
+              <h2 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                Публичная анкета
+              </h2>
+              <p className="text-xs text-gray-500 font-medium mt-1">Эти данные будут видны в Радаре и Маркетплейсе</p>
             </div>
-            {profile.avatar && (
-              <img src={profile.avatar} alt="Avatar" className="w-16 h-16 rounded-2xl object-cover border border-gray-100 shadow-sm" />
-            )}
+            
+            <div className="flex items-center gap-4 bg-gray-50 pr-4 pl-1.5 py-1.5 rounded-2xl border border-gray-200/60">
+              <img 
+                src={profile.avatar} 
+                alt="Avatar" 
+                className="w-12 h-12 rounded-xl object-cover shadow-sm bg-white" 
+              />
+              <div>
+                <p className="text-[10px] font-bold text-green-600 uppercase tracking-wider flex items-center gap-1">
+                  <ShieldCheck size={12} /> Google Auth
+                </p>
+                <p className="text-xs font-semibold text-gray-500 mt-0.5">Фото синхронизировано</p>
+              </div>
+            </div>
           </div>
 
-          <div className="space-y-5">
+          <div className="space-y-6">
+            {/* Имя */}
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1.5">Отображаемое имя / Название компании</label>
+              <label className="block text-xs font-bold text-gray-900 mb-2 uppercase tracking-wide">
+                Отображаемое имя / Название
+              </label>
               <input
                 type="text"
                 value={profile.name}
                 onChange={(e) => setProfile({...profile, name: e.target.value})}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand/20 focus:border-brand outline-none transition-all"
-                placeholder="Иван Иванов"
+                className="w-full bg-gray-50 border border-gray-200/60 rounded-xl px-4 py-3.5 text-sm focus:bg-white focus:ring-4 focus:ring-brand/10 focus:border-brand outline-none transition-all font-semibold text-gray-900 placeholder-gray-400"
+                placeholder="Например: Иван Иванов или ООО Вектор"
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Тип аккаунта */}
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1.5">Тип аккаунта</label>
+                <label className="block text-xs font-bold text-gray-900 mb-2 uppercase tracking-wide flex items-center gap-1.5">
+                  Категория профиля
+                  <div className="group relative">
+                    <Info size={14} className="text-gray-400 cursor-help" />
+                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 p-2 bg-gray-900 text-white text-[10px] font-medium rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10 text-center">
+                      Влияет на то, в каком разделе вас увидят другие пользователи
+                    </div>
+                  </div>
+                </label>
                 <select 
                   value={profile.type}
                   onChange={(e) => setProfile({...profile, type: e.target.value as 'personal' | 'business'})}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand/20 outline-none"
+                  className="w-full bg-gray-50 border border-gray-200/60 rounded-xl px-4 py-3.5 text-sm focus:bg-white focus:ring-4 focus:ring-brand/10 focus:border-brand outline-none transition-all font-semibold text-gray-900 appearance-none"
                 >
-                  <option value="personal">👤 Личный (Общение / Знакомства)</option>
-                  <option value="business">💼 Бизнес (Услуги / B2B)</option>
+                  <option value="personal">Личный профиль (Связи / Знакомства)</option>
+                  <option value="business">Бизнес аккаунт (B2B / Услуги)</option>
                 </select>
               </div>
 
-              {profile.type === 'personal' && (
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1.5">Ваш пол</label>
-                  <select 
-                    value={profile.userGender}
-                    onChange={(e) => setProfile({...profile, userGender: e.target.value})}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand/20 outline-none"
-                  >
-                    <option value="none">Не указан</option>
-                    <option value="male">Мужской</option>
-                    <option value="female">Женский</option>
-                  </select>
-                </div>
-              )}
+              {/* Пол */}
+              <div className={`transition-opacity duration-300 ${profile.type === 'business' ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+                <label className="block text-xs font-bold text-gray-900 mb-2 uppercase tracking-wide">
+                  Ваш пол
+                </label>
+                <select 
+                  value={profile.userGender}
+                  onChange={(e) => setProfile({...profile, userGender: e.target.value})}
+                  className="w-full bg-gray-50 border border-gray-200/60 rounded-xl px-4 py-3.5 text-sm focus:bg-white focus:ring-4 focus:ring-brand/10 focus:border-brand outline-none transition-all font-semibold text-gray-900 appearance-none"
+                  disabled={profile.type === 'business'}
+                >
+                  <option value="none">Скрыт / Не указан</option>
+                  <option value="male">Мужской</option>
+                  <option value="female">Женский</option>
+                </select>
+              </div>
             </div>
 
+            {/* Описание */}
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1.5">
-                {profile.type === 'business' ? 'Краткое описание бизнеса (Чем занимаетесь?)' : 'О себе (Роль / Должность / Цель)'}
+              <label className="block text-xs font-bold text-gray-900 mb-2 uppercase tracking-wide">
+                {profile.type === 'business' ? 'Сфера деятельности компании' : 'О себе (Bio)'}
               </label>
               <textarea
                 value={profile.role}
                 onChange={(e) => setProfile({...profile, role: e.target.value})}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand/20 focus:border-brand outline-none transition-all resize-none h-24"
-                placeholder={profile.type === 'business' ? "Например: Разрабатываем мобильные приложения под ключ..." : "Например: Junior Frontend разработчик, ищу ментора..."}
+                className="w-full bg-gray-50 border border-gray-200/60 rounded-xl px-4 py-4 text-sm focus:bg-white focus:ring-4 focus:ring-brand/10 focus:border-brand outline-none transition-all resize-none h-28 font-medium text-gray-900 placeholder-gray-400"
+                placeholder={profile.type === 'business' ? "Опишите, какие услуги предоставляет ваша компания..." : "Расскажите о своих навыках, профессии и целях..."}
               />
             </div>
 
-            {/* Блок добавления тегов / скиллов */}
+            {/* Теги */}
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1.5">
-                Ключевые навыки / Теги <span className="text-gray-400 font-normal">({profile.skills.length}/10)</span>
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-bold text-gray-900 uppercase tracking-wide">
+                  Ключевые навыки / Теги
+                </label>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${profile.skills.length >= 10 ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
+                  {profile.skills.length} / 10
+                </span>
+              </div>
+              
               <div className="flex flex-wrap gap-2 mb-3">
                 {profile.skills.map(skill => (
-                  <span key={skill} className="inline-flex items-center gap-1.5 bg-brand/10 text-brand px-3 py-1.5 rounded-lg text-sm font-semibold">
+                  <span key={skill} className="inline-flex items-center gap-1.5 bg-gray-950 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm group">
                     {skill}
-                    <button onClick={() => handleRemoveSkill(skill)} className="hover:text-red-500 transition-colors">
+                    <button 
+                      onClick={() => handleRemoveSkill(skill)} 
+                      className="text-gray-400 hover:text-red-400 transition-colors ml-1"
+                    >
                       <X size={14} />
                     </button>
                   </span>
                 ))}
               </div>
-              <input
-                type="text"
-                value={skillInput}
-                onChange={(e) => setSkillInput(e.target.value)}
-                onKeyDown={handleAddSkill}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand/20 focus:border-brand outline-none transition-all"
-                placeholder="Введите навык и нажмите Enter (например: TypeScript, Дизайн, B2B)"
-                disabled={profile.skills.length >= 10}
-              />
+              
+              <div className="relative">
+                <input
+                  type="text"
+                  value={skillInput}
+                  onChange={(e) => setSkillInput(e.target.value)}
+                  onKeyDown={handleAddSkill}
+                  className="w-full bg-gray-50 border border-gray-200/60 rounded-xl pl-4 pr-12 py-3.5 text-sm focus:bg-white focus:ring-4 focus:ring-brand/10 focus:border-brand outline-none transition-all font-medium text-gray-900 placeholder-gray-400"
+                  placeholder={profile.skills.length >= 10 ? "Достигнут лимит тегов" : "Введите навык и нажмите Enter..."}
+                  disabled={profile.skills.length >= 10}
+                />
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex gap-1">
+                  <div className="px-1.5 py-0.5 bg-gray-200 text-gray-500 rounded text-[9px] font-bold">↵</div>
+                </div>
+              </div>
             </div>
 
-            {/* Кнопка сохранения */}
-            <div className="pt-4 flex items-center justify-between">
+            {/* Сохранение */}
+            <div className="pt-8 mt-4 border-t border-gray-100 flex items-center justify-between">
               <div className="h-6">
                 {showSuccess && (
                   <span className="flex items-center gap-2 text-green-600 text-sm font-bold animate-fade-in">
-                    <CheckCircle2 size={18} /> Сохранено в базу данных
+                    <CheckCircle2 size={18} /> Сохранено в облаке
                   </span>
                 )}
               </div>
@@ -274,14 +351,17 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
               <button
                 onClick={handleSaveProfile}
                 disabled={isSaving}
-                className="bg-gray-900 text-white px-8 py-3.5 rounded-xl font-bold text-sm hover:bg-gray-800 transition-all shadow-md flex items-center gap-2 disabled:opacity-50"
+                className="bg-brand text-white px-8 py-3.5 rounded-xl font-bold text-sm hover:bg-brand-dark transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center gap-2.5 disabled:opacity-70 disabled:hover:scale-100 min-w-[200px] justify-center"
               >
                 {isSaving ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    Сохранение...
+                  </>
                 ) : (
                   <>
-                    <Save size={18} />
-                    Сохранить профиль
+                    <Save size={16} />
+                    Опубликовать профиль
                   </>
                 )}
               </button>

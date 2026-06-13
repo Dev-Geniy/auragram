@@ -1,18 +1,29 @@
 import { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '../services/firebase';
 import { Hexagon, ArrowRight, ShieldCheck, Zap, Globe } from 'lucide-react';
 
 const LoginPage = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Извлекаем сохраненный URL. Если его нет — по умолчанию ведем в ленту '/posts'
+  const from = location.state?.from?.pathname + (location.state?.from?.search || '') || '/posts';
 
   const handleGoogleLogin = async () => {
     try {
       setIsLoading(true);
       setError(null);
       await signInWithPopup(auth, googleProvider);
-      // Успешный вход автоматически перехватит onAuthStateChanged в App.tsx
+      
+      // ИДЕАЛЬНЫЙ РЕДИРЕКТ: 
+      // Отправляем пользователя туда, куда он изначально хотел попасть
+      navigate(from, { replace: true });
+      
     } catch (err: any) {
       console.error('Ошибка авторизации:', err);
       setError('Не удалось войти. Проверьте подключение и попробуйте еще раз.');

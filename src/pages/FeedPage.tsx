@@ -3,6 +3,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Link } from 'react-router-dom';
+import ProfileModal from '../components/ProfileModal'; // ИМПОРТИРУЕМ МОДАЛКУ
 import { MessageCircle, Briefcase, User as UserIcon, Sparkles, MapPin, Activity, ShoppingBag } from 'lucide-react';
 
 interface FeedPageProps {
@@ -13,18 +14,22 @@ interface FeedPageProps {
 interface UserProfile {
   id: string;
   name: string;
-  type: 'personal' | 'business';
+  type: 'personal' | 'business' | string;
   userGender: 'male' | 'female' | 'none';
   role: string;
   skills: string[];
   avatar: string;
-  products?: any[]; // Добавили поле для проверки товаров
+  products?: any[];
+  contacts?: { phone?: string; website?: string; email?: string; }; // Добавили для совместимости с модалкой
 }
 
 export default function FeedPage({ currentSync, userGender }: FeedPageProps) {
   const { user } = useAuthStore();
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // СОСТОЯНИЕ ДЛЯ ОТКРЫТИЯ МОДАЛКИ ПРЕДПРОСМОТРА ПРОФИЛЯ
+  const [previewProfile, setPreviewProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     const fetchProfiles = async () => {
@@ -65,7 +70,7 @@ export default function FeedPage({ currentSync, userGender }: FeedPageProps) {
   });
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#FAFAFA] p-6 md:p-10 select-none pb-24">
+    <div className="flex-1 overflow-y-auto bg-[#FAFAFA] p-6 md:p-10 select-none pb-24 relative">
       <div className="max-w-6xl mx-auto">
         
         {/* ВЕРХНЯЯ ПАНЕЛЬ (РАДАР) */}
@@ -125,7 +130,11 @@ export default function FeedPage({ currentSync, userGender }: FeedPageProps) {
             {filteredProfiles.map((profile) => (
               <div key={profile.id} className="bg-white rounded-[2rem] overflow-hidden border border-gray-200/60 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)] hover:-translate-y-1 hover:border-gray-300 transition-all duration-300 group flex flex-col">
                 
-                <div className="relative h-56 bg-gray-100 overflow-hidden shrink-0">
+                {/* ОБЛОЖКА: КЛИК ОТКРЫВАЕТ МОДАЛКУ ПРЕДПРОСМОТРА */}
+                <div 
+                  className="relative h-56 bg-gray-100 overflow-hidden shrink-0 cursor-pointer"
+                  onClick={() => setPreviewProfile(profile)}
+                >
                   <img 
                     src={profile.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}&background=random`} 
                     alt={profile.name} 
@@ -216,6 +225,15 @@ export default function FeedPage({ currentSync, userGender }: FeedPageProps) {
         )}
 
       </div>
+
+      {/* ======= РЕНДЕР МОДАЛКИ ПРЕДПРОСМОТРА ПРОФИЛЯ ======= */}
+      {previewProfile && (
+        <ProfileModal 
+          profile={previewProfile} 
+          onClose={() => setPreviewProfile(null)} 
+        />
+      )}
+
     </div>
   );
 }

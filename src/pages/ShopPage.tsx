@@ -51,16 +51,16 @@ export default function MarketPage() {
         const loadedBusinesses: BusinessProfile[] = [];
         
         querySnapshot.forEach((doc) => {
-          // Скрываем магазин самого пользователя из общей выдачи
-          if (doc.id !== user?.uid) {
-            const data = doc.data();
-            loadedBusinesses.push({ 
-              id: doc.id, 
-              ...data,
-              products: data.products || [],
-              category: data.category || 'Другое'
-            } as BusinessProfile);
-          }
+          // ИСПРАВЛЕНО: Используем переменную user для фильтрации своего магазина
+          if (user && doc.id === user.uid) return;
+          
+          const data = doc.data();
+          loadedBusinesses.push({ 
+            id: doc.id, 
+            ...data,
+            products: data.products || [],
+            category: data.category || 'Другое'
+          } as BusinessProfile);
         });
         
         setBusinesses(loadedBusinesses);

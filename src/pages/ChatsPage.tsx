@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
-import { useLocation, Link } from 'react-router-dom'; // ДОБАВИЛИ ДЛЯ ПЕРЕХВАТА ССЫЛОК И НАВИГАЦИИ
+import { useLocation, Link } from 'react-router-dom';
+import ProfileModal from '../components/ProfileModal'; // ИМПОРТ НАШЕЙ МОДАЛКИ
 import { 
   MessageSquare, Send, Search, X, ShieldCheck, 
   Loader2, Clock, Image as ImageIcon, Heart, ExternalLink 
@@ -14,9 +15,11 @@ interface UserProfile {
   avatar: string;
   type: string;
   role: string;
+  skills?: string[];
+  contacts?: { phone?: string; website?: string; email?: string; };
+  products?: any[];
 }
 
-// РАСШИРИЛИ ИНТЕРФЕЙС ДЛЯ ПОДДЕРЖКИ КАРТОЧЕК
 interface Message {
   id: string;
   text: string;
@@ -59,6 +62,10 @@ export default function ChatsPage() {
   
   const [contacts, setContacts] = useState<UserProfile[]>([]);
   const [selectedContact, setSelectedContact] = useState<UserProfile | null>(null);
+  
+  // СОСТОЯНИЕ ДЛЯ ОТКРЫТИЯ МОДАЛКИ ПРЕДПРОСМОТРА ПРОФИЛЯ
+  const [previewProfile, setPreviewProfile] = useState<UserProfile | null>(null);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -72,7 +79,7 @@ export default function ChatsPage() {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 1. Загрузка контактов (REAL-TIME)
+  // 1. Загрузка контактов
   useEffect(() => {
     setIsLoadingContacts(true);
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
@@ -92,7 +99,7 @@ export default function ChatsPage() {
     return () => unsubscribe();
   }, [user]);
 
-  // 2. АВТОМАТИЧЕСКИЙ ВЫБОР ДИАЛОГА (При клике "Написать" из Радара или Магазина)
+  // 2. АВТОМАТИЧЕСКИЙ ВЫБОР ДИАЛОГА
   useEffect(() => {
     if (contacts.length > 0 && location.state?.selectedUserId) {
       const contactToSelect = contacts.find(c => c.id === location.state.selectedUserId);
@@ -207,7 +214,7 @@ export default function ChatsPage() {
   );
 
   return (
-    <div className="flex flex-col md:flex-row h-full w-full overflow-hidden select-none bg-white md:bg-[#FAFAFA]">
+    <div className="flex flex-col md:flex-row h-full w-full overflow-hidden select-none bg-white md:bg-[#FAFAFA] relative">
       
       {/* ЛЕВАЯ ПАНЕЛЬ */}
       <div className="w-full md:w-[320px] shrink-0 md:border-r border-b border-gray-100 flex flex-col bg-white md:shadow-[1px_0_10px_rgba(0,0,0,0.01)] z-20">
@@ -255,11 +262,18 @@ export default function ChatsPage() {
                     : 'md:hover:bg-white md:border md:border-transparent md:hover:shadow-[0_2px_8px_rgba(0,0,0,0.01)]'
                 }`}
               >
-                <div className="relative shrink-0">
+                {/* АВАТАРКА С КЛИКОМ ДЛЯ ОТКРЫТИЯ ПРОФИЛЯ */}
+                <div 
+                  className="relative shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation(); // Останавливаем всплытие, чтобы не выбрать диалог
+                    setPreviewProfile(contact);
+                  }}
+                >
                   <img 
                     src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} 
                     alt={contact.name} 
-                    className={`object-cover border bg-gray-50 transition-all ${
+                    className={`object-cover border bg-gray-50 transition-all hover:scale-105 ${
                       selectedContact?.id === contact.id 
                         ? 'w-[60px] h-[60px] md:w-12 md:h-12 rounded-[20px] md:rounded-xl border-brand/50 shadow-md' 
                         : 'w-14 h-14 md:w-12 md:h-12 rounded-[18px] md:rounded-xl border-gray-100'
@@ -296,17 +310,23 @@ export default function ChatsPage() {
       </div>
       
       {/* ПРАВАЯ ПАНЕЛЬ */}
-      <div className="flex-1 flex flex-col bg-white relative min-h-0">
+      <div className="flex-1 flex flex-col bg-white relative min-h-0 z-10">
         {selectedContact ? (
           <>
             <div className="h-[60px] md:h-[85px] bg-white border-b border-gray-100 flex items-center px-4 md:px-8 shrink-0 justify-between shadow-[0_4px_20px_rgba(0,0,0,0.01)] z-10">
               <div className="flex items-center gap-3 md:gap-4">
-                <div className="relative">
+                
+                {/* АВАТАРКА В ШАПКЕ ЧАТА (ТОЖЕ КЛИКАБЕЛЬНА) */}
+                <div 
+                  className="relative cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={() => setPreviewProfile(selectedContact)}
+                >
                   <img src={selectedContact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}&background=random`} alt={selectedContact.name} className="w-9 h-9 md:w-11 md:h-11 rounded-xl object-cover border border-gray-100" />
                   <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 md:w-3 md:h-3 bg-green-500 rounded-full border-2 border-white" />
                 </div>
-                <div>
-                  <h3 className="font-bold text-sm md:text-base text-gray-950 leading-tight">{selectedContact.name}</h3>
+                
+                <div className="cursor-pointer" onClick={() => setPreviewProfile(selectedContact)}>
+                  <h3 className="font-bold text-sm md:text-base text-gray-950 leading-tight hover:text-brand transition-colors">{selectedContact.name}</h3>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     {selectedContact.type === 'business' ? (
                       <span className="text-[9px] md:text-[10px] font-bold text-amber-600 uppercase tracking-wider bg-amber-50 px-1.5 py-0.5 rounded">Бизнес-аккаунт</span>
@@ -315,6 +335,7 @@ export default function ChatsPage() {
                     )}
                   </div>
                 </div>
+
               </div>
             </div>
             
@@ -332,7 +353,6 @@ export default function ChatsPage() {
                   const hasLikes = msg.likes && msg.likes.length > 0;
                   const isLikedByMe = msg.likes?.includes(user?.uid || '');
 
-                  // ЯВЛЯЕТСЯ ЛИ СООБЩЕНИЕ ИНТЕРАКТИВНОЙ КАРТОЧКОЙ
                   const isCard = msg.type === 'share_card' && msg.cardData;
 
                   return (
@@ -345,7 +365,6 @@ export default function ChatsPage() {
                             : 'bg-white border border-gray-100 text-gray-900 rounded-2xl rounded-tl-sm shadow-[0_2px_10px_rgba(0,0,0,0.02)]'
                         } ${isCard ? 'p-1.5' : 'px-4 py-2.5 text-[13px] font-medium tracking-wide'}`}>
                           
-                          {/* ======= РЕНДЕР КАРТОЧКИ (ЕСЛИ ЭТО SHARE_CARD) ======= */}
                           {isCard ? (
                             <div className="flex flex-col w-[240px] md:w-[280px] bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100/50">
                               <div className="relative h-32 md:h-36 bg-gray-100 shrink-0">
@@ -378,7 +397,6 @@ export default function ChatsPage() {
                               </div>
                             </div>
                           ) : (
-                            /* ======= РЕНДЕР ОБЫЧНОГО СООБЩЕНИЯ ======= */
                             <>
                               {msg.imageUrl && (
                                 <div className="w-full max-w-[250px] rounded-xl overflow-hidden mb-1 border border-white/10">
@@ -389,12 +407,10 @@ export default function ChatsPage() {
                             </>
                           )}
 
-                          {/* ВРЕМЯ СООБЩЕНИЯ */}
                           <span className={`text-[9px] font-bold self-end select-none ${isCard ? 'px-2 pb-1' : 'mt-1'} ${isMine ? 'text-white/50' : 'text-gray-400'}`}>
                             {formatTime(msg.createdAt)}
                           </span>
 
-                          {/* КНОПКА ЛАЙКА ПРИ НАВЕДЕНИИ */}
                           <div className={`absolute ${isMine ? '-left-8' : '-right-8'} bottom-1 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity`}>
                             <button onClick={() => handleLikeMessage(msg.id, msg.likes)} className="p-1.5 rounded-full bg-white border border-gray-100 shadow-sm text-gray-400 hover:text-pink-500 hover:bg-pink-50 transition-colors">
                               <Heart size={14} className={isLikedByMe ? "fill-pink-500 text-pink-500" : ""} />
@@ -402,7 +418,6 @@ export default function ChatsPage() {
                           </div>
                         </div>
 
-                        {/* ОТОБРАЖЕНИЕ СЧЕТЧИКА ЛАЙКОВ */}
                         {hasLikes && (
                           <div className={`absolute -bottom-3 ${isMine ? 'right-2' : 'left-2'} bg-white border border-gray-100 shadow-sm rounded-full px-2 py-0.5 flex items-center gap-1 z-10 animate-fade-in`}>
                             <Heart size={10} className="fill-pink-500 text-pink-500" />
@@ -466,6 +481,15 @@ export default function ChatsPage() {
           </div>
         )}
       </div>
+
+      {/* ======= РЕНДЕР МОДАЛКИ ПРЕДПРОСМОТРА ПРОФИЛЯ ======= */}
+      {previewProfile && (
+        <ProfileModal 
+          profile={previewProfile} 
+          onClose={() => setPreviewProfile(null)} 
+        />
+      )}
+
     </div>
   );
 }

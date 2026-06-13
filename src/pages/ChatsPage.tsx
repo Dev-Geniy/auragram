@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
-import { useLocation } from 'react-router-dom'; // ДОБАВИЛИ ДЛЯ ПЕРЕХВАТА ССЫЛОК
+import { useLocation, Link } from 'react-router-dom'; // ДОБАВИЛИ ДЛЯ ПЕРЕХВАТА ССЫЛОК И НАВИГАЦИИ
 import { 
   MessageSquare, Send, Search, X, ShieldCheck, 
-  Loader2, Clock, Image as ImageIcon, Heart 
+  Loader2, Clock, Image as ImageIcon, Heart, ExternalLink 
 } from 'lucide-react';
 
 interface UserProfile {
@@ -16,6 +16,7 @@ interface UserProfile {
   role: string;
 }
 
+// РАСШИРИЛИ ИНТЕРФЕЙС ДЛЯ ПОДДЕРЖКИ КАРТОЧЕК
 interface Message {
   id: string;
   text: string;
@@ -23,6 +24,15 @@ interface Message {
   likes?: string[];
   senderId: string;
   createdAt: any;
+  type?: 'share_card' | string;
+  cardData?: {
+    type: 'shop' | 'product';
+    title: string;
+    imageUrl: string;
+    link: string;
+    description: string;
+    price?: string;
+  };
 }
 
 const uploadToImgBB = async (file: File): Promise<string> => {
@@ -45,7 +55,7 @@ const uploadToImgBB = async (file: File): Promise<string> => {
 
 export default function ChatsPage() {
   const { user } = useAuthStore();
-  const location = useLocation(); // ЧИТАЕМ ПАРАМЕТРЫ ПЕРЕХОДА ИЗ РАДАРА
+  const location = useLocation(); 
   
   const [contacts, setContacts] = useState<UserProfile[]>([]);
   const [selectedContact, setSelectedContact] = useState<UserProfile | null>(null);
@@ -82,7 +92,7 @@ export default function ChatsPage() {
     return () => unsubscribe();
   }, [user]);
 
-  // 2. АВТОМАТИЧЕСКИЙ ВЫБОР ДИАЛОГА (При клике "Написать" из Радара)
+  // 2. АВТОМАТИЧЕСКИЙ ВЫБОР ДИАЛОГА (При клике "Написать" из Радара или Магазина)
   useEffect(() => {
     if (contacts.length > 0 && location.state?.selectedUserId) {
       const contactToSelect = contacts.find(c => c.id === location.state.selectedUserId);
@@ -322,24 +332,69 @@ export default function ChatsPage() {
                   const hasLikes = msg.likes && msg.likes.length > 0;
                   const isLikedByMe = msg.likes?.includes(user?.uid || '');
 
+                  // ЯВЛЯЕТСЯ ЛИ СООБЩЕНИЕ ИНТЕРАКТИВНОЙ КАРТОЧКОЙ
+                  const isCard = msg.type === 'share_card' && msg.cardData;
+
                   return (
                     <div key={msg.id} className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'} ${isSequential ? 'mt-1' : 'mt-4'}`}>
                       <div className="group relative max-w-[85%] md:max-w-[75%]">
-                        <div className={`relative px-4 py-2.5 text-[13px] font-medium tracking-wide flex flex-col gap-1.5 shadow-sm transition-all ${
+                        
+                        <div className={`relative flex flex-col gap-1.5 shadow-sm transition-all ${
                           isMine 
                             ? 'bg-gray-950 text-white rounded-2xl rounded-tr-sm' 
                             : 'bg-white border border-gray-100 text-gray-900 rounded-2xl rounded-tl-sm shadow-[0_2px_10px_rgba(0,0,0,0.02)]'
-                        }`}>
-                          {msg.imageUrl && (
-                            <div className="w-full max-w-[250px] rounded-xl overflow-hidden mb-1 border border-white/10">
-                              <img src={msg.imageUrl} alt="attachment" className="w-full h-auto object-cover" />
+                        } ${isCard ? 'p-1.5' : 'px-4 py-2.5 text-[13px] font-medium tracking-wide'}`}>
+                          
+                          {/* ======= РЕНДЕР КАРТОЧКИ (ЕСЛИ ЭТО SHARE_CARD) ======= */}
+                          {isCard ? (
+                            <div className="flex flex-col w-[240px] md:w-[280px] bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100/50">
+                              <div className="relative h-32 md:h-36 bg-gray-100 shrink-0">
+                                <img src={msg.cardData!.imageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(msg.cardData!.title)}`} className="w-full h-full object-cover" alt="card cover" />
+                                <div className="absolute top-2 left-2 bg-white/95 backdrop-blur-md px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider text-gray-900 shadow-sm border border-white/50">
+                                  {msg.cardData!.type === 'shop' ? 'Магазин' : 'Товар'}
+                                </div>
+                              </div>
+                              <div className="p-4 flex flex-col">
+                                <h4 className="font-bold text-sm text-gray-900 line-clamp-1 mb-1.5">{msg.cardData!.title}</h4>
+                                {msg.cardData!.description && (
+                                  <p className="text-[11px] text-gray-500 font-medium line-clamp-2 leading-relaxed mb-3">
+                                    {msg.cardData!.description}
+                                  </p>
+                                )}
+                                <div className="flex items-center justify-between mt-auto">
+                                  {msg.cardData!.price ? (
+                                    <span className="text-xs font-black text-amber-700 bg-amber-50 px-2 py-1 rounded-lg">
+                                      {msg.cardData!.price}
+                                    </span>
+                                  ) : <span />}
+                                  
+                                  <Link 
+                                    to={msg.cardData!.link.replace(window.location.origin, '')} 
+                                    className="flex items-center gap-1.5 bg-gray-900 text-white px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-brand transition-colors active:scale-95 shrink-0"
+                                  >
+                                    Подробнее <ExternalLink size={12} />
+                                  </Link>
+                                </div>
+                              </div>
                             </div>
+                          ) : (
+                            /* ======= РЕНДЕР ОБЫЧНОГО СООБЩЕНИЯ ======= */
+                            <>
+                              {msg.imageUrl && (
+                                <div className="w-full max-w-[250px] rounded-xl overflow-hidden mb-1 border border-white/10">
+                                  <img src={msg.imageUrl} alt="attachment" className="w-full h-auto object-cover" />
+                                </div>
+                              )}
+                              {msg.text && <span className="leading-relaxed whitespace-pre-wrap break-words">{msg.text}</span>}
+                            </>
                           )}
-                          {msg.text && <span className="leading-relaxed whitespace-pre-wrap break-words">{msg.text}</span>}
-                          <span className={`text-[9px] font-bold self-end select-none mt-1 ${isMine ? 'text-white/50' : 'text-gray-400'}`}>
+
+                          {/* ВРЕМЯ СООБЩЕНИЯ */}
+                          <span className={`text-[9px] font-bold self-end select-none ${isCard ? 'px-2 pb-1' : 'mt-1'} ${isMine ? 'text-white/50' : 'text-gray-400'}`}>
                             {formatTime(msg.createdAt)}
                           </span>
 
+                          {/* КНОПКА ЛАЙКА ПРИ НАВЕДЕНИИ */}
                           <div className={`absolute ${isMine ? '-left-8' : '-right-8'} bottom-1 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity`}>
                             <button onClick={() => handleLikeMessage(msg.id, msg.likes)} className="p-1.5 rounded-full bg-white border border-gray-100 shadow-sm text-gray-400 hover:text-pink-500 hover:bg-pink-50 transition-colors">
                               <Heart size={14} className={isLikedByMe ? "fill-pink-500 text-pink-500" : ""} />
@@ -347,6 +402,7 @@ export default function ChatsPage() {
                           </div>
                         </div>
 
+                        {/* ОТОБРАЖЕНИЕ СЧЕТЧИКА ЛАЙКОВ */}
                         {hasLikes && (
                           <div className={`absolute -bottom-3 ${isMine ? 'right-2' : 'left-2'} bg-white border border-gray-100 shadow-sm rounded-full px-2 py-0.5 flex items-center gap-1 z-10 animate-fade-in`}>
                             <Heart size={10} className="fill-pink-500 text-pink-500" />

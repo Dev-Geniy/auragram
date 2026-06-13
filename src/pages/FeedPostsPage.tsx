@@ -1,12 +1,13 @@
-import { useState, useEffect, useMemo } from 'react';
-import { collection, addDoc, query, orderBy, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { collection, addDoc, query, orderBy, serverTimestamp, onSnapshot, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Link } from 'react-router-dom';
 import ProfileModal from '../components/ProfileModal';
 import { 
   Sparkles, MessageSquare, Plus, X, UserPlus, Image as ImageIcon, 
-  FileText, ShoppingBag, AlertCircle, Calendar, RefreshCw, Layers, UploadCloud
+  FileText, ShoppingBag, AlertCircle, Calendar, RefreshCw, Layers, UploadCloud,
+  Trash2, Edit2, Check
 } from 'lucide-react';
 
 interface Product {
@@ -49,17 +50,15 @@ export default function FeedPostsPage() {
   const [usersList, setUsersList] = useState<any[]>([]);
   const [classicPosts, setClassicPosts] = useState<FirestorePost[]>([]);
   
-  // Разделяем загрузку, чтобы точно знать, когда оба потока данных готовы
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
   const isLoading = isLoadingUsers || isLoadingPosts;
 
   const [activeTab, setActiveTab] = useState<'all' | 'products' | 'classic' | 'events'>('all');
 
-  // Состояние для предпросмотра профиля
   const [previewProfile, setPreviewProfile] = useState<any | null>(null);
 
-  // Состояния формы создания поста
+  // Состояния создания
   const [isCreating, setIsCreating] = useState(false);
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
@@ -67,11 +66,18 @@ export default function FeedPostsPage() {
   const [isSending, setIsSending] = useState(false);
   const [isUploadingImg, setIsUploadingImg] = useState(false);
 
-  // 1. РЕАКТИВНАЯ ЗАГРУЗКА ДАННЫХ (onSnapshot)
+  // Состояния редактирования
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editText, setEditText] = useState('');
+  const [editImageUrl, setEditImageUrl] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isUploadingEditImg, setIsUploadingEditImg] = useState(false);
+
+  // 1. РЕАКТИВНАЯ ЗАГРУЗКА ДАННЫХ
   useEffect(() => {
     if (!user) return;
 
-    // Слушатель списка пользователей (для товаров и системных уведомлений)
     const unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
       const loadedUsers: any[] = [];
       snapshot.forEach((doc) => {
@@ -84,7 +90,6 @@ export default function FeedPostsPage() {
       setIsLoadingUsers(false);
     });
 
-    // Слушатель постов
     const postsQuery = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
     const unsubscribePosts = onSnapshot(postsQuery, (snapshot) => {
       const loadedPosts: FirestorePost[] = [];
@@ -98,20 +103,19 @@ export default function FeedPostsPage() {
       setIsLoadingPosts(false);
     });
 
-    // Очищаем слушатели при размонтировании компонента
     return () => {
       unsubscribeUsers();
       unsubscribePosts();
     };
   }, [user]);
 
-  // Проверка лимита: количество постов пользователя за сегодня
+  // Лимит: количество постов за сегодня
   const todayPostsCount = useMemo(() => {
     if (!user) return 0;
     const today = new Date();
     return classicPosts.filter(post => {
       if (post.userId !== user.uid || post.type !== 'classic') return false;
-      if (!post.createdAt) return false; // Игнорируем посты, которые еще не получили timestamp от сервера
+      if (!post.createdAt) return false; 
       
       const postDate = post.createdAt?.toDate ? post.createdAt.toDate() : new Date(post.createdAt);
       return (
@@ -122,11 +126,10 @@ export default function FeedPostsPage() {
     }).length;
   }, [classicPosts, user]);
 
-  // 2. Сборка единого сквозного таймлайна
+  // Сборка таймлайна
   const timelineItems = useMemo(() => {
     const items: FeedItem[] = [];
 
-    // А) Добавление товаров из бизнес-аккаунтов
     usersList.forEach(u => {
       if (u.type === 'business' && u.products && Array.isArray(u.products)) {
         u.products.forEach((prod: Product) => {
@@ -145,7 +148,6 @@ export default function FeedPostsPage() {
         });
       }
 
-      // Б) Системные уведомления о регистрации новых пользователей
       if (u.createdAt && u.isPublicJoin !== false) {
         const regTime = new Date(u.createdAt).getTime();
         items.push({
@@ -159,9 +161,7 @@ export default function FeedPostsPage() {
       }
     });
 
-    // В) Добавление пользовательских текстовых постов
     classicPosts.forEach(p => {
-      // Поддержка мгновенного отображения (когда createdAt еще null при локальном сохранении)
       const postTime = p.createdAt?.toMillis ? p.createdAt.toMillis() : (p.createdAt ? new Date(p.createdAt).getTime() : Date.now());
       items.push({
         id: p.id,
@@ -176,11 +176,9 @@ export default function FeedPostsPage() {
       });
     });
 
-    // Сортировка по убыванию времени (свежие сверху)
     return items.sort((a, b) => b.timestamp - a.timestamp);
   }, [usersList, classicPosts]);
 
-  // Фильтрация по вкладкам интерфейса
   const filteredTimeline = useMemo(() => {
     return timelineItems.filter(item => {
       if (activeTab === 'all') return true;
@@ -191,30 +189,27 @@ export default function FeedPostsPage() {
     });
   }, [timelineItems, activeTab]);
 
-  // Загрузка картинки через ImgBB
+  const uploadImageToImgBB = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('image', file);
+    const apiKey = import.meta.env.VITE_IMGBB_API_KEY || '22de10db6eb1f3ec3fca012dcc566961'; 
+    const response = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
+      method: 'POST',
+      body: formData
+    });
+    const data = await response.json();
+    if (data.success) return data.data.url;
+    throw new Error('Ошибка при загрузке изображения');
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setIsUploadingImg(true);
-    const formData = new FormData();
-    formData.append('image', file);
-
     try {
-      const apiKey = import.meta.env.VITE_IMGBB_API_KEY || '22de10db6eb1f3ec3fca012dcc566961'; 
-      const response = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
-        method: 'POST',
-        body: formData
-      });
-      const data = await response.json();
-      
-      if (data.success) {
-        setImageUrl(data.data.url);
-      } else {
-        alert('Ошибка при загрузке изображения на сервер');
-      }
+      const url = await uploadImageToImgBB(file);
+      setImageUrl(url);
     } catch (error) {
-      console.error('Ошибка загрузки:', error);
       alert('Произошла ошибка при загрузке. Проверьте подключение.');
     } finally {
       setIsUploadingImg(false);
@@ -222,7 +217,21 @@ export default function FeedPostsPage() {
     }
   };
 
-  // 3. Обработчик отправки публикации
+  const handleEditImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingEditImg(true);
+    try {
+      const url = await uploadImageToImgBB(file);
+      setEditImageUrl(url);
+    } catch (error) {
+      alert('Произошла ошибка при загрузке. Проверьте подключение.');
+    } finally {
+      setIsUploadingEditImg(false);
+      e.target.value = '';
+    }
+  };
+
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !text.trim() || todayPostsCount >= 2 || isSending) return;
@@ -248,20 +257,55 @@ export default function FeedPostsPage() {
       setText('');
       setImageUrl('');
       setIsCreating(false);
-      // УДАЛЕНО: await fetchData(); — Теперь onSnapshot обновит всё автоматически!
     } catch (error) {
-      console.error('Ошибка добавления публикации в ленту:', error);
+      console.error('Ошибка добавления публикации:', error);
     } finally {
       setIsSending(false);
     }
   };
 
-  // Открытие профиля автора
+  // ФУНКЦИИ УДАЛЕНИЯ И РЕДАКТИРОВАНИЯ
+  const handleDeletePost = async (postId: string) => {
+    if (!window.confirm('Вы уверены, что хотите безвозвратно удалить эту публикацию?')) return;
+    try {
+      await deleteDoc(doc(db, 'posts', postId));
+    } catch (error) {
+      console.error('Ошибка при удалении:', error);
+      alert('Не удалось удалить публикацию.');
+    }
+  };
+
+  const handleStartEdit = (item: FeedItem) => {
+    setEditingPostId(item.id);
+    setEditTitle(item.title || '');
+    setEditText(item.text || '');
+    setEditImageUrl(item.imageUrl || '');
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPostId || !editText.trim() || isSavingEdit) return;
+
+    setIsSavingEdit(true);
+    try {
+      await updateDoc(doc(db, 'posts', editingPostId), {
+        title: editTitle.trim(),
+        text: editText.trim(),
+        imageUrl: editImageUrl.trim(),
+        // Мы не обновляем createdAt, чтобы пост остался на своем месте в ленте по времени
+      });
+      setEditingPostId(null);
+    } catch (error) {
+      console.error('Ошибка при сохранении:', error);
+      alert('Не удалось сохранить изменения.');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   const handleOpenProfile = (authorId: string) => {
     const profile = usersList.find(u => u.id === authorId);
-    if (profile) {
-      setPreviewProfile(profile);
-    }
+    if (profile) setPreviewProfile(profile);
   };
 
   const formatItemDate = (timestamp: number) => {
@@ -399,10 +443,14 @@ export default function FeedPostsPage() {
             {filteredTimeline.map(item => (
               <div 
                 key={item.id} 
-                className="bg-white rounded-3xl p-6 border border-gray-200/60 shadow-[0_4px_20px_rgba(0,0,0,0.01)] hover:shadow-[0_8px_25px_rgba(0,0,0,0.03)] hover:border-gray-300/80 transition-all duration-300 flex flex-col sm:flex-row gap-5"
+                className={`bg-white rounded-3xl p-6 border transition-all duration-300 flex flex-col sm:flex-row gap-5 ${
+                  editingPostId === item.id 
+                    ? 'border-brand/40 shadow-[0_8px_30px_rgba(0,0,0,0.06)] scale-[1.01]' 
+                    : 'border-gray-200/60 shadow-[0_4px_20px_rgba(0,0,0,0.01)] hover:shadow-[0_8px_25px_rgba(0,0,0,0.03)] hover:border-gray-300/80'
+                }`}
               >
-                {/* Изображение поста */}
-                {item.imageUrl && (
+                {/* Изображение поста (для обычного вида и формы редактирования) */}
+                {item.imageUrl && editingPostId !== item.id && (
                   <div className="w-full sm:w-44 h-44 rounded-2xl overflow-hidden bg-gray-50 shrink-0 border border-gray-100">
                     <img src={item.imageUrl} alt={item.title || 'Post cover'} className="w-full h-full object-cover" />
                   </div>
@@ -411,7 +459,7 @@ export default function FeedPostsPage() {
                 {/* Контентная часть */}
                 <div className="flex-1 flex flex-col justify-between min-w-0 py-0.5">
                   <div>
-                    {/* Мета-хедер автора (С КЛИКОМ НА ПРОФИЛЬ) */}
+                    {/* Мета-хедер автора */}
                     <div className="flex items-center justify-between gap-4 mb-3.5">
                       <div 
                         className="flex items-center gap-3 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
@@ -430,28 +478,108 @@ export default function FeedPostsPage() {
                         </div>
                       </div>
 
-                      {/* Категория карточки */}
-                      <div>
+                      {/* Категория карточки и КНОПКИ УПРАВЛЕНИЯ */}
+                      <div className="flex items-center gap-2">
+                        {/* Кнопки Редактирования и Удаления для автора */}
+                        {item.type === 'classic' && item.authorId === user?.uid && editingPostId !== item.id && (
+                          <div className="flex items-center gap-1 mr-1 sm:mr-3 sm:pr-3 sm:border-r border-gray-100">
+                            <button 
+                              onClick={() => handleStartEdit(item)} 
+                              className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Редактировать"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button 
+                              onClick={() => handleDeletePost(item.id)} 
+                              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Удалить пост"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        )}
+
                         {item.type === 'product' && (
-                          <span className="bg-amber-50 text-amber-700 border border-amber-200/50 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md">Товар</span>
+                          <span className="hidden sm:inline-block bg-amber-50 text-amber-700 border border-amber-200/50 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md">Товар</span>
                         )}
                         {item.type === 'classic' && (
-                          <span className="bg-gray-100 text-gray-700 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md">Пост</span>
+                          <span className="hidden sm:inline-block bg-gray-100 text-gray-700 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md">Пост</span>
                         )}
                         {item.type === 'registration' && (
-                          <span className="bg-green-50 text-green-700 border border-green-200/50 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md">Welcome</span>
+                          <span className="hidden sm:inline-block bg-green-50 text-green-700 border border-green-200/50 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md">Welcome</span>
                         )}
                       </div>
                     </div>
 
-                    {/* Тело контента */}
-                    {item.type === 'registration' ? (
+                    {/* ТЕЛО КОНТЕНТА ИЛИ ФОРМА РЕДАКТИРОВАНИЯ */}
+                    {editingPostId === item.id ? (
+                      <form onSubmit={handleSaveEdit} className="space-y-3 mt-2 animate-fade-in">
+                        <input 
+                          type="text" 
+                          placeholder="Заголовок" 
+                          value={editTitle}
+                          onChange={e => setEditTitle(e.target.value)}
+                          className="w-full bg-gray-50 border border-gray-200/60 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-brand/10 focus:border-brand outline-none transition-all font-semibold"
+                        />
+                        <textarea 
+                          placeholder="Текст поста..." 
+                          value={editText}
+                          onChange={e => setEditText(e.target.value)}
+                          required
+                          className="w-full bg-gray-50 border border-gray-200/60 rounded-xl px-4 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-brand/10 focus:border-brand outline-none transition-all resize-none h-28 font-medium"
+                        />
+                        
+                        <div className="flex flex-col sm:flex-row items-center gap-3">
+                          <div className="flex-1 w-full flex items-center gap-2 bg-gray-50 border border-gray-200/60 rounded-xl px-3 py-2.5 focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/10 focus-within:bg-white transition-all">
+                            <ImageIcon size={16} className="text-gray-400 shrink-0" />
+                            <input 
+                              type="text" 
+                              placeholder="Ссылка на изображение (URL)" 
+                              value={editImageUrl}
+                              onChange={e => setEditImageUrl(e.target.value)}
+                              className="w-full bg-transparent text-xs outline-none font-medium"
+                            />
+                          </div>
+                          <label className="w-full sm:w-auto shrink-0 flex items-center justify-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all">
+                            {isUploadingEditImg ? <RefreshCw size={14} className="animate-spin" /> : <UploadCloud size={14} />}
+                            Загрузить
+                            <input type="file" accept="image/*" className="hidden" onChange={handleEditImageUpload} disabled={isUploadingEditImg}/>
+                          </label>
+                        </div>
+
+                        {editImageUrl && (
+                          <div className="mt-2 relative inline-block rounded-xl overflow-hidden border border-gray-200 shadow-sm h-20">
+                            <img src={editImageUrl} alt="Preview" className="h-full w-auto object-cover" />
+                            <button type="button" onClick={() => setEditImageUrl('')} className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 hover:bg-black/70 transition-colors"><X size={12} /></button>
+                          </div>
+                        )}
+
+                        <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                          <button 
+                            type="button" 
+                            onClick={() => setEditingPostId(null)} 
+                            className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all"
+                          >
+                            Отмена
+                          </button>
+                          <button 
+                            type="submit" 
+                            disabled={isSavingEdit || !editText.trim()} 
+                            className="px-5 py-2.5 bg-gray-950 hover:bg-gray-800 text-white rounded-xl text-xs font-bold tracking-wider uppercase transition-all flex items-center gap-1.5 shadow-sm"
+                          >
+                            {isSavingEdit ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
+                            Сохранить
+                          </button>
+                        </div>
+                      </form>
+                    ) : item.type === 'registration' ? (
                       <div className="p-4 bg-green-50/40 border border-green-100/50 rounded-2xl flex items-center gap-3.5">
                         <div className="w-9 h-9 bg-green-500 text-white rounded-xl flex items-center justify-center shrink-0 shadow-sm shadow-green-500/20">
                           <UserPlus size={16} />
                         </div>
                         <p className="text-xs text-gray-600 font-medium leading-relaxed">
-                          Радар зафиксировал нового участника в сети! Добро пожаловать, <span className="font-bold text-gray-900">{item.authorName}</span>. Профиль открыт для защищенного нетворкинга.
+                          Радар зафиксировал нового участника в сети! Добро пожаловать, <span className="font-bold text-gray-900">{item.authorName}</span>.
                         </p>
                       </div>
                     ) : (
@@ -462,8 +590,8 @@ export default function FeedPostsPage() {
                     )}
                   </div>
 
-                  {/* Футер карточки с кнопками действий */}
-                  {item.type !== 'registration' && (
+                  {/* Футер карточки с кнопками действий (Скрываем при редактировании) */}
+                  {item.type !== 'registration' && editingPostId !== item.id && (
                     <div className="flex items-center justify-between gap-4 pt-5 mt-4 border-t border-gray-100 shrink-0">
                       <div>
                         {item.type === 'product' && item.price && (

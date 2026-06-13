@@ -125,11 +125,13 @@ export default function ShopPage() {
         await updateDoc(chatRef, chatData);
       }
 
-      // Отправляем структурированное сообщение (cardData будет использовать ChatsPage)
-      await addDoc(collection(db, 'chats', chatId, 'messages'), {
+      // ИСПРАВЛЕНО: Отправляем структурированное сообщение в правильную коллекцию
+      await addDoc(collection(db, 'messages'), {
+        chatId: chatId,
         senderId: user.uid,
-        text: `[Карточка: ${shareItem.name}] ${link}`,
-        timestamp: serverTimestamp(),
+        receiverId: targetUser.id,
+        text: `Поделился: ${shareItem.name}`,
+        createdAt: serverTimestamp(),
         type: 'share_card',
         cardData: {
           type: shareItem.shareType,

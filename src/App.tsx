@@ -17,7 +17,7 @@ const FeedPage = lazy(() => import('./pages/FeedPage'));
 const MarketPage = lazy(() => import('./pages/MarketPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const FeedPostsPage = lazy(() => import('./pages/FeedPostsPage'));
-const ShopPage = lazy(() => import('./pages/ShopPage')); // Подключили страницу магазина
+const ShopPage = lazy(() => import('./pages/ShopPage'));
 
 // ==========================================
 // ГЛОБАЛЬНЫЙ ЗАГРУЗЧИК (PRELOADER)
@@ -33,16 +33,31 @@ const GlobalLoader = () => (
 );
 
 // ==========================================
+// УМНАЯ ОБЕРТКА ДЛЯ ЗАЩИТЫ МАРШРУТОВ (С ХРАНЕНИЕМ URL)
+// ==========================================
+const RequireAuth = ({ children }: { children: JSX.Element }) => {
+  const { user } = useAuthStore();
+  const location = useLocation();
+
+  // Если пользователя нет, перекидываем на логин, сохраняя полный путь (включая параметры ?product=...)
+  if (!user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Если всё ок, пускаем на страницу
+  return children;
+};
+
+// ==========================================
 // ОСНОВНОЙ МАКЕТ (САЙДБАР ПК / НИЖНЕЕ МЕНЮ МОБИЛОК)
 // ==========================================
 const MainLayout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const { user } = useAuthStore();
 
-  // Обновленная структура меню (Чаты и Радар поменяны местами)
   const menuItems = [
     { path: '/posts', icon: <Component size={22} />, label: 'Лента' },
-    { path: '/chats', icon: <MessageSquare size={22} />, label: 'Чаты', badge: true }, // badge - индикатор уведомлений
+    { path: '/chats', icon: <MessageSquare size={22} />, label: 'Чаты', badge: true },
     { path: '/feed', icon: <Globe size={22} />, label: 'Радар' },
     { path: '/market', icon: <Store size={22} />, label: 'Маркет' },
   ];
@@ -61,7 +76,6 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
       {/* 💻 ДЕСКТОПНЫЙ САЙДБАР */}
       <aside className="hidden md:flex w-[280px] bg-white border-r border-gray-200/60 flex-col justify-between z-20 shadow-[1px_0_20px_rgba(0,0,0,0.02)]">
         <div>
-          {/* Кликабельный Логотип */}
           <Link to="/posts" className="h-20 flex items-center px-6 border-b border-gray-100 gap-3 group">
             <div className="w-10 h-10 bg-gray-950 rounded-xl flex items-center justify-center shadow-lg shadow-gray-950/20 group-hover:scale-105 transition-transform duration-300">
               <Hexagon size={22} className="text-white" strokeWidth={2.5} />
@@ -71,7 +85,6 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
             </span>
           </Link>
 
-          {/* Профиль пользователя */}
           {user && (
             <Link 
               to="/profile" 
@@ -95,7 +108,6 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
             </Link>
           )}
 
-          {/* Навигация */}
           <nav className="px-4 py-2 space-y-1.5">
             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-3 mb-4 mt-2">Меню платформы</div>
             {menuItems.map((item) => {
@@ -112,20 +124,17 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
                 >
                   <div className={`relative transition-transform duration-300 ${isActive ? 'scale-110 text-white' : 'text-gray-400 group-hover:text-gray-900 group-hover:scale-110'}`}>
                     {item.icon}
-                    {/* Бейдж непрочитанных (не показываем, если раздел активен) */}
                     {item.badge && !isActive && (
                       <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-brand rounded-full border-2 border-white"></span>
                     )}
                   </div>
                   {item.label}
-                  {/* Пульсирующая точка удалена по просьбе для чистоты интерфейса */}
                 </Link>
               );
             })}
           </nav>
         </div>
 
-        {/* Кнопка Выхода */}
         <div className="p-5 border-t border-gray-100/50">
           <button
             onClick={handleLogout}
@@ -137,7 +146,7 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
         </div>
       </aside>
 
-      {/* 📱 МОБИЛЬНЫЙ ХЕДЕР (Стеклянный) */}
+      {/* 📱 МОБИЛЬНЫЙ ХЕДЕР */}
       <header className="md:hidden fixed top-0 left-0 right-0 h-[68px] bg-white/80 backdrop-blur-xl border-b border-gray-200/60 z-30 flex items-center justify-between px-5 pt-safe">
         <Link to="/posts" className="flex items-center gap-3 group">
           <div className="w-8 h-8 bg-gray-950 rounded-lg flex items-center justify-center shadow-md group-hover:scale-105 transition-transform duration-300">
@@ -164,10 +173,9 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
         </Suspense>
       </main>
 
-      {/* 📱 МОБИЛЬНОЕ НИЖНЕЕ МЕНЮ (Glassmorphism Bottom Bar) */}
+      {/* 📱 МОБИЛЬНОЕ НИЖНЕЕ МЕНЮ */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-[84px] bg-white/90 backdrop-blur-xl border-t border-gray-200/60 z-30 flex items-center justify-around px-2 pb-safe shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
         {menuItems.map((item) => {
-          // Для магазина подсвечиваем иконку Маркета
           const isActive = location.pathname === item.path || (item.path === '/market' && location.pathname.startsWith('/shop'));
           return (
             <Link
@@ -177,7 +185,6 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
                 isActive ? 'text-gray-950' : 'text-gray-400 hover:text-gray-600'
               }`}
             >
-              {/* Полоска сверху убрана для более чистого iOS-стиля */}
               <div className={`relative transition-all duration-300 ${isActive ? '-translate-y-1.5 scale-110' : 'scale-100 mt-1'}`}>
                 {item.icon}
                 {item.badge && !isActive && (
@@ -225,16 +232,16 @@ export default function App() {
         <Routes>
           <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/posts" />} />
           
-          {/* Защищенные роуты */}
+          {/* Защищенные роуты через RequireAuth */}
           <Route path="/" element={<Navigate to="/posts" replace />} />
-          <Route path="/chats" element={user ? <MainLayout><ChatsPage /></MainLayout> : <Navigate to="/login" />} />
-          <Route path="/feed" element={user ? <MainLayout><FeedPage currentSync={currentSync} userGender={gender} /></MainLayout> : <Navigate to="/login" />} />
-          <Route path="/posts" element={user ? <MainLayout><FeedPostsPage /></MainLayout> : <Navigate to="/login" />} />
-          <Route path="/market" element={user ? <MainLayout><MarketPage /></MainLayout> : <Navigate to="/login" />} />
-          <Route path="/profile" element={user ? <MainLayout><ProfilePage currentSync={currentSync} setSync={setSync} gender={gender} setGender={setGender} /></MainLayout> : <Navigate to="/login" />} />
+          <Route path="/chats" element={<RequireAuth><MainLayout><ChatsPage /></MainLayout></RequireAuth>} />
+          <Route path="/feed" element={<RequireAuth><MainLayout><FeedPage currentSync={currentSync} userGender={gender} /></MainLayout></RequireAuth>} />
+          <Route path="/posts" element={<RequireAuth><MainLayout><FeedPostsPage /></MainLayout></RequireAuth>} />
+          <Route path="/market" element={<RequireAuth><MainLayout><MarketPage /></MainLayout></RequireAuth>} />
+          <Route path="/profile" element={<RequireAuth><MainLayout><ProfilePage currentSync={currentSync} setSync={setSync} gender={gender} setGender={setGender} /></MainLayout></RequireAuth>} />
           
           {/* Страница отдельного магазина */}
-          <Route path="/shop/:id" element={user ? <MainLayout><ShopPage /></MainLayout> : <Navigate to="/login" />} />
+          <Route path="/shop/:id" element={<RequireAuth><MainLayout><ShopPage /></MainLayout></RequireAuth>} />
           
           <Route path="*" element={<Navigate to="/posts" replace />} />
         </Routes>

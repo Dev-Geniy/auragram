@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { X, Phone, Globe, MessageSquare, ShoppingBag } from 'lucide-react';
+import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import { X, Phone, Globe, MessageSquare, ShoppingBag, FileText, Calendar, RefreshCw } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -29,12 +31,58 @@ interface ProfileModalProps {
   onClose: () => void;
 }
 
+interface UserPost {
+  id: string;
+  title: string;
+  text: string;
+  imageUrl?: string;
+  createdAt: any;
+}
+
 export default function ProfileModal({ profile, onClose }: ProfileModalProps) {
-  // Закрытие при клике вне карточки (на затемненный фон)
+  const [posts, setPosts] = useState<UserPost[]>([]);
+  const [visibleCount, setVisibleCount] = useState(3);
+  const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+
+  // Загрузка постов пользователя при открытии модалки
+  useEffect(() => {
+    if (!profile.id) return;
+    
+    const fetchUserPosts = async () => {
+      setIsLoadingPosts(true);
+      try {
+        const q = query(
+          collection(db, 'posts'),
+          where('userId', '==', profile.id),
+          orderBy('createdAt', 'desc')
+        );
+        const snapshot = await getDocs(q);
+        const loadedPosts: UserPost[] = [];
+        snapshot.forEach(doc => {
+          loadedPosts.push({ id: doc.id, ...doc.data() } as UserPost);
+        });
+        setPosts(loadedPosts);
+      } catch (error) {
+        console.error('Ошибка загрузки постов:', error);
+      } finally {
+        setIsLoadingPosts(false);
+      }
+    };
+
+    fetchUserPosts();
+  }, [profile.id]);
+
+  // Закрытие при клике вне карточки
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
       onClose();
     }
+  };
+
+  const formatPostDate = (timestamp: any) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleDateString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   };
 
   return (
@@ -42,7 +90,6 @@ export default function ProfileModal({ profile, onClose }: ProfileModalProps) {
       className="fixed inset-0 z-[150] bg-gray-950/40 backdrop-blur-md flex items-center justify-center p-4 md:p-10 overflow-y-auto animate-fade-in"
       onClick={handleBackdropClick}
     >
-      {/* Добавили flex flex-col для правильного позиционирования футера */}
       <div className="bg-white w-full max-w-md rounded-[2rem] overflow-hidden shadow-2xl relative my-auto animate-scale-up flex flex-col">
         
         <button 
@@ -72,7 +119,7 @@ export default function ProfileModal({ profile, onClose }: ProfileModalProps) {
           </div>
         </div>
         
-        {/* Тело профиля */}
+        {/* Тело профиля (Scrollable) */}
         <div className="p-6 md:p-8 flex flex-col gap-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
           <p className="text-[15px] text-gray-600 font-medium leading-relaxed whitespace-pre-wrap">
             {profile.role || 'Описание отсутствует...'}
@@ -124,12 +171,58 @@ export default function ProfileModal({ profile, onClose }: ProfileModalProps) {
               )}
             </div>
           )}
+
+          {/* БЛОГ: ЛЕНТА ПУБЛИКАЦИЙ ПОЛЬЗОВАТЕЛЯ */}
+          <div className="pt-6 border-t border-gray-100 space-y-4">
+            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+              <FileText size={14} className="text-gray-400" /> Публикации автора
+            </h4>
+
+            {isLoadingPosts ? (
+              <div className="flex justify-center py-4">
+                <RefreshCw size={20} className="animate-spin text-gray-300" />
+              </div>
+            ) : posts.length === 0 ? (
+              <div className="text-center py-6 bg-gray-50 rounded-2xl border border-gray-100">
+                <p className="text-xs font-medium text-gray-400">Пользователь пока ничего не публиковал.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {posts.slice(0, visibleCount).map(post => (
+                  <div key={post.id} className="bg-white border border-gray-200/60 rounded-2xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+                    {post.imageUrl && (
+                      <div className="w-full h-32 bg-gray-50 rounded-xl overflow-hidden mb-3">
+                        <img src={post.imageUrl} alt="cover" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    {post.title && <h5 className="font-bold text-sm text-gray-900 mb-1">{post.title}</h5>}
+                    <p className="text-xs text-gray-600 leading-relaxed font-medium line-clamp-3 whitespace-pre-wrap">
+                      {post.text}
+                    </p>
+                    <p className="text-[9px] text-gray-400 font-bold flex items-center gap-1 mt-3">
+                      <Calendar size={10} /> {formatPostDate(post.createdAt)}
+                    </p>
+                  </div>
+                ))}
+
+                {/* Кнопка загрузки дополнительных постов */}
+                {posts.length > visibleCount && (
+                  <button 
+                    onClick={() => setVisibleCount(prev => prev + 5)}
+                    className="w-full py-3 bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-bold rounded-xl transition-colors border border-gray-200/60"
+                  >
+                    Загрузить ещё 5
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
         </div>
 
-        {/* ФУТЕР С КНОПКАМИ ДЕЙСТВИЙ (Новый блок) */}
+        {/* ФУТЕР С КНОПКАМИ ДЕЙСТВИЙ */}
         {profile.id && (
           <div className="p-4 md:p-6 bg-gray-50 border-t border-gray-100 flex items-center gap-3 shrink-0">
-            {/* Кнопка магазина (только для бизнес-профилей) */}
             {profile.type === 'business' && (
               <Link 
                 to={`/shop/${profile.id}`}
@@ -141,7 +234,6 @@ export default function ProfileModal({ profile, onClose }: ProfileModalProps) {
               </Link>
             )}
             
-            {/* Универсальная кнопка "Написать" */}
             <Link 
               to="/chats" 
               state={{ selectedUserId: profile.id }}

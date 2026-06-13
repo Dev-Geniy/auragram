@@ -64,7 +64,7 @@ export default function FeedPage({ currentSync, userGender }: FeedPageProps) {
   });
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#FAFAFA] p-6 md:p-10 select-none">
+    <div className="flex-1 overflow-y-auto bg-[#FAFAFA] p-6 md:p-10 select-none pb-24">
       <div className="max-w-6xl mx-auto">
         
         {/* ВЕРХНЯЯ ПАНЕЛЬ (РАДАР) */}
@@ -107,7 +107,7 @@ export default function FeedPage({ currentSync, userGender }: FeedPageProps) {
           /* Премиальный Skeleton Loader */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3].map((n) => (
-              <div key={n} className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm animate-pulse flex flex-col">
+              <div key={n} className="bg-white rounded-[2rem] overflow-hidden border border-gray-100 shadow-sm animate-pulse flex flex-col">
                 <div className="h-48 bg-gray-200/60 w-full" />
                 <div className="p-6 space-y-4 flex-1">
                   <div className="h-4 bg-gray-100 rounded w-3/4" />
@@ -127,7 +127,7 @@ export default function FeedPage({ currentSync, userGender }: FeedPageProps) {
         ) : filteredProfiles.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProfiles.map((profile) => (
-              <div key={profile.id} className="bg-white rounded-3xl overflow-hidden border border-gray-200/60 shadow-sm hover:shadow-xl hover:shadow-brand/5 hover:-translate-y-1 hover:border-gray-300 transition-all duration-300 group flex flex-col">
+              <div key={profile.id} className="bg-white rounded-[2rem] overflow-hidden border border-gray-200/60 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)] hover:-translate-y-1 hover:border-gray-300 transition-all duration-300 group flex flex-col">
                 
                 {/* Аватар и статус (Cover) */}
                 <div className="relative h-56 bg-gray-100 overflow-hidden shrink-0">
@@ -160,7 +160,7 @@ export default function FeedPage({ currentSync, userGender }: FeedPageProps) {
                 
                 {/* Информация */}
                 <div className="p-6 flex-1 flex flex-col">
-                  <p className="text-sm text-gray-600 mb-5 line-clamp-2 min-h-[40px] font-medium leading-relaxed">
+                  <p className="text-[13px] text-gray-600 mb-5 line-clamp-2 min-h-[40px] font-medium leading-relaxed">
                     {profile.role || 'Пользователь пока не добавил описание профиля.'}
                   </p>
                   
@@ -177,10 +177,10 @@ export default function FeedPage({ currentSync, userGender }: FeedPageProps) {
                     )}
                   </div>
                   
-                  {/* Кнопка связи (Link на ChatsPage) */}
+                  {/* ИСПРАВЛЕНО: Кнопка связи теперь ведет на /chats */}
                   <Link 
-                    to="/" 
-                    className="w-full py-3.5 bg-gray-50 group-hover:bg-brand text-gray-900 group-hover:text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-sm"
+                    to="/chats" 
+                    className="w-full py-3.5 bg-gray-50 group-hover:bg-gray-950 text-gray-900 group-hover:text-white font-bold text-[11px] uppercase tracking-wider rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-sm"
                   >
                     <MessageCircle size={16} className="group-hover:scale-110 transition-transform duration-300" />
                     Написать сообщение

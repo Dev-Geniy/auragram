@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
-import { MessageSquare, Send, User as UserIcon, Search } from 'lucide-react';
+import { MessageSquare, Send, User as Search } from 'lucide-react';
 
 // Типы данных
 interface UserProfile {

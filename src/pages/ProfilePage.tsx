@@ -3,8 +3,8 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { 
-  User, Briefcase, Users, X, Save, Sparkles, CheckCircle2, 
-  Settings, ShieldCheck, Info, Phone, Mail, Globe, Package, 
+  User, Briefcase, Users, X, Save, CheckCircle2, 
+  Settings, Phone, Mail, Globe, Package, 
   Plus, Trash2, Image as ImageIcon, Eye, Search, Camera, Bell
 } from 'lucide-react';
 
@@ -111,6 +111,13 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
     }
   };
 
+  const handleRemoveSkill = (skillToRemove: string) => {
+    setProfile({
+      ...profile,
+      skills: profile.skills.filter(s => s !== skillToRemove)
+    });
+  };
+
   const handleAddProduct = () => {
     if (!newProduct.name || !newProduct.price) return;
     const productToAdd = {
@@ -121,6 +128,13 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
     setProfile({ ...profile, products: [productToAdd, ...profile.products] });
     setNewProduct({ id: '', name: '', price: '', description: '', imageUrl: '' });
     setIsAddingProduct(false);
+  };
+
+  const handleRemoveProduct = (productId: string) => {
+    setProfile({
+      ...profile,
+      products: profile.products.filter(p => p.id !== productId)
+    });
   };
 
   // Единые стили для инпутов (Enterprise Design Code)

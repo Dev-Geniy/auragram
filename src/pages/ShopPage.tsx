@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { doc, getDoc, collection, getDocs, setDoc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, setDoc, updateDoc, addDoc, serverTimestamp, query, where, documentId } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { 
   Phone, Mail, Globe, Package, ArrowLeft, MessageSquare, 
-  MapPin, Building2, Share2, X, Search, CheckCircle, RefreshCw, Link2
+  MapPin, Building2, Share2, X, Search, CheckCircle, RefreshCw, Link2, Users
 } from 'lucide-react';
 
 interface Product {
@@ -42,6 +42,7 @@ export default function ShopPage() {
   const [searchContact, setSearchContact] = useState('');
   const [sharingStatus, setSharingStatus] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [isContactsLoading, setIsContactsLoading] = useState(false);
 
   useEffect(() => {
     const fetchShop = async () => {
@@ -62,24 +63,64 @@ export default function ShopPage() {
     fetchShop();
   }, [id]);
 
-  // Загрузка контактов при открытии модального окна
+  // Загрузка контактов при открытии модального окна (ОПТИМИЗИРОВАНО)
   const openShareModal = async (item: any, type: 'shop' | 'product') => {
     setShareItem({ ...item, shareType: type });
     setShowShareModal(true);
     
-    if (contacts.length === 0) {
+    if (contacts.length === 0 && user) {
+      setIsContactsLoading(true);
       try {
-        const usersSnap = await getDocs(collection(db, 'users'));
-        const loadedUsers: any[] = [];
-        usersSnap.forEach(d => {
-          // Исключаем самого себя из списка
-          if (d.id !== user?.uid) {
-            loadedUsers.push({ id: d.id, ...d.data() });
+        // 1. Ищем все чаты, где участвует текущий пользователь
+        const chatsQuery = query(
+          collection(db, 'chats'),
+          where('participants', 'array-contains', user.uid)
+        );
+        const chatsSnap = await getDocs(chatsQuery);
+        
+        // 2. Собираем ID всех собеседников (исключая самого себя)
+        const participantIds = new Set<string>();
+        chatsSnap.forEach(doc => {
+          const data = doc.data();
+          if (data.participants && Array.isArray(data.participants)) {
+            data.participants.forEach((pId: string) => {
+              if (pId !== user.uid) participantIds.add(pId);
+            });
           }
         });
+
+        const idsArray = Array.from(participantIds);
+
+        // Если чатов нет вообще, выходим
+        if (idsArray.length === 0) {
+          setContacts([]);
+          setIsContactsLoading(false);
+          return;
+        }
+
+        // 3. Загружаем профили только найденных собеседников
+        const loadedUsers: any[] = [];
+        
+        // Firestore 'in' query поддерживает максимум 10 элементов.
+        // Если собеседников больше 10, разбиваем на чанки
+        const chunkSize = 10;
+        for (let i = 0; i < idsArray.length; i += chunkSize) {
+          const chunk = idsArray.slice(i, i + chunkSize);
+          const usersQuery = query(
+            collection(db, 'users'),
+            where(documentId(), 'in', chunk)
+          );
+          const usersSnap = await getDocs(usersQuery);
+          usersSnap.forEach(d => {
+            loadedUsers.push({ id: d.id, ...d.data() });
+          });
+        }
+        
         setContacts(loadedUsers);
       } catch (err) {
         console.error('Ошибка загрузки контактов:', err);
+      } finally {
+        setIsContactsLoading(false);
       }
     }
   };
@@ -125,7 +166,7 @@ export default function ShopPage() {
         await updateDoc(chatRef, chatData);
       }
 
-      // ИСПРАВЛЕНО: Отправляем структурированное сообщение в правильную коллекцию
+      // Отправляем структурированное сообщение
       await addDoc(collection(db, 'messages'), {
         chatId: chatId,
         senderId: user.uid,
@@ -403,7 +444,7 @@ export default function ShopPage() {
                 <Search size={18} className="text-gray-400 shrink-0"/>
                 <input 
                   type="text" 
-                  placeholder="Найти пользователя..." 
+                  placeholder="Найти диалог..." 
                   className="bg-transparent outline-none text-sm w-full font-medium text-gray-900 placeholder:text-gray-400" 
                   value={searchContact} 
                   onChange={e => setSearchContact(e.target.value)} 
@@ -411,12 +452,17 @@ export default function ShopPage() {
               </div>
             </div>
 
-            {/* Список контактов */}
+            {/* Список контактов (ТЕПЕРЬ ТОЛЬКО ИЗ ЧАТОВ) */}
             <div className="flex-1 overflow-y-auto p-2 custom-scrollbar relative">
-              {contacts.length === 0 ? (
+              {isContactsLoading ? (
                 <div className="flex flex-col items-center justify-center h-40 text-gray-400">
                   <RefreshCw size={24} className="animate-spin mb-2 opacity-50" />
-                  <p className="text-xs font-medium">Загрузка контактов...</p>
+                  <p className="text-xs font-medium">Загрузка ваших чатов...</p>
+                </div>
+              ) : contacts.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-40 text-gray-400 text-center px-4">
+                  <Users size={32} className="mb-2 opacity-30" />
+                  <p className="text-xs font-medium">У вас пока нет активных диалогов.<br/>Сначала напишите кому-нибудь.</p>
                 </div>
               ) : (
                 contacts

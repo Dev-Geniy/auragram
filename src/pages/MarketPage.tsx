@@ -1,5 +1,3 @@
-import React from 'react';
-
 export default function MarketPage() {
   return (
     <div className="p-8 text-gray-400">

@@ -4,7 +4,7 @@ import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { 
   MessageSquare, Send, Search, X, ShieldCheck, 
-  Loader2, Clock, Image as ImageIcon, Heart, Trash2 
+  Loader2, Clock, Image as ImageIcon, Heart
 } from 'lucide-react';
 
 interface UserProfile {

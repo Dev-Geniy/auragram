@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { 
   Phone, Mail, Globe, Package, ArrowLeft, MessageSquare, 
-  MapPin, Building2, ExternalLink 
+  MapPin, Building2 
 } from 'lucide-react';
 
 interface Product {
@@ -48,7 +48,7 @@ export default function ShopPage() {
         setIsLoading(false);
       }
     };
-    fetchProfile();
+    fetchShop(); // ИСПРАВЛЕНО: Вызываем правильное имя функции
   }, [id]);
 
   if (isLoading) {
@@ -92,15 +92,12 @@ export default function ShopPage() {
         {/* КАРТОЧКА МАГАЗИНА */}
         <div className="bg-white rounded-[2rem] shadow-[0_4px_25px_rgba(0,0,0,0.03)] border border-gray-100 overflow-hidden mb-8">
           
-          {/* Обложка */}
           <div className="relative h-48 md:h-64 bg-gradient-to-tr from-amber-500 to-amber-300 overflow-hidden">
             <div className="absolute inset-0 bg-black/20"></div>
-            {/* Паттерн на фоне */}
             <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(#fff 2px, transparent 2px)', backgroundSize: '24px 24px' }}></div>
           </div>
 
           <div className="px-6 md:px-10 pb-8 md:pb-10 relative">
-            {/* Аватарка, выходящая за край обложки */}
             <div className="flex justify-between items-end -mt-16 md:-mt-20 mb-6">
               <div className="w-32 h-32 md:w-40 md:h-40 rounded-3xl bg-white p-1.5 shadow-lg border border-gray-100 relative z-10">
                 <img 
@@ -117,7 +114,6 @@ export default function ShopPage() {
               </Link>
             </div>
 
-            {/* Инфо бизнеса */}
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <span className="bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md">
@@ -141,7 +137,6 @@ export default function ShopPage() {
               </p>
             </div>
 
-            {/* Контакты (Если заполнены) */}
             {shop.contacts && (shop.contacts.phone || shop.contacts.email || shop.contacts.website) && (
               <div className="mt-8 pt-8 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {shop.contacts.phone && (
@@ -214,10 +209,8 @@ export default function ShopPage() {
             </div>
           )}
         </div>
-
       </div>
 
-      {/* МОБИЛЬНАЯ ПЛАВАЮЩАЯ КНОПКА СВЯЗИ */}
       <div className="md:hidden fixed bottom-[90px] left-4 right-4 z-40">
         <Link 
           to="/chats" 

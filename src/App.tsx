@@ -6,8 +6,7 @@ import { useAuthStore } from './store/useAuthStore';
 import LoginPage from './pages/LoginPage';
 import { 
   MessageSquare, Globe, Store, User, LogOut, 
-  Briefcase, Heart, Users, Sparkles, ChevronRight, 
-  MapPin, ArrowLeft, Building, UserCheck, Plus, Share2
+  Briefcase, Heart, Users, Sparkles, ChevronRight, ArrowLeft, Building, UserCheck, Plus, Share2
 } from 'lucide-react';
 
 // ==========================================

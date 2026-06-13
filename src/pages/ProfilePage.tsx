@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
 import { db, auth } from '../services/firebase';
@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { 
   User, Briefcase, Users, X, Save, CheckCircle2, 
   Settings, Phone, Mail, Globe, Package, 
-  Plus, Trash2, Image as ImageIcon, Eye, Search, Camera, Bell, Loader2, UploadCloud
+  Plus, Trash2, Image as ImageIcon, Eye, Search, Camera, Bell, Loader2, UploadCloud, Edit2
 } from 'lucide-react';
 
 interface ProfilePageProps {
@@ -28,7 +28,6 @@ interface Product {
 const uploadToImgBB = async (file: File): Promise<string> => {
   const formData = new FormData();
   formData.append('image', file);
-  // Ваш API ключ ImgBB
   const API_KEY = '22de10db6eb1f3ec3fca012dcc566961';
   
   const res = await fetch(`https://api.imgbb.com/1/upload?key=${API_KEY}`, {
@@ -38,7 +37,7 @@ const uploadToImgBB = async (file: File): Promise<string> => {
   
   const data = await res.json();
   if (data.success) {
-    return data.data.url; // Прямая ссылка на картинку
+    return data.data.url;
   } else {
     throw new Error('Ошибка загрузки ImgBB');
   }
@@ -58,13 +57,18 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
   
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const productImgInputRef = useRef<HTMLInputElement>(null);
+  const editProductImgInputRef = useRef<HTMLInputElement>(null); // Для формы редактирования
   
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   
+  // Состояние нового товара
   const [newProduct, setNewProduct] = useState<Product>({
     id: '', name: '', price: '', description: '', imageUrl: ''
   });
+
+  // Состояние редактируемого товара
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   
   const [profile, setProfile] = useState({
     name: '',
@@ -128,7 +132,7 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
     }
   };
 
-  // ОБРАБОТЧИК ЗАГРУЗКИ ФОТО ТОВАРА (ImgBB)
+  // ОБРАБОТЧИК ЗАГРУЗКИ ФОТО НОВОГО ТОВАРА
   const handleProductImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -145,24 +149,39 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
     }
   };
 
+  // ОБРАБОТЧИК ЗАГРУЗКИ ФОТО ДЛЯ РЕДАКТИРУЕМОГО ТОВАРА
+  const handleEditProductImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setIsUploadingProductImage(true);
+    try {
+      const url = await uploadToImgBB(file);
+      setEditingProduct(prev => prev ? { ...prev, imageUrl: url } : null);
+    } catch (error) {
+      console.error(error);
+      alert('Не удалось загрузить изображение товара.');
+    } finally {
+      setIsUploadingProductImage(false);
+    }
+  };
+
   // ГЛАВНОЕ СОХРАНЕНИЕ
   const handleSaveProfile = async () => {
     if (!user) return;
     setIsSaving(true);
     try {
-      // 1. Сохраняем в Базу Данных
       await setDoc(doc(db, 'users', user.uid), {
         ...profile,
         updatedAt: new Date().toISOString()
       }, { merge: true });
 
-      // 2. ФИКС: Обновляем Auth-объект, чтобы фото сразу сменилось в левом меню
       if (auth.currentUser) {
         await updateProfile(auth.currentUser, {
           displayName: profile.name,
           photoURL: profile.avatar
         });
-        setUser({ ...auth.currentUser }); // Принудительно обновляем глобальный стейт
+        setUser({ ...auth.currentUser });
       }
 
       setShowSuccess(true);
@@ -189,6 +208,7 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
     setProfile({ ...profile, skills: profile.skills.filter(s => s !== skillToRemove) });
   };
 
+  // УПРАВЛЕНИЕ ТОВАРАМИ
   const handleAddProduct = () => {
     if (!newProduct.name || !newProduct.price) return;
     const productToAdd = {
@@ -202,7 +222,23 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
   };
 
   const handleRemoveProduct = (productId: string) => {
-    setProfile({ ...profile, products: profile.products.filter(p => p.id !== productId) });
+    if (window.confirm('Удалить этот товар из витрины?')) {
+      setProfile({ ...profile, products: profile.products.filter(p => p.id !== productId) });
+    }
+  };
+
+  const handleStartEditProduct = (product: Product) => {
+    setEditingProduct({ ...product });
+    setIsAddingProduct(false);
+  };
+
+  const handleSaveEditProduct = () => {
+    if (!editingProduct || !editingProduct.name || !editingProduct.price) return;
+    setProfile({
+      ...profile,
+      products: profile.products.map(p => p.id === editingProduct.id ? editingProduct : p)
+    });
+    setEditingProduct(null);
   };
 
   const inputClass = "w-full bg-gray-50 border border-gray-200/60 rounded-2xl px-5 py-4 text-[15px] focus:bg-white focus:ring-4 focus:ring-brand/10 focus:border-brand outline-none transition-all font-semibold text-gray-900 placeholder-gray-400 shadow-[inset_0_2px_4px_rgba(0,0,0,0.01)]";
@@ -326,8 +362,6 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
             <div className="flex flex-col sm:flex-row sm:items-center gap-6 bg-gray-50 p-6 rounded-[2rem] border border-gray-200/60">
               <div className="relative shrink-0 group">
                 <img src={profile.avatar} alt="Avatar" className="w-24 h-24 rounded-3xl object-cover shadow-md bg-white border-2 border-white" />
-                
-                {/* Скрытый инпут файла */}
                 <input 
                   type="file" 
                   ref={avatarInputRef}
@@ -335,7 +369,6 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
                   accept="image/png, image/jpeg, image/webp" 
                   className="hidden" 
                 />
-                
                 <button 
                   onClick={() => avatarInputRef.current?.click()}
                   disabled={isUploadingAvatar}
@@ -440,10 +473,48 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
               <div className="pt-6 border-t border-gray-100">
                 <div className="flex items-center justify-between mb-6">
                   <label className={labelClass + " mb-0"}>Витрина товаров ({profile.products.length})</label>
-                  <button onClick={() => setIsAddingProduct(!isAddingProduct)} className="bg-amber-100 text-amber-800 hover:bg-amber-500 hover:text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5">{isAddingProduct ? <X size={16} /> : <Plus size={16} />} {isAddingProduct ? 'Скрыть' : 'Добавить'}</button>
+                  <button onClick={() => { setIsAddingProduct(!isAddingProduct); setEditingProduct(null); }} className="bg-amber-100 text-amber-800 hover:bg-amber-500 hover:text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5">{isAddingProduct ? <X size={16} /> : <Plus size={16} />} {isAddingProduct ? 'Скрыть' : 'Добавить'}</button>
                 </div>
 
-                {isAddingProduct && (
+                {/* ФОРМА РЕДАКТИРОВАНИЯ ТОВАРА */}
+                {editingProduct && (
+                  <div className="bg-gray-50 border border-gray-200/80 rounded-3xl p-6 mb-6 animate-fade-in shadow-sm">
+                    <div className="flex justify-between items-center mb-5">
+                      <h4 className="text-[13px] font-black text-gray-900 uppercase tracking-widest flex items-center gap-2"><Edit2 size={16} className="text-amber-500"/> Редактирование товара</h4>
+                      <button onClick={() => setEditingProduct(null)} className="text-gray-400 hover:text-gray-900 transition-colors"><X size={18} /></button>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <input type="text" placeholder="Название товара" value={editingProduct.name} onChange={e => setEditingProduct({...editingProduct, name: e.target.value})} className={inputClass} />
+                        <input type="text" placeholder="Цена (100 $)" value={editingProduct.price} onChange={e => setEditingProduct({...editingProduct, price: e.target.value})} className={inputClass} />
+                      </div>
+                      
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="flex-1 relative">
+                          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400"><ImageIcon size={20} /></div>
+                          <input type="text" placeholder="Ссылка на фото (URL)" value={editingProduct.imageUrl} onChange={e => setEditingProduct({...editingProduct, imageUrl: e.target.value})} className={`${inputClass} pl-14`} />
+                        </div>
+                        <input type="file" ref={editProductImgInputRef} onChange={handleEditProductImageChange} accept="image/*" className="hidden" />
+                        <button 
+                          onClick={() => editProductImgInputRef.current?.click()}
+                          disabled={isUploadingProductImg}
+                          className="bg-white border border-gray-200/60 text-gray-950 px-6 py-4 rounded-2xl text-[15px] font-bold hover:bg-gray-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shrink-0"
+                        >
+                          {isUploadingProductImg ? <Loader2 size={18} className="animate-spin" /> : <UploadCloud size={18} />} Обновить фото
+                        </button>
+                      </div>
+
+                      <textarea placeholder="Краткое описание товара..." value={editingProduct.description} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} className={`${inputClass} h-24 resize-none`} />
+                      <div className="flex gap-3 mt-2">
+                        <button onClick={() => setEditingProduct(null)} className="flex-1 bg-white border border-gray-200 text-gray-700 px-6 py-4 rounded-xl text-[13px] font-bold uppercase hover:bg-gray-50 transition-colors">Отмена</button>
+                        <button onClick={handleSaveEditProduct} disabled={!editingProduct.name || !editingProduct.price} className="flex-[2] bg-gray-950 text-white px-6 py-4 rounded-xl text-[13px] font-bold uppercase hover:bg-gray-800 disabled:opacity-50 transition-colors">Сохранить изменения</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ФОРМА ДОБАВЛЕНИЯ ТОВАРА */}
+                {isAddingProduct && !editingProduct && (
                   <div className="bg-amber-50/50 border border-amber-200/60 rounded-3xl p-6 mb-6 animate-fade-in">
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -451,7 +522,6 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
                         <input type="text" placeholder="Цена (100 $)" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} className={inputClass} />
                       </div>
                       
-                      {/* ЗАГРУЗКА ФОТО ТОВАРА ImgBB */}
                       <div className="flex flex-col sm:flex-row gap-3">
                         <div className="flex-1 relative">
                           <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400"><ImageIcon size={20} /></div>
@@ -476,10 +546,13 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
                 {profile.products.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {profile.products.map(product => (
-                      <div key={product.id} className="bg-white border border-gray-200/80 shadow-sm rounded-2xl overflow-hidden flex flex-col group">
+                      <div key={product.id} className={`bg-white border ${editingProduct?.id === product.id ? 'border-amber-400 ring-2 ring-amber-400/20' : 'border-gray-200/80 hover:border-gray-300'} shadow-sm rounded-2xl overflow-hidden flex flex-col group transition-all`}>
                         <div className="h-40 bg-gray-100 relative overflow-hidden">
                           <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                          <button onClick={() => handleRemoveProduct(product.id)} className="absolute top-3 right-3 w-10 h-10 bg-white/90 backdrop-blur text-red-500 rounded-xl flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50"><Trash2 size={18} /></button>
+                          <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => handleStartEditProduct(product)} className="w-10 h-10 bg-white/90 backdrop-blur text-gray-600 hover:text-gray-900 rounded-xl flex items-center justify-center shadow-sm hover:bg-gray-50 transition-colors"><Edit2 size={18} /></button>
+                            <button onClick={() => handleRemoveProduct(product.id)} className="w-10 h-10 bg-white/90 backdrop-blur text-red-500 hover:text-red-600 rounded-xl flex items-center justify-center shadow-sm hover:bg-red-50 transition-colors"><Trash2 size={18} /></button>
+                          </div>
                         </div>
                         <div className="p-5 flex flex-col flex-1">
                           <div className="flex justify-between items-start gap-3 mb-2">

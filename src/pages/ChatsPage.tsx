@@ -3,10 +3,11 @@ import { collection, query, where, onSnapshot, addDoc, serverTimestamp, updateDo
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useLocation, Link } from 'react-router-dom';
-import ProfileModal from '../components/ProfileModal'; // ИМПОРТ НАШЕЙ МОДАЛКИ
+import ProfileModal from '../components/ProfileModal'; 
 import { 
   MessageSquare, Send, Search, X, ShieldCheck, 
-  Loader2, Clock, Image as ImageIcon, Heart, ExternalLink 
+  Loader2, Clock, Image as ImageIcon, Heart, ExternalLink,
+  Check, CheckCheck, Bookmark
 } from 'lucide-react';
 
 interface UserProfile {
@@ -18,6 +19,7 @@ interface UserProfile {
   skills?: string[];
   contacts?: { phone?: string; website?: string; email?: string; };
   products?: any[];
+  isSaved?: boolean; // Флаг для чата "Избранное"
 }
 
 interface Message {
@@ -26,7 +28,9 @@ interface Message {
   imageUrl?: string;
   likes?: string[];
   senderId: string;
+  receiverId: string;
   createdAt: any;
+  isRead?: boolean; // Флаг прочтения
   type?: 'share_card' | string;
   cardData?: {
     type: 'shop' | 'product';
@@ -63,10 +67,11 @@ export default function ChatsPage() {
   const [contacts, setContacts] = useState<UserProfile[]>([]);
   const [selectedContact, setSelectedContact] = useState<UserProfile | null>(null);
   
-  // СОСТОЯНИЕ ДЛЯ ОТКРЫТИЯ МОДАЛКИ ПРЕДПРОСМОТРА ПРОФИЛЯ
   const [previewProfile, setPreviewProfile] = useState<UserProfile | null>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({}); // Счетчики непрочитанных
+  
   const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -79,13 +84,24 @@ export default function ChatsPage() {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 1. Загрузка контактов
+  // 1. Загрузка контактов и формирование "Избранного"
   useEffect(() => {
+    if (!user) return;
     setIsLoadingContacts(true);
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
       const loadedContacts: UserProfile[] = [];
       snapshot.forEach((doc) => {
-        if (doc.id !== user?.uid) {
+        if (doc.id === user.uid) {
+          // Создаем чат "Избранное" из собственного профиля
+          loadedContacts.unshift({ 
+            id: doc.id, 
+            name: 'Избранное', 
+            avatar: '', 
+            type: 'personal', 
+            role: 'Сохраненные сообщения',
+            isSaved: true
+          } as UserProfile);
+        } else {
           loadedContacts.push({ id: doc.id, ...doc.data() } as UserProfile);
         }
       });
@@ -99,6 +115,24 @@ export default function ChatsPage() {
     return () => unsubscribe();
   }, [user]);
 
+  // 1.5. Слушатель непрочитанных сообщений для бейджиков
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, 'messages'), where('receiverId', '==', user.uid), where('isRead', '==', false));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const counts: Record<string, number> = {};
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        // Сообщения себе (в Избранное) не считаем непрочитанными
+        if (data.senderId !== user.uid) {
+          counts[data.senderId] = (counts[data.senderId] || 0) + 1;
+        }
+      });
+      setUnreadCounts(counts);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
   // 2. АВТОМАТИЧЕСКИЙ ВЫБОР ДИАЛОГА
   useEffect(() => {
     if (contacts.length > 0 && location.state?.selectedUserId) {
@@ -109,7 +143,7 @@ export default function ChatsPage() {
     }
   }, [contacts, location.state]);
 
-  // 3. Подписка на сообщения
+  // 3. Подписка на сообщения выбранного диалога + Чтение
   useEffect(() => {
     if (!user || !selectedContact) return;
 
@@ -118,8 +152,16 @@ export default function ChatsPage() {
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const loadedMessages: Message[] = [];
-      snapshot.forEach((doc) => {
-        loadedMessages.push({ id: doc.id, ...doc.data() } as Message);
+      
+      snapshot.forEach((docSnap) => {
+        const msgData = docSnap.data() as Message;
+        msgData.id = docSnap.id;
+        loadedMessages.push(msgData);
+
+        // МАРКИРУЕМ КАК ПРОЧИТАННОЕ: если сообщение адресовано нам и еще не прочитано
+        if (msgData.receiverId === user.uid && !msgData.isRead && msgData.senderId !== user.uid) {
+          updateDoc(doc(db, 'messages', msgData.id), { isRead: true }).catch(err => console.log(err));
+        }
       });
       
       loadedMessages.sort((a, b) => {
@@ -176,7 +218,8 @@ export default function ChatsPage() {
         likes: [],
         senderId: user.uid,
         receiverId: selectedContact.id,
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        isRead: false // По умолчанию не прочитано
       });
     } catch (error) {
       console.error('Ошибка отправки сообщения:', error);
@@ -252,52 +295,75 @@ export default function ChatsPage() {
               </div>
             ))
           ) : filteredContacts.length > 0 ? (
-            filteredContacts.map(contact => (
-              <div 
-                key={contact.id} 
-                onClick={() => setSelectedContact(contact)}
-                className={`flex flex-col md:flex-row items-center gap-1.5 md:gap-3.5 md:p-3.5 md:rounded-2xl cursor-pointer transition-all duration-200 shrink-0 ${
-                  selectedContact?.id === contact.id 
-                    ? 'md:bg-white md:shadow-[0_4px_15px_rgba(0,0,0,0.03)] md:border md:border-gray-200/60 scale-105 md:scale-100' 
-                    : 'md:hover:bg-white md:border md:border-transparent md:hover:shadow-[0_2px_8px_rgba(0,0,0,0.01)]'
-                }`}
-              >
-                {/* АВАТАРКА С КЛИКОМ ДЛЯ ОТКРЫТИЯ ПРОФИЛЯ */}
+            filteredContacts.map(contact => {
+              const unread = unreadCounts[contact.id] || 0;
+              return (
                 <div 
-                  className="relative shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation(); // Останавливаем всплытие, чтобы не выбрать диалог
-                    setPreviewProfile(contact);
-                  }}
+                  key={contact.id} 
+                  onClick={() => setSelectedContact(contact)}
+                  className={`flex flex-col md:flex-row items-center gap-1.5 md:gap-3.5 md:p-3.5 md:rounded-2xl cursor-pointer transition-all duration-200 shrink-0 ${
+                    selectedContact?.id === contact.id 
+                      ? 'md:bg-white md:shadow-[0_4px_15px_rgba(0,0,0,0.03)] md:border md:border-gray-200/60 scale-105 md:scale-100' 
+                      : 'md:hover:bg-white md:border md:border-transparent md:hover:shadow-[0_2px_8px_rgba(0,0,0,0.01)]'
+                  }`}
                 >
-                  <img 
-                    src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} 
-                    alt={contact.name} 
-                    className={`object-cover border bg-gray-50 transition-all hover:scale-105 ${
-                      selectedContact?.id === contact.id 
-                        ? 'w-[60px] h-[60px] md:w-12 md:h-12 rounded-[20px] md:rounded-xl border-brand/50 shadow-md' 
-                        : 'w-14 h-14 md:w-12 md:h-12 rounded-[18px] md:rounded-xl border-gray-100'
-                    }`} 
-                  />
-                  {contact.type === 'business' && <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-amber-500 rounded-full border-[2.5px] border-white" />}
-                </div>
-                
-                <div className="md:hidden w-16 text-center">
-                  <p className={`text-[10px] truncate ${selectedContact?.id === contact.id ? 'font-bold text-gray-900' : 'font-medium text-gray-500'}`}>
-                    {contact.name ? contact.name.split(' ')[0] : '...'}
-                  </p>
-                </div>
+                  {/* АВАТАРКА С КЛИКОМ ДЛЯ ОТКРЫТИЯ ПРОФИЛЯ */}
+                  <div 
+                    className="relative shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!contact.isSaved) setPreviewProfile(contact);
+                    }}
+                  >
+                    {contact.isSaved ? (
+                      <div className={`flex items-center justify-center text-white transition-all ${
+                        selectedContact?.id === contact.id 
+                          ? 'w-[60px] h-[60px] md:w-12 md:h-12 rounded-[20px] md:rounded-xl bg-brand shadow-md' 
+                          : 'w-14 h-14 md:w-12 md:h-12 rounded-[18px] md:rounded-xl bg-gray-900'
+                      }`}>
+                        <Bookmark size={20} />
+                      </div>
+                    ) : (
+                      <img 
+                        src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} 
+                        alt={contact.name} 
+                        className={`object-cover border bg-gray-50 transition-all hover:scale-105 ${
+                          selectedContact?.id === contact.id 
+                            ? 'w-[60px] h-[60px] md:w-12 md:h-12 rounded-[20px] md:rounded-xl border-brand/50 shadow-md' 
+                            : 'w-14 h-14 md:w-12 md:h-12 rounded-[18px] md:rounded-xl border-gray-100'
+                        }`} 
+                      />
+                    )}
+                    
+                    {contact.type === 'business' && !contact.isSaved && <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-amber-500 rounded-full border-[2.5px] border-white" />}
+                    
+                    {/* БЕЙДЖ НЕПРОЧИТАННЫХ СООБЩЕНИЙ */}
+                    {unread > 0 && (
+                      <div className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-4 h-4 md:w-5 md:h-5 flex items-center justify-center rounded-full border-2 border-white shadow-sm z-10 animate-scale-up">
+                        {unread > 99 ? '99+' : unread}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="md:hidden w-16 text-center">
+                    <p className={`text-[10px] truncate ${selectedContact?.id === contact.id ? 'font-bold text-gray-900' : 'font-medium text-gray-500'}`}>
+                      {contact.name ? contact.name.split(' ')[0] : '...'}
+                    </p>
+                  </div>
 
-                <div className="hidden md:block flex-1 min-w-0">
-                  <h4 className={`text-sm font-bold truncate transition-colors ${selectedContact?.id === contact.id ? 'text-gray-950' : 'text-gray-900'}`}>
-                    {contact.name || 'Пользователь'}
-                  </h4>
-                  <p className="text-[11px] text-gray-400 truncate mt-1 font-medium tracking-wide">
-                    {contact.role || 'Связь защищена'}
-                  </p>
+                  <div className="hidden md:block flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className={`text-sm font-bold truncate transition-colors ${selectedContact?.id === contact.id ? 'text-gray-950' : 'text-gray-900'}`}>
+                        {contact.name || 'Пользователь'}
+                      </h4>
+                    </div>
+                    <p className={`text-[11px] truncate mt-1 tracking-wide ${unread > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-400'}`}>
+                      {contact.role || 'Связь защищена'}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <div className="text-center w-full py-6 md:py-10">
               <div className="w-10 h-10 md:w-12 md:h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-300 mx-auto mb-2 md:mb-3">
@@ -316,19 +382,28 @@ export default function ChatsPage() {
             <div className="h-[60px] md:h-[85px] bg-white border-b border-gray-100 flex items-center px-4 md:px-8 shrink-0 justify-between shadow-[0_4px_20px_rgba(0,0,0,0.01)] z-10">
               <div className="flex items-center gap-3 md:gap-4">
                 
-                {/* АВАТАРКА В ШАПКЕ ЧАТА (ТОЖЕ КЛИКАБЕЛЬНА) */}
                 <div 
-                  className="relative cursor-pointer hover:opacity-80 transition-opacity"
-                  onClick={() => setPreviewProfile(selectedContact)}
+                  className={`relative ${!selectedContact.isSaved && 'cursor-pointer hover:opacity-80 transition-opacity'}`}
+                  onClick={() => !selectedContact.isSaved && setPreviewProfile(selectedContact)}
                 >
-                  <img src={selectedContact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}&background=random`} alt={selectedContact.name} className="w-9 h-9 md:w-11 md:h-11 rounded-xl object-cover border border-gray-100" />
-                  <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 md:w-3 md:h-3 bg-green-500 rounded-full border-2 border-white" />
+                  {selectedContact.isSaved ? (
+                     <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl bg-gray-900 text-white flex items-center justify-center shadow-sm">
+                       <Bookmark size={20} />
+                     </div>
+                  ) : (
+                    <>
+                      <img src={selectedContact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}&background=random`} alt={selectedContact.name} className="w-9 h-9 md:w-11 md:h-11 rounded-xl object-cover border border-gray-100" />
+                      <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 md:w-3 md:h-3 bg-green-500 rounded-full border-2 border-white" />
+                    </>
+                  )}
                 </div>
                 
-                <div className="cursor-pointer" onClick={() => setPreviewProfile(selectedContact)}>
+                <div className={!selectedContact.isSaved ? "cursor-pointer" : ""} onClick={() => !selectedContact.isSaved && setPreviewProfile(selectedContact)}>
                   <h3 className="font-bold text-sm md:text-base text-gray-950 leading-tight hover:text-brand transition-colors">{selectedContact.name}</h3>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    {selectedContact.type === 'business' ? (
+                    {selectedContact.isSaved ? (
+                      <span className="text-[9px] md:text-[10px] font-bold text-brand uppercase tracking-wider bg-brand/10 px-1.5 py-0.5 rounded">Ваши заметки</span>
+                    ) : selectedContact.type === 'business' ? (
                       <span className="text-[9px] md:text-[10px] font-bold text-amber-600 uppercase tracking-wider bg-amber-50 px-1.5 py-0.5 rounded">Бизнес-аккаунт</span>
                     ) : (
                       <span className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase tracking-wider">Личный профиль</span>
@@ -407,9 +482,22 @@ export default function ChatsPage() {
                             </>
                           )}
 
-                          <span className={`text-[9px] font-bold self-end select-none ${isCard ? 'px-2 pb-1' : 'mt-1'} ${isMine ? 'text-white/50' : 'text-gray-400'}`}>
-                            {formatTime(msg.createdAt)}
-                          </span>
+                          {/* ВРЕМЯ И ГАЛОЧКИ ПРОЧТЕНИЯ */}
+                          <div className={`flex items-center gap-1 self-end mt-1 ${isCard && 'px-2 pb-1'}`}>
+                            <span className={`text-[9px] font-bold select-none ${isMine ? 'text-white/50' : 'text-gray-400'}`}>
+                              {formatTime(msg.createdAt)}
+                            </span>
+                            {/* Отображаем статус только для своих сообщений, и если это не чат с самим собой */}
+                            {isMine && !selectedContact.isSaved && (
+                              <span className="ml-0.5">
+                                {msg.isRead ? (
+                                  <CheckCheck size={12} className="text-blue-400" />
+                                ) : (
+                                  <Check size={12} className="text-white/50" />
+                                )}
+                              </span>
+                            )}
+                          </div>
 
                           <div className={`absolute ${isMine ? '-left-8' : '-right-8'} bottom-1 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity`}>
                             <button onClick={() => handleLikeMessage(msg.id, msg.likes)} className="p-1.5 rounded-full bg-white border border-gray-100 shadow-sm text-gray-400 hover:text-pink-500 hover:bg-pink-50 transition-colors">

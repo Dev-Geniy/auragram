@@ -1,27 +1,49 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Link } from 'react-router-dom';
-import { Store, Search, Building2, MapPin, ExternalLink, Briefcase, Sparkles, X } from 'lucide-react';
+import { Store, Search, Building2, MapPin, Briefcase, ShoppingBag, ArrowRight, Package, X } from 'lucide-react';
+
+interface Product {
+  id: string;
+  name: string;
+  price: string;
+  description: string;
+  imageUrl: string;
+}
 
 interface BusinessProfile {
   id: string;
   name: string;
   role: string;
-  skills: string[];
   avatar: string;
+  products: Product[];
+  category?: string; // Добавим категорию
+  createdAt?: any;
 }
+
+// Фиксированные категории (Константы)
+export const BUSINESS_CATEGORIES = [
+  'Все категории',
+  'IT & Разработка',
+  'Дизайн & Графика',
+  'Маркетинг & PR',
+  'Консалтинг & Услуги',
+  'E-commerce & Товары',
+  'Образование',
+];
 
 export default function MarketPage() {
   const { user } = useAuthStore();
   const [businesses, setBusinesses] = useState<BusinessProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string>('Все категории');
 
   useEffect(() => {
-    const fetchBusinesses = async () => {
+    const fetchMarketData = async () => {
       setIsLoading(true);
       try {
         const q = query(collection(db, 'users'), where('type', '==', 'business'));
@@ -29,215 +51,245 @@ export default function MarketPage() {
         const loadedBusinesses: BusinessProfile[] = [];
         
         querySnapshot.forEach((doc) => {
-          if (doc.id !== user?.uid) {
-            loadedBusinesses.push({ id: doc.id, ...doc.data() } as BusinessProfile);
-          }
+          const data = doc.data();
+          loadedBusinesses.push({ 
+            id: doc.id, 
+            ...data,
+            products: data.products || [],
+            category: data.category || 'Другое'
+          } as BusinessProfile);
         });
         
         setBusinesses(loadedBusinesses);
       } catch (error) {
-        console.error('Ошибка при загрузке бизнес-аккаунтов:', error);
+        console.error('Ошибка при загрузке Маркетплейса:', error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchBusinesses();
-  }, [user]);
+    fetchMarketData();
+  }, []);
 
-  // Умный подсчет и сортировка тегов по популярности
-  const topTags = useMemo(() => {
-    const tagCounts = businesses.reduce((acc, company) => {
-      company.skills?.forEach(skill => {
-        const normalizedSkill = skill.trim();
-        acc[normalizedSkill] = (acc[normalizedSkill] || 0) + 1;
-      });
-      return acc;
-    }, {} as Record<string, number>);
-
-    return Object.entries(tagCounts)
-      .sort((a, b) => b[1] - a[1]) // Сортируем по убыванию популярности
-      .slice(0, 6)                 // Берем топ-6
-      .map(entry => entry[0]);
+  // 1. СОРТИРОВКА МАГАЗИНОВ (По популярности: кол-во товаров + новизна)
+  const topShops = useMemo(() => {
+    return [...businesses].sort((a, b) => {
+      const aScore = (a.products?.length || 0);
+      const bScore = (b.products?.length || 0);
+      if (bScore !== aScore) return bScore - aScore;
+      
+      const timeA = a.createdAt?.toMillis?.() || 0;
+      const timeB = b.createdAt?.toMillis?.() || 0;
+      return timeB - timeA;
+    });
   }, [businesses]);
 
-  const filteredBusinesses = businesses.filter(b => {
-    const searchLower = searchQuery.toLowerCase().trim();
-    const matchesSearch = 
-      !searchLower ||
-      (b.name || '').toLowerCase().includes(searchLower) ||
-      (b.role || '').toLowerCase().includes(searchLower) ||
-      (b.skills || []).some(s => s.toLowerCase().includes(searchLower));
-      
-    const matchesTag = selectedTag ? (b.skills || []).includes(selectedTag) : true;
+  // 2. АГРЕГАЦИЯ ВСЕХ ТОВАРОВ В ЕДИНУЮ СЕТКУ
+  const allProducts = useMemo(() => {
+    const productsList: (Product & { shopId: string; shopName: string; shopAvatar: string; shopCategory: string })[] = [];
     
-    return matchesSearch && matchesTag;
-  });
+    businesses.forEach(shop => {
+      if (shop.products && shop.products.length > 0) {
+        shop.products.forEach(prod => {
+          productsList.push({
+            ...prod,
+            shopId: shop.id,
+            shopName: shop.name || 'Без названия',
+            shopAvatar: shop.avatar,
+            shopCategory: shop.category || 'Другое'
+          });
+        });
+      }
+    });
+
+    // Сортируем от новых к старым (по ID товара, который мы задавали как Date.now())
+    return productsList.sort((a, b) => Number(b.id) - Number(a.id));
+  }, [businesses]);
+
+  // 3. ФИЛЬТРАЦИЯ ТОВАРОВ
+  const filteredProducts = useMemo(() => {
+    return allProducts.filter(item => {
+      const matchCategory = activeCategory === 'Все категории' || item.shopCategory === activeCategory;
+      const matchSearch = 
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        item.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.shopName.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      return matchCategory && matchSearch;
+    });
+  }, [allProducts, activeCategory, searchQuery]);
+
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 bg-[#FAFAFA] p-6 md:p-10 flex flex-col gap-10 animate-pulse">
+        <div className="h-10 w-64 bg-gray-200/60 rounded-xl" />
+        <div className="flex gap-4 overflow-hidden">
+          {[1, 2, 3, 4].map(n => <div key={n} className="w-24 h-24 rounded-full bg-gray-200/60 shrink-0" />)}
+        </div>
+        <div className="h-14 w-full bg-gray-200/60 rounded-2xl" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          {[1, 2, 3, 4, 5, 6].map(n => <div key={n} className="h-64 rounded-3xl bg-gray-200/60" />)}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#FAFAFA] p-6 md:p-10 select-none">
-      <div className="max-w-6xl mx-auto">
-        
-        {/* ВЕРХНЯЯ ПАНЕЛЬ (ENTERPRISE HEADER) */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-10">
-          <div>
-            <h1 className="text-3xl font-black text-gray-950 tracking-tight flex items-center gap-3">
-              B2B Маркетплейс
-              <Sparkles size={24} className="text-amber-500 animate-pulse" />
-            </h1>
-            <p className="text-sm text-gray-500 mt-2 font-medium max-w-2xl">
-              Экосистема проверенных корпоративных услуг и технологических партнеров. Находите решения для масштабирования вашего бизнеса.
-            </p>
-          </div>
+    <div className="flex-1 overflow-y-auto bg-[#FAFAFA] pb-24 select-none custom-scrollbar">
+      
+      {/* ХЕДЕР */}
+      <div className="p-6 md:px-10 md:pt-10 md:pb-6 bg-white border-b border-gray-100 sticky top-0 z-20">
+        <div className="max-w-7xl mx-auto flex flex-col gap-6">
           
-          <Link 
-            to="/profile" 
-            className="inline-flex items-center justify-center gap-2.5 bg-gray-950 hover:bg-gray-800 text-white px-6 py-3.5 rounded-2xl text-xs font-bold tracking-wider uppercase transition-all shadow-md hover:shadow-lg active:scale-95"
-          >
-            <Briefcase size={16} />
-            Мой бизнес-профиль
-          </Link>
-        </div>
-
-        {/* СТРОКА ПОИСКА И БЫСТРЫЕ ФИЛЬТРЫ */}
-        <div className="space-y-5 mb-12">
-          <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm flex items-center transition-all focus-within:border-amber-400 focus-within:shadow-[0_4px_20px_rgba(245,158,11,0.08)]">
-            <div className="pl-6 pr-3 text-gray-400 shrink-0">
-              <Search size={20} />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-black text-gray-950 tracking-tight flex items-center gap-3">
+                Маркетплейс
+              </h1>
+              <p className="text-sm text-gray-500 mt-1 font-medium">Товары и услуги от проверенных B2B партнеров</p>
             </div>
+            <Link to="/profile" className="inline-flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-5 py-3 rounded-2xl text-xs font-bold tracking-wider uppercase transition-all shadow-md active:scale-95 shrink-0">
+              <Building2 size={16} /> Открыть свой магазин
+            </Link>
+          </div>
+
+          {/* ПОИСК */}
+          <div className="relative flex items-center bg-gray-50 rounded-2xl border border-gray-200/60 focus-within:border-amber-400 focus-within:bg-white focus-within:shadow-[0_4px_20px_rgba(245,158,11,0.08)] transition-all">
+            <Search className="absolute left-4 text-gray-400" size={18} />
             <input 
               type="text" 
-              placeholder="Поиск по названию компании, ключевым услугам или стеку технологий..." 
+              placeholder="Поиск товаров, услуг или магазинов..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-transparent border-none py-4 px-2 text-sm focus:outline-none text-gray-900 placeholder-gray-400 font-semibold"
+              className="w-full bg-transparent pl-12 pr-10 py-4 text-sm focus:outline-none text-gray-900 placeholder-gray-400 font-semibold"
             />
             {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery('')}
-                className="pr-6 text-gray-300 hover:text-gray-600 transition-colors"
-              >
-                <X size={18} />
+              <button onClick={() => setSearchQuery('')} className="absolute right-4 text-gray-400 hover:text-gray-600">
+                <X size={16} />
               </button>
             )}
           </div>
 
-          {/* Быстрые теги (Тренды) */}
-          {topTags.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-gray-400 font-bold uppercase tracking-wider text-[10px] mr-2">Тренды:</span>
-              <button
-                onClick={() => setSelectedTag(null)}
-                className={`px-4 py-2 rounded-xl font-bold transition-all duration-200 ${!selectedTag ? 'bg-gray-950 text-white shadow-md' : 'bg-white text-gray-500 border border-gray-200/60 hover:border-gray-300 hover:text-gray-900'}`}
-              >
-                Все категории
-              </button>
-              {topTags.map(tag => (
-                <button
-                  key={tag}
-                  onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
-                  className={`px-4 py-2 rounded-xl font-bold transition-all duration-200 ${selectedTag === tag ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'bg-white text-gray-500 border border-gray-200/60 hover:border-gray-300 hover:text-gray-900'}`}
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto p-6 md:p-10 space-y-12">
+
+        {/* 1. КАРУСЕЛЬ МАГАЗИНОВ (STORIES STYLE) */}
+        {topShops.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <Store size={20} className="text-amber-500" /> Топ магазины
+              </h2>
+            </div>
+            
+            <div className="flex overflow-x-auto gap-5 pb-4 scrollbar-none snap-x">
+              {topShops.map(shop => (
+                <Link 
+                  key={shop.id} 
+                  to={`/shop/${shop.id}`}
+                  className="flex flex-col items-center gap-2 min-w-[90px] group snap-start"
                 >
-                  {tag}
-                </button>
+                  <div className="w-20 h-20 rounded-[1.5rem] p-1 bg-gradient-to-tr from-amber-400 to-amber-600 shadow-md group-hover:scale-105 transition-transform duration-300">
+                    <img 
+                      src={shop.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(shop.name)}&background=f59e0b&color=fff`} 
+                      alt={shop.name} 
+                      className="w-full h-full rounded-[1.2rem] object-cover border-2 border-white"
+                    />
+                  </div>
+                  <span className="text-xs font-bold text-gray-900 text-center w-full truncate group-hover:text-amber-600 transition-colors">
+                    {shop.name || 'Магазин'}
+                  </span>
+                </Link>
               ))}
             </div>
-          )}
-        </div>
+          </section>
+        )}
 
-        {/* СЕТКА С КАРТОЧКАМИ */}
-        {isLoading ? (
-          /* Премиальный Skeleton Loader */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3, 4, 5, 6].map((n) => (
-              <div key={n} className="bg-white rounded-3xl p-7 border border-gray-100 space-y-6 animate-pulse shadow-sm">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 bg-gray-100/80 rounded-2xl shrink-0" />
-                  <div className="space-y-3 flex-1">
-                    <div className="h-4 bg-gray-100/80 rounded-md w-1/3" />
-                    <div className="h-5 bg-gray-100/80 rounded-md w-3/4" />
-                  </div>
-                </div>
-                <div className="space-y-2.5">
-                  <div className="h-3 bg-gray-100/80 rounded w-full" />
-                  <div className="h-3 bg-gray-100/80 rounded w-full" />
-                  <div className="h-3 bg-gray-100/80 rounded w-4/5" />
-                </div>
-                <div className="flex gap-2 pt-2">
-                  <div className="h-7 bg-gray-100/80 rounded-lg w-16" />
-                  <div className="h-7 bg-gray-100/80 rounded-lg w-20" />
-                  <div className="h-7 bg-gray-100/80 rounded-lg w-14" />
-                </div>
-              </div>
+        {/* 2. ГЛОБАЛЬНАЯ ВИТРИНА ТОВАРОВ */}
+        <section>
+          {/* Категории */}
+          <div className="flex overflow-x-auto gap-2 pb-6 mb-2 scrollbar-none">
+            {BUSINESS_CATEGORIES.map(category => (
+              <button
+                key={category}
+                onClick={() => setActiveCategory(category)}
+                className={`px-5 py-2.5 rounded-xl text-[13px] font-bold whitespace-nowrap transition-all duration-200 border ${
+                  activeCategory === category 
+                    ? 'bg-gray-950 text-white border-gray-950 shadow-md' 
+                    : 'bg-white text-gray-600 border-gray-200/60 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {category}
+              </button>
             ))}
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredBusinesses.length > 0 ? (
-              filteredBusinesses.map(company => (
-                <div key={company.id} className="bg-white rounded-3xl p-7 border border-gray-200/60 shadow-sm hover:shadow-xl hover:shadow-amber-500/5 hover:-translate-y-1 hover:border-amber-200/60 transition-all duration-300 group flex flex-col h-full relative overflow-hidden">
+
+          {/* Сетка товаров */}
+          {filteredProducts.length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+              {filteredProducts.map(product => (
+                <div key={product.id} className="bg-white border border-gray-200/60 rounded-3xl overflow-hidden shadow-[0_2px_10px_rgba(0,0,0,0.01)] hover:shadow-[0_10px_30px_rgba(245,158,11,0.08)] hover:border-amber-200 transition-all duration-300 group flex flex-col">
                   
-                  <div className="flex items-start gap-4 mb-6">
+                  {/* Изображение товара */}
+                  <div className="relative h-48 md:h-56 bg-gray-100 overflow-hidden">
                     <img 
-                      src={company.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(company.name)}&background=f59e0b&color=fff`} 
-                      alt={company.name} 
-                      className="w-16 h-16 rounded-2xl object-cover border border-gray-100 bg-gray-50 shadow-sm" 
+                      src={product.imageUrl} 
+                      alt={product.name} 
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out" 
                     />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md w-max mb-2">
-                        <Building2 size={10} /> Корпоративный
-                      </div>
-                      <h3 className="font-bold text-gray-950 leading-snug truncate text-lg group-hover:text-amber-600 transition-colors">
-                        {company.name || 'Без названия'}
-                      </h3>
-                      <p className="text-[11px] text-gray-400 mt-1 flex items-center gap-1 font-semibold">
-                        <MapPin size={11} /> Верифицирован
-                      </p>
+                    <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm text-gray-950 px-3 py-1.5 rounded-xl text-[11px] font-black shadow-sm">
+                      {product.price}
                     </div>
                   </div>
                   
-                  <p className="text-sm text-gray-600 mb-6 flex-1 line-clamp-3 leading-relaxed font-medium">
-                    {company.role || 'Описание деятельности компании не предоставлено. Свяжитесь напрямую для получения деталей.'}
-                  </p>
-                  
-                  <div className="flex flex-wrap gap-2 mb-8">
-                    {(company.skills || []).map((skill, i) => (
-                      <span key={i} className="text-[10px] font-bold bg-gray-50 text-gray-500 px-3 py-1.5 rounded-lg border border-gray-200/60">
-                        {skill}
-                      </span>
-                    ))}
+                  {/* Описание товара */}
+                  <div className="p-4 md:p-5 flex flex-col flex-1">
+                    <h3 className="font-bold text-gray-900 text-sm md:text-base leading-tight line-clamp-2 mb-2 group-hover:text-amber-600 transition-colors">
+                      {product.name}
+                    </h3>
+                    <p className="text-xs text-gray-500 line-clamp-2 font-medium leading-relaxed mb-4">
+                      {product.description || 'Описание отсутствует'}
+                    </p>
+                    
+                    {/* Автор/Магазин */}
+                    <div className="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between">
+                      <Link to={`/shop/${product.shopId}`} className="flex items-center gap-2 group/shop min-w-0">
+                        <img src={product.shopAvatar} alt={product.shopName} className="w-6 h-6 rounded-md object-cover border border-gray-200 shrink-0" />
+                        <span className="text-[10px] font-bold text-gray-500 group-hover/shop:text-gray-900 truncate transition-colors">
+                          {product.shopName}
+                        </span>
+                      </Link>
+                      
+                      {/* Кнопка "В магазин" */}
+                      <Link to={`/shop/${product.shopId}`} className="w-8 h-8 rounded-xl bg-gray-50 text-gray-900 flex items-center justify-center group-hover:bg-amber-500 group-hover:text-white transition-colors shrink-0">
+                        <ArrowRight size={14} />
+                      </Link>
+                    </div>
                   </div>
-                  
-                  <Link
-                    to="/"
-                    className="w-full py-3.5 bg-gray-50 group-hover:bg-amber-500 text-gray-900 group-hover:text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-sm"
-                  >
-                    <ExternalLink size={16} />
-                    Открыть диалог
-                  </Link>
+
                 </div>
-              ))
-            ) : (
-              <div className="col-span-full py-24 text-center bg-white rounded-3xl border border-gray-200/60 shadow-sm">
-                <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center text-gray-300 mx-auto mb-5 border border-gray-100">
-                  <Store size={32} />
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Ничего не найдено</h3>
-                <p className="text-sm text-gray-500 max-w-sm mx-auto font-medium leading-relaxed">
-                  Мы не смогли найти компании по вашему запросу. Попробуйте изменить параметры поиска или сбросить фильтры.
-                </p>
-                {(searchQuery || selectedTag) && (
-                  <button 
-                    onClick={() => { setSearchQuery(''); setSelectedTag(null); }}
-                    className="mt-6 text-sm font-bold text-amber-600 hover:text-amber-700 transition-colors"
-                  >
-                    Сбросить все фильтры
-                  </button>
-                )}
+              ))}
+            </div>
+          ) : (
+            <div className="py-20 text-center bg-white rounded-3xl border border-gray-200/60 border-dashed">
+              <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-300 mx-auto mb-4">
+                <Package size={28} />
               </div>
-            )}
-          </div>
-        )}
+              <h3 className="text-lg font-bold text-gray-900 mb-1">Ничего не найдено</h3>
+              <p className="text-sm text-gray-500 max-w-sm mx-auto font-medium">
+                В этой категории пока нет товаров, или ваш поисковый запрос не дал результатов.
+              </p>
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="mt-4 text-amber-600 font-bold text-sm">
+                  Очистить поиск
+                </button>
+              )}
+            </div>
+          )}
+        </section>
 
       </div>
     </div>

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+// Изменили BrowserRouter на HashRouter специально для GitHub Pages
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './services/firebase';
 import { useAuthStore } from './store/useAuthStore';
@@ -27,7 +28,7 @@ const App = () => {
   }
 
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         {/* Если нет пользователя - показываем логин */}
         <Route 
@@ -49,7 +50,7 @@ const App = () => {
           } 
         />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 };
 

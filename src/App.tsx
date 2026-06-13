@@ -38,10 +38,11 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const { user } = useAuthStore();
 
+  // Обновленная структура меню (Лента теперь на первом месте)
   const menuItems = [
-    { path: '/feed', icon: <Globe size={22} />, label: 'Радар' },
-    { path: '/', icon: <MessageSquare size={22} />, label: 'Чаты', badge: true }, // badge симулирует непрочитанные
     { path: '/posts', icon: <Component size={22} />, label: 'Лента' },
+    { path: '/feed', icon: <Globe size={22} />, label: 'Радар' },
+    { path: '/chats', icon: <MessageSquare size={22} />, label: 'Чаты', badge: true }, // badge симулирует непрочитанные
     { path: '/market', icon: <Store size={22} />, label: 'Маркет' },
   ];
 
@@ -59,15 +60,15 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
       {/* 💻 ДЕСКТОПНЫЙ САЙДБАР */}
       <aside className="hidden md:flex w-[280px] bg-white border-r border-gray-200/60 flex-col justify-between z-20 shadow-[1px_0_20px_rgba(0,0,0,0.02)]">
         <div>
-          {/* Логотип */}
-          <div className="h-20 flex items-center px-6 border-b border-gray-100 gap-3">
-            <div className="w-10 h-10 bg-gray-950 rounded-xl flex items-center justify-center shadow-lg shadow-gray-950/20">
+          {/* Кликабельный Логотип */}
+          <Link to="/posts" className="h-20 flex items-center px-6 border-b border-gray-100 gap-3 group">
+            <div className="w-10 h-10 bg-gray-950 rounded-xl flex items-center justify-center shadow-lg shadow-gray-950/20 group-hover:scale-105 transition-transform duration-300">
               <Hexagon size={22} className="text-white" strokeWidth={2.5} />
             </div>
-            <span className="font-black text-2xl tracking-tight text-gray-950">
-              AuraSync
+            <span className="font-black text-2xl tracking-tight text-gray-950 group-hover:text-brand transition-colors duration-300">
+              Aura
             </span>
-          </div>
+          </Link>
 
           {/* Профиль пользователя */}
           {user && (
@@ -110,7 +111,6 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
                 >
                   <div className={`relative transition-transform duration-300 ${isActive ? 'scale-110 text-white' : 'text-gray-400 group-hover:text-gray-900 group-hover:scale-110'}`}>
                     {item.icon}
-                    {/* Visionary touch: Бейдж уведомлений */}
                     {item.badge && !isActive && (
                       <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-brand rounded-full border-2 border-white"></span>
                     )}
@@ -137,18 +137,18 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
 
       {/* 📱 МОБИЛЬНЫЙ ХЕДЕР (Стеклянный) */}
       <header className="md:hidden fixed top-0 left-0 right-0 h-[68px] bg-white/80 backdrop-blur-xl border-b border-gray-200/60 z-30 flex items-center justify-between px-5 pt-safe">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-gray-950 rounded-lg flex items-center justify-center shadow-md">
+        <Link to="/posts" className="flex items-center gap-3 group">
+          <div className="w-8 h-8 bg-gray-950 rounded-lg flex items-center justify-center shadow-md group-hover:scale-105 transition-transform duration-300">
             <Hexagon size={18} className="text-white" strokeWidth={2.5} />
           </div>
-          <span className="font-black text-xl tracking-tight text-gray-950">AuraSync</span>
-        </div>
+          <span className="font-black text-xl tracking-tight text-gray-950 group-hover:text-brand transition-colors duration-300">Aura</span>
+        </Link>
         {user && (
-          <Link to="/profile" className="relative">
+          <Link to="/profile" className="relative group">
             <img 
               src={user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}`} 
               alt="User" 
-              className="w-10 h-10 rounded-xl object-cover border border-gray-200/60 shadow-sm active:scale-95 transition-transform" 
+              className="w-10 h-10 rounded-xl object-cover border border-gray-200/60 shadow-sm active:scale-95 transition-transform group-hover:border-brand" 
             />
             <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
           </Link>
@@ -221,16 +221,17 @@ export default function App() {
     <HashRouter>
       <Suspense fallback={<GlobalLoader />}>
         <Routes>
-          <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/feed" />} />
+          <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/posts" />} />
           
           {/* Защищенные роуты */}
-          <Route path="/" element={user ? <MainLayout><ChatsPage /></MainLayout> : <Navigate to="/login" />} />
+          <Route path="/" element={<Navigate to="/posts" replace />} />
+          <Route path="/chats" element={user ? <MainLayout><ChatsPage /></MainLayout> : <Navigate to="/login" />} />
           <Route path="/feed" element={user ? <MainLayout><FeedPage currentSync={currentSync} userGender={gender} /></MainLayout> : <Navigate to="/login" />} />
           <Route path="/posts" element={user ? <MainLayout><FeedPostsPage /></MainLayout> : <Navigate to="/login" />} />
           <Route path="/market" element={user ? <MainLayout><MarketPage /></MainLayout> : <Navigate to="/login" />} />
           <Route path="/profile" element={user ? <MainLayout><ProfilePage currentSync={currentSync} setSync={setSync} gender={gender} setGender={setGender} /></MainLayout> : <Navigate to="/login" />} />
           
-          <Route path="*" element={<Navigate to="/feed" replace />} />
+          <Route path="*" element={<Navigate to="/posts" replace />} />
         </Routes>
       </Suspense>
     </HashRouter>

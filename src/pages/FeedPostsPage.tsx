@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
-import { collection, getDocs, addDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import React, { useState, useEffect, useMemo } from 'react';
+import { collection, addDoc, query, orderBy, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Link } from 'react-router-dom';
-import ProfileModal from '../components/ProfileModal'; // ИМПОРТИРУЕМ МОДАЛКУ
+import ProfileModal from '../components/ProfileModal';
 import { 
   Sparkles, MessageSquare, Plus, X, UserPlus, Image as ImageIcon, 
   FileText, ShoppingBag, AlertCircle, Calendar, RefreshCw, Layers, UploadCloud
@@ -48,7 +48,12 @@ export default function FeedPostsPage() {
   // Состояния данных
   const [usersList, setUsersList] = useState<any[]>([]);
   const [classicPosts, setClassicPosts] = useState<FirestorePost[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  
+  // Разделяем загрузку, чтобы точно знать, когда оба потока данных готовы
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+  const isLoading = isLoadingUsers || isLoadingPosts;
+
   const [activeTab, setActiveTab] = useState<'all' | 'products' | 'classic' | 'events'>('all');
 
   // Состояние для предпросмотра профиля
@@ -62,35 +67,42 @@ export default function FeedPostsPage() {
   const [isSending, setIsSending] = useState(false);
   const [isUploadingImg, setIsUploadingImg] = useState(false);
 
-  // 1. Извлечение всех необходимых данных из Firestore
-  const fetchData = async () => {
-    setIsLoading(true);
-    try {
-      // Получаем пользователей (для товаров и регистраций)
-      const usersSnapshot = await getDocs(collection(db, 'users'));
+  // 1. РЕАКТИВНАЯ ЗАГРУЗКА ДАННЫХ (onSnapshot)
+  useEffect(() => {
+    if (!user) return;
+
+    // Слушатель списка пользователей (для товаров и системных уведомлений)
+    const unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
       const loadedUsers: any[] = [];
-      usersSnapshot.forEach((doc) => {
+      snapshot.forEach((doc) => {
         loadedUsers.push({ id: doc.id, ...doc.data() });
       });
       setUsersList(loadedUsers);
+      setIsLoadingUsers(false);
+    }, (error) => {
+      console.error('Ошибка загрузки пользователей:', error);
+      setIsLoadingUsers(false);
+    });
 
-      // Получаем классические посты
-      const postsQuery = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
-      const postsSnapshot = await getDocs(postsQuery);
+    // Слушатель постов
+    const postsQuery = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
+    const unsubscribePosts = onSnapshot(postsQuery, (snapshot) => {
       const loadedPosts: FirestorePost[] = [];
-      postsSnapshot.forEach((doc) => {
+      snapshot.forEach((doc) => {
         loadedPosts.push({ id: doc.id, ...doc.data() } as FirestorePost);
       });
       setClassicPosts(loadedPosts);
-    } catch (error) {
-      console.error('Ошибка при агрегации ленты событий:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      setIsLoadingPosts(false);
+    }, (error) => {
+      console.error('Ошибка загрузки постов:', error);
+      setIsLoadingPosts(false);
+    });
 
-  useEffect(() => {
-    fetchData();
+    // Очищаем слушатели при размонтировании компонента
+    return () => {
+      unsubscribeUsers();
+      unsubscribePosts();
+    };
   }, [user]);
 
   // Проверка лимита: количество постов пользователя за сегодня
@@ -99,6 +111,8 @@ export default function FeedPostsPage() {
     const today = new Date();
     return classicPosts.filter(post => {
       if (post.userId !== user.uid || post.type !== 'classic') return false;
+      if (!post.createdAt) return false; // Игнорируем посты, которые еще не получили timestamp от сервера
+      
       const postDate = post.createdAt?.toDate ? post.createdAt.toDate() : new Date(post.createdAt);
       return (
         postDate.getDate() === today.getDate() &&
@@ -147,11 +161,12 @@ export default function FeedPostsPage() {
 
     // В) Добавление пользовательских текстовых постов
     classicPosts.forEach(p => {
-      const postTime = p.createdAt?.toMillis ? p.createdAt.toMillis() : new Date(p.createdAt).getTime();
+      // Поддержка мгновенного отображения (когда createdAt еще null при локальном сохранении)
+      const postTime = p.createdAt?.toMillis ? p.createdAt.toMillis() : (p.createdAt ? new Date(p.createdAt).getTime() : Date.now());
       items.push({
         id: p.id,
         type: p.type || 'classic',
-        timestamp: postTime || Date.now(),
+        timestamp: postTime,
         authorId: p.userId,
         authorName: p.userName || 'Автор',
         authorAvatar: p.userAvatar,
@@ -233,7 +248,7 @@ export default function FeedPostsPage() {
       setText('');
       setImageUrl('');
       setIsCreating(false);
-      await fetchData(); 
+      // УДАЛЕНО: await fetchData(); — Теперь onSnapshot обновит всё автоматически!
     } catch (error) {
       console.error('Ошибка добавления публикации в ленту:', error);
     } finally {

@@ -3,7 +3,6 @@ import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
-// Сюда мы потом вставим реальные ключи от твоего проекта Firebase
 // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyChHiBebIPnMxRAV8Qc78GlmhIQDYGo61Y",

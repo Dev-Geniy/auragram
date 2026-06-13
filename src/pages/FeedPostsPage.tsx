@@ -5,7 +5,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { Link } from 'react-router-dom';
 import { 
   Sparkles, MessageSquare, Plus, X, UserPlus, Image as ImageIcon, 
-  FileText, ShoppingBag, AlertCircle, Calendar, RefreshCw, Layers
+  FileText, ShoppingBag, AlertCircle, Calendar, RefreshCw, Layers, UploadCloud
 } from 'lucide-react';
 
 interface Product {
@@ -56,6 +56,7 @@ export default function FeedPostsPage() {
   const [text, setText] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [isUploadingImg, setIsUploadingImg] = useState(false);
 
   // 1. Извлечение всех необходимых данных из Firestore
   const fetchData = async () => {
@@ -171,6 +172,39 @@ export default function FeedPostsPage() {
     });
   }, [timelineItems, activeTab]);
 
+  // Загрузка картинки через ImgBB
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingImg(true);
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      // ВСТАВЬ СЮДА СВОЙ КЛЮЧ ИЛИ ИСПОЛЬЗУЙ ПЕРЕМЕННУЮ ОКРУЖЕНИЯ
+      const apiKey = import.meta.env.VITE_IMGBB_API_KEY || 'твой_ключ_imgbb'; 
+      const response = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setImageUrl(data.data.url);
+      } else {
+        alert('Ошибка при загрузке изображения на сервер');
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки:', error);
+      alert('Произошла ошибка при загрузке. Проверьте подключение.');
+    } finally {
+      setIsUploadingImg(false);
+      // Сбрасываем value инпута, чтобы можно было загрузить тот же файл снова, если нужно
+      e.target.value = '';
+    }
+  };
+
   // 3. Обработчик отправки публикации
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -269,21 +303,48 @@ export default function FeedPostsPage() {
                   className="w-full bg-gray-50 border border-gray-200/60 rounded-xl px-4 py-4 text-sm focus:bg-white focus:ring-4 focus:ring-brand/10 focus:border-brand outline-none transition-all resize-none h-28 font-medium text-gray-900"
                 />
 
-                <div className="flex items-center gap-3 bg-gray-50 border border-gray-200/60 rounded-xl px-4 py-3 focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/10 focus-within:bg-white transition-all">
-                  <ImageIcon size={18} className="text-gray-400" />
-                  <input 
-                    type="text" 
-                    placeholder="Прямая ссылка на изображение (необязательно)" 
-                    value={imageUrl}
-                    onChange={e => setImageUrl(e.target.value)}
-                    className="w-full bg-transparent text-sm outline-none font-medium text-gray-900"
-                  />
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <div className="flex-1 w-full flex items-center gap-3 bg-gray-50 border border-gray-200/60 rounded-xl px-4 py-3 focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/10 focus-within:bg-white transition-all">
+                    <ImageIcon size={18} className="text-gray-400 shrink-0" />
+                    <input 
+                      type="text" 
+                      placeholder="Прямая ссылка на изображение" 
+                      value={imageUrl}
+                      onChange={e => setImageUrl(e.target.value)}
+                      className="w-full bg-transparent text-sm outline-none font-medium text-gray-900"
+                    />
+                  </div>
+                  <label className="w-full sm:w-auto shrink-0 flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-5 py-3 rounded-xl text-xs font-bold cursor-pointer transition-all border border-gray-200/50">
+                    {isUploadingImg ? <RefreshCw size={16} className="animate-spin" /> : <UploadCloud size={16} />}
+                    {isUploadingImg ? 'Загрузка...' : 'Выбрать файл'}
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={handleImageUpload} 
+                      disabled={isUploadingImg}
+                    />
+                  </label>
                 </div>
+
+                {/* Предпросмотр картинки, если ссылка уже есть */}
+                {imageUrl && (
+                  <div className="mt-3 relative inline-block rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+                    <img src={imageUrl} alt="Preview" className="h-24 w-auto object-cover" />
+                    <button 
+                      type="button" 
+                      onClick={() => setImageUrl('')}
+                      className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 hover:bg-black/70 transition-colors"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
 
                 <div className="pt-2 flex justify-end">
                   <button
                     type="submit"
-                    disabled={!text.trim() || isSending}
+                    disabled={!text.trim() || isSending || isUploadingImg}
                     className="bg-gray-950 text-white px-6 py-3 rounded-xl text-xs font-bold tracking-wider uppercase hover:bg-gray-800 disabled:opacity-40 transition-all flex items-center gap-2"
                   >
                     {isSending && <RefreshCw size={14} className="animate-spin" />}
@@ -389,7 +450,7 @@ export default function FeedPostsPage() {
                       <div className="flex items-center gap-2">
                         {item.type === 'product' && (
                           <Link 
-                            to="/market" 
+                            to={`/shop/${item.authorId}`} 
                             className="px-4 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-xl text-xs font-bold border border-gray-100 transition-colors flex items-center gap-1.5"
                           >
                             <ShoppingBag size={14} /> В магазин

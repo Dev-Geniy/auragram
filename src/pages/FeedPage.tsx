@@ -3,7 +3,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Link } from 'react-router-dom';
-import { MessageCircle, Briefcase, User as UserIcon, Sparkles, MapPin, Activity } from 'lucide-react';
+import { MessageCircle, Briefcase, User as UserIcon, Sparkles, MapPin, Activity, ShoppingBag } from 'lucide-react';
 
 interface FeedPageProps {
   currentSync: 'all' | 'business' | 'personal';
@@ -18,6 +18,7 @@ interface UserProfile {
   role: string;
   skills: string[];
   avatar: string;
+  products?: any[]; // Добавили поле для проверки товаров
 }
 
 export default function FeedPage({ currentSync, userGender }: FeedPageProps) {
@@ -104,7 +105,6 @@ export default function FeedPage({ currentSync, userGender }: FeedPageProps) {
 
         {/* СЕТКА АНКЕТ */}
         {isLoading ? (
-          /* Премиальный Skeleton Loader */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3].map((n) => (
               <div key={n} className="bg-white rounded-[2rem] overflow-hidden border border-gray-100 shadow-sm animate-pulse flex flex-col">
@@ -113,10 +113,6 @@ export default function FeedPage({ currentSync, userGender }: FeedPageProps) {
                   <div className="h-4 bg-gray-100 rounded w-3/4" />
                   <div className="h-3 bg-gray-100 rounded w-full" />
                   <div className="h-3 bg-gray-100 rounded w-5/6" />
-                  <div className="flex gap-2 pt-2">
-                    <div className="h-6 bg-gray-100 rounded-md w-16" />
-                    <div className="h-6 bg-gray-100 rounded-md w-20" />
-                  </div>
                   <div className="pt-4 mt-auto">
                     <div className="h-11 bg-gray-100 rounded-xl w-full" />
                   </div>
@@ -129,7 +125,6 @@ export default function FeedPage({ currentSync, userGender }: FeedPageProps) {
             {filteredProfiles.map((profile) => (
               <div key={profile.id} className="bg-white rounded-[2rem] overflow-hidden border border-gray-200/60 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_30px_rgba(0,0,0,0.06)] hover:-translate-y-1 hover:border-gray-300 transition-all duration-300 group flex flex-col">
                 
-                {/* Аватар и статус (Cover) */}
                 <div className="relative h-56 bg-gray-100 overflow-hidden shrink-0">
                   <img 
                     src={profile.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}&background=random`} 
@@ -158,7 +153,6 @@ export default function FeedPage({ currentSync, userGender }: FeedPageProps) {
                   </div>
                 </div>
                 
-                {/* Информация */}
                 <div className="p-6 flex-1 flex flex-col">
                   <p className="text-[13px] text-gray-600 mb-5 line-clamp-2 min-h-[40px] font-medium leading-relaxed">
                     {profile.role || 'Пользователь пока не добавил описание профиля.'}
@@ -177,21 +171,35 @@ export default function FeedPage({ currentSync, userGender }: FeedPageProps) {
                     )}
                   </div>
                   
-                  {/* ИСПРАВЛЕНО: Кнопка связи теперь ведет на /chats */}
-                  <Link 
-                    to="/chats" 
-                    className="w-full py-3.5 bg-gray-50 group-hover:bg-gray-950 text-gray-900 group-hover:text-white font-bold text-[11px] uppercase tracking-wider rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-sm"
-                  >
-                    <MessageCircle size={16} className="group-hover:scale-110 transition-transform duration-300" />
-                    Написать сообщение
-                  </Link>
-                </div>
+                  {/* ИНТЕЛЛЕКТУАЛЬНЫЕ КНОПКИ ДЕЙСТВИЙ */}
+                  <div className="flex items-center gap-2 w-full mt-auto">
+                    {/* Если это бизнес и у него есть товары — показываем кнопку "В магазин" */}
+                    {profile.type === 'business' && profile.products && profile.products.length > 0 && (
+                      <Link 
+                        to={`/shop/${profile.id}`}
+                        className="flex-1 py-3.5 bg-gray-50 hover:bg-amber-500 text-gray-900 hover:text-white font-bold text-[10px] sm:text-[11px] uppercase tracking-wider rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 shadow-sm group/btn"
+                      >
+                        <ShoppingBag size={16} className="group-hover/btn:scale-110 transition-transform duration-300" />
+                        <span className="truncate">В магазин</span>
+                      </Link>
+                    )}
 
+                    {/* Кнопка "Написать" с передачей состояния (state) */}
+                    <Link 
+                      to="/chats" 
+                      state={{ selectedUserId: profile.id }}
+                      className="flex-1 py-3.5 bg-gray-50 hover:bg-gray-950 text-gray-900 hover:text-white font-bold text-[10px] sm:text-[11px] uppercase tracking-wider rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 shadow-sm group/btn2"
+                    >
+                      <MessageCircle size={16} className="group-hover/btn2:scale-110 transition-transform duration-300" />
+                      <span className="truncate">Написать</span>
+                    </Link>
+                  </div>
+
+                </div>
               </div>
             ))}
           </div>
         ) : (
-          /* Empty State */
           <div className="bg-white rounded-3xl p-16 text-center border border-gray-200/60 shadow-sm flex flex-col items-center justify-center min-h-[50vh]">
             <div className="relative mb-6">
               <div className="absolute inset-0 bg-brand/20 rounded-full animate-ping"></div>
@@ -201,15 +209,9 @@ export default function FeedPage({ currentSync, userGender }: FeedPageProps) {
             </div>
             <h3 className="text-xl font-black text-gray-900 mb-2 tracking-tight">Вне зоны доступа</h3>
             <p className="text-sm text-gray-500 max-w-sm mx-auto font-medium leading-relaxed">
-              Радар не зафиксировал пользователей по фильтру «{currentSync === 'business' ? 'Бизнес' : currentSync === 'personal' ? 'Люди' : 'Все'}». 
-              Попробуйте расширить зону поиска в настройках профиля.
+              Радар не зафиксировал пользователей по фильтру. 
+              Попробуйте расширить зону поиска.
             </p>
-            <Link 
-              to="/profile" 
-              className="mt-8 text-sm font-bold text-brand hover:text-brand-dark transition-colors"
-            >
-              Изменить настройки фильтрации
-            </Link>
           </div>
         )}
 

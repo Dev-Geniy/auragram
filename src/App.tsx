@@ -1,18 +1,54 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './services/firebase';
+import { useAuthStore } from './store/useAuthStore';
+import LoginPage from './pages/LoginPage';
 
 const App = () => {
+  const { user, isLoading, setUser, setLoading } = useAuthStore();
+
+  // Слушаем изменения статуса авторизации из Firebase
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [setUser, setLoading]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-brand"></div>
+      </div>
+    );
+  }
+
   return (
     <BrowserRouter>
-      <div className="min-h-screen flex flex-col justify-center items-center">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-brand mb-4">Auragram Enterprise</h1>
-          <p className="text-gray-500 font-medium">UI-движок и роутинг успешно инициализированы.</p>
-        </div>
-        <Routes>
-          {/* В будущем здесь будут роуты: <Route path="/login" element={<LoginPage />} /> */}
-        </Routes>
-      </div>
+      <Routes>
+        {/* Если нет пользователя - показываем логин */}
+        <Route 
+          path="/login" 
+          element={!user ? <LoginPage /> : <Navigate to="/" />} 
+        />
+        
+        {/* Главная страница чата (пока заглушка) */}
+        <Route 
+          path="/" 
+          element={
+            user ? (
+              <div className="min-h-screen flex items-center justify-center text-2xl font-bold">
+                Добро пожаловать в Auragram, {user.displayName || 'Пользователь'}!
+              </div>
+            ) : (
+              <Navigate to="/login" />
+            )
+          } 
+        />
+      </Routes>
     </BrowserRouter>
   );
 };

@@ -1,5 +1,6 @@
 import React from 'react';
-import { X, Phone, Globe } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { X, Phone, Globe, MessageSquare, ShoppingBag } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -41,10 +42,12 @@ export default function ProfileModal({ profile, onClose }: ProfileModalProps) {
       className="fixed inset-0 z-[150] bg-gray-950/40 backdrop-blur-md flex items-center justify-center p-4 md:p-10 overflow-y-auto animate-fade-in"
       onClick={handleBackdropClick}
     >
-      <div className="bg-white w-full max-w-md rounded-[2rem] overflow-hidden shadow-2xl relative my-auto animate-scale-up">
+      {/* Добавили flex flex-col для правильного позиционирования футера */}
+      <div className="bg-white w-full max-w-md rounded-[2rem] overflow-hidden shadow-2xl relative my-auto animate-scale-up flex flex-col">
+        
         <button 
           onClick={onClose} 
-          className="absolute top-4 right-4 w-10 h-10 bg-black/50 hover:bg-black/70 backdrop-blur-md text-white rounded-full flex items-center justify-center transition-colors z-10"
+          className="absolute top-4 right-4 w-10 h-10 bg-black/50 hover:bg-black/70 backdrop-blur-md text-white rounded-full flex items-center justify-center transition-colors z-20"
         >
           <X size={20} />
         </button>
@@ -122,6 +125,35 @@ export default function ProfileModal({ profile, onClose }: ProfileModalProps) {
             </div>
           )}
         </div>
+
+        {/* ФУТЕР С КНОПКАМИ ДЕЙСТВИЙ (Новый блок) */}
+        {profile.id && (
+          <div className="p-4 md:p-6 bg-gray-50 border-t border-gray-100 flex items-center gap-3 shrink-0">
+            {/* Кнопка магазина (только для бизнес-профилей) */}
+            {profile.type === 'business' && (
+              <Link 
+                to={`/shop/${profile.id}`}
+                onClick={onClose}
+                className="flex-1 py-3.5 bg-white hover:bg-amber-500 text-gray-900 hover:text-white font-bold text-[11px] uppercase tracking-wider rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-sm border border-gray-200/60 hover:border-amber-500 group"
+              >
+                <ShoppingBag size={16} className="group-hover:scale-110 transition-transform" />
+                <span className="truncate">В магазин</span>
+              </Link>
+            )}
+            
+            {/* Универсальная кнопка "Написать" */}
+            <Link 
+              to="/chats" 
+              state={{ selectedUserId: profile.id }}
+              onClick={onClose}
+              className="flex-1 py-3.5 bg-gray-950 hover:bg-gray-800 text-white font-bold text-[11px] uppercase tracking-wider rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-sm group"
+            >
+              <MessageSquare size={16} className="group-hover:scale-110 transition-transform" />
+              <span className="truncate">Написать</span>
+            </Link>
+          </div>
+        )}
+
       </div>
     </div>
   );

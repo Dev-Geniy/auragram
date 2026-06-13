@@ -17,6 +17,7 @@ const FeedPage = lazy(() => import('./pages/FeedPage'));
 const MarketPage = lazy(() => import('./pages/MarketPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const FeedPostsPage = lazy(() => import('./pages/FeedPostsPage'));
+const ShopPage = lazy(() => import('./pages/ShopPage')); // Подключили страницу магазина
 
 // ==========================================
 // ГЛОБАЛЬНЫЙ ЗАГРУЗЧИК (PRELOADER)
@@ -32,17 +33,17 @@ const GlobalLoader = () => (
 );
 
 // ==========================================
-// ОСНОВНОЙ МАКЕТ (САЙДБАР ДЛЯ ПК / НИЖНЕЕ МЕНЮ ДЛЯ МОБИЛОК)
+// ОСНОВНОЙ МАКЕТ (САЙДБАР ПК / НИЖНЕЕ МЕНЮ МОБИЛОК)
 // ==========================================
 const MainLayout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const { user } = useAuthStore();
 
-  // Обновленная структура меню (Лента теперь на первом месте)
+  // Обновленная структура меню (Чаты и Радар поменяны местами)
   const menuItems = [
     { path: '/posts', icon: <Component size={22} />, label: 'Лента' },
+    { path: '/chats', icon: <MessageSquare size={22} />, label: 'Чаты', badge: true }, // badge - индикатор уведомлений
     { path: '/feed', icon: <Globe size={22} />, label: 'Радар' },
-    { path: '/chats', icon: <MessageSquare size={22} />, label: 'Чаты', badge: true }, // badge симулирует непрочитанные
     { path: '/market', icon: <Store size={22} />, label: 'Маркет' },
   ];
 
@@ -98,7 +99,7 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
           <nav className="px-4 py-2 space-y-1.5">
             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-3 mb-4 mt-2">Меню платформы</div>
             {menuItems.map((item) => {
-              const isActive = location.pathname === item.path;
+              const isActive = location.pathname === item.path || (item.path === '/market' && location.pathname.startsWith('/shop'));
               return (
                 <Link
                   key={item.path}
@@ -111,12 +112,13 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
                 >
                   <div className={`relative transition-transform duration-300 ${isActive ? 'scale-110 text-white' : 'text-gray-400 group-hover:text-gray-900 group-hover:scale-110'}`}>
                     {item.icon}
+                    {/* Бейдж непрочитанных (не показываем, если раздел активен) */}
                     {item.badge && !isActive && (
                       <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-brand rounded-full border-2 border-white"></span>
                     )}
                   </div>
                   {item.label}
-                  {isActive && <div className="absolute right-4 w-1.5 h-1.5 rounded-full bg-white/60 animate-pulse" />}
+                  {/* Пульсирующая точка удалена по просьбе для чистоты интерфейса */}
                 </Link>
               );
             })}
@@ -165,7 +167,8 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
       {/* 📱 МОБИЛЬНОЕ НИЖНЕЕ МЕНЮ (Glassmorphism Bottom Bar) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-[84px] bg-white/90 backdrop-blur-xl border-t border-gray-200/60 z-30 flex items-center justify-around px-2 pb-safe shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
         {menuItems.map((item) => {
-          const isActive = location.pathname === item.path;
+          // Для магазина подсвечиваем иконку Маркета
+          const isActive = location.pathname === item.path || (item.path === '/market' && location.pathname.startsWith('/shop'));
           return (
             <Link
               key={item.path}
@@ -174,8 +177,7 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
                 isActive ? 'text-gray-950' : 'text-gray-400 hover:text-gray-600'
               }`}
             >
-              <div className={`absolute top-0 w-8 h-1 bg-gray-950 rounded-b-full transition-all duration-300 ${isActive ? 'opacity-100 scale-100' : 'opacity-0 scale-0'}`} />
-              
+              {/* Полоска сверху убрана для более чистого iOS-стиля */}
               <div className={`relative transition-all duration-300 ${isActive ? '-translate-y-1.5 scale-110' : 'scale-100 mt-1'}`}>
                 {item.icon}
                 {item.badge && !isActive && (
@@ -230,6 +232,9 @@ export default function App() {
           <Route path="/posts" element={user ? <MainLayout><FeedPostsPage /></MainLayout> : <Navigate to="/login" />} />
           <Route path="/market" element={user ? <MainLayout><MarketPage /></MainLayout> : <Navigate to="/login" />} />
           <Route path="/profile" element={user ? <MainLayout><ProfilePage currentSync={currentSync} setSync={setSync} gender={gender} setGender={setGender} /></MainLayout> : <Navigate to="/login" />} />
+          
+          {/* Страница отдельного магазина */}
+          <Route path="/shop/:id" element={user ? <MainLayout><ShopPage /></MainLayout> : <Navigate to="/login" />} />
           
           <Route path="*" element={<Navigate to="/posts" replace />} />
         </Routes>

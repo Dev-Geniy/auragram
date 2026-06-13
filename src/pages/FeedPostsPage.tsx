@@ -7,7 +7,7 @@ import ProfileModal from '../components/ProfileModal';
 import { 
   Sparkles, MessageSquare, Plus, X, UserPlus, Image as ImageIcon, 
   FileText, ShoppingBag, AlertCircle, Calendar, RefreshCw, Layers, UploadCloud,
-  Trash2, Edit2, Check
+  Trash2, Edit2, Check, Share2
 } from 'lucide-react';
 
 interface Product {
@@ -42,6 +42,51 @@ interface FeedItem {
   price?: string;
   imageUrl?: string;
 }
+
+// ==========================================
+// УТИЛИТА СЖАТИЯ ИЗОБРАЖЕНИЙ НА СТОРОНЕ КЛИЕНТА
+// ==========================================
+const compressImage = (file: File, maxWidth = 1200, quality = 0.7): Promise<File> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        // Вычисляем новые размеры с сохранением пропорций
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        // Конвертируем обратно в File
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const compressedFile = new File([blob], file.name, {
+              type: 'image/jpeg',
+              lastModified: Date.now(),
+            });
+            resolve(compressedFile);
+          } else {
+            reject(new Error('Ошибка сжатия изображения'));
+          }
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = (err) => reject(err);
+    };
+    reader.onerror = (err) => reject(err);
+  });
+};
 
 export default function FeedPostsPage() {
   const { user } = useAuthStore();
@@ -207,7 +252,9 @@ export default function FeedPostsPage() {
     if (!file) return;
     setIsUploadingImg(true);
     try {
-      const url = await uploadImageToImgBB(file);
+      // ИСПОЛЬЗУЕМ СЖАТИЕ ПЕРЕД ОТПРАВКОЙ НА СЕРВЕР
+      const compressedFile = await compressImage(file, 1200, 0.7);
+      const url = await uploadImageToImgBB(compressedFile);
       setImageUrl(url);
     } catch (error) {
       alert('Произошла ошибка при загрузке. Проверьте подключение.');
@@ -222,7 +269,9 @@ export default function FeedPostsPage() {
     if (!file) return;
     setIsUploadingEditImg(true);
     try {
-      const url = await uploadImageToImgBB(file);
+      // ИСПОЛЬЗУЕМ СЖАТИЕ ПЕРЕД ОТПРАВКОЙ НА СЕРВЕР
+      const compressedFile = await compressImage(file, 1200, 0.7);
+      const url = await uploadImageToImgBB(compressedFile);
       setEditImageUrl(url);
     } catch (error) {
       alert('Произошла ошибка при загрузке. Проверьте подключение.');
@@ -292,7 +341,6 @@ export default function FeedPostsPage() {
         title: editTitle.trim(),
         text: editText.trim(),
         imageUrl: editImageUrl.trim(),
-        // Мы не обновляем createdAt, чтобы пост остался на своем месте в ленте по времени
       });
       setEditingPostId(null);
     } catch (error) {
@@ -308,13 +356,36 @@ export default function FeedPostsPage() {
     if (profile) setPreviewProfile(profile);
   };
 
+  // ФУНКЦИЯ "ПОДЕЛИТЬСЯ"
+  const handleShare = async (item: FeedItem) => {
+    const shareTitle = item.title || 'Пост в AuraSync';
+    const shareText = `${item.title ? item.title + '\n' : ''}${item.text || ''}`;
+    const shareUrl = window.location.origin;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: shareUrl,
+        });
+      } catch (err) {
+        console.log('Поделиться отменено', err);
+      }
+    } else {
+      // Фолбэк для ПК (копирование в буфер обмена)
+      navigator.clipboard.writeText(`${shareText}\n\nПодробнее в AuraSync: ${shareUrl}`);
+      alert('Текст и ссылка скопированы в буфер обмена!');
+    }
+  };
+
   const formatItemDate = (timestamp: number) => {
     const date = new Date(timestamp);
     return date.toLocaleDateString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#FAFAFA] p-6 md:p-10 select-none relative">
+    <div className="flex-1 overflow-y-auto bg-[#FAFAFA] p-6 md:p-10 select-none relative pb-24">
       <div className="max-w-4xl mx-auto">
         
         {/* ХЕДЕР СТРАНИЦЫ */}
@@ -384,7 +455,7 @@ export default function FeedPostsPage() {
                   </div>
                   <label className="w-full sm:w-auto shrink-0 flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-5 py-3 rounded-xl text-xs font-bold cursor-pointer transition-all border border-gray-200/50">
                     {isUploadingImg ? <RefreshCw size={16} className="animate-spin" /> : <UploadCloud size={16} />}
-                    {isUploadingImg ? 'Загрузка...' : 'Выбрать файл'}
+                    {isUploadingImg ? 'Сжатие и Загрузка...' : 'Выбрать файл'}
                     <input 
                       type="file" 
                       accept="image/*" 
@@ -423,7 +494,7 @@ export default function FeedPostsPage() {
           </div>
         )}
 
-        {/* НАВИГАЦИОННЫЕ ВКЛАДКИ */}
+        {/* НАВИГАЦИОННЫЕ ВКЛАДКИ (ТАБЫ) */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-4 mb-8 text-xs font-bold scrollbar-none border-b border-gray-200/40">
           <button onClick={() => setActiveTab('all')} className={`px-4 py-2 rounded-xl transition-all whitespace-nowrap ${activeTab === 'all' ? 'bg-gray-950 text-white shadow-sm' : 'bg-white text-gray-500 border border-gray-200/60 hover:text-gray-900'}`}>Все события</button>
           <button onClick={() => setActiveTab('products')} className={`px-4 py-2 rounded-xl transition-all whitespace-nowrap ${activeTab === 'products' ? 'bg-amber-500 text-white shadow-sm' : 'bg-white text-gray-500 border border-gray-200/60 hover:text-gray-900'}`}>Товары бизнес-витрин</button>
@@ -593,7 +664,18 @@ export default function FeedPostsPage() {
                   {/* Футер карточки с кнопками действий (Скрываем при редактировании) */}
                   {item.type !== 'registration' && editingPostId !== item.id && (
                     <div className="flex items-center justify-between gap-4 pt-5 mt-4 border-t border-gray-100 shrink-0">
-                      <div>
+                      
+                      {/* Левая сторона: Share и Цена */}
+                      <div className="flex items-center gap-3">
+                        <button 
+                          onClick={() => handleShare(item)}
+                          className="text-gray-400 hover:text-brand transition-colors p-2 -ml-2 rounded-xl hover:bg-brand/10 flex items-center gap-1.5 text-xs font-bold"
+                          title="Поделиться"
+                        >
+                          <Share2 size={16} />
+                          <span className="hidden sm:inline-block">Поделиться</span>
+                        </button>
+                        
                         {item.type === 'product' && item.price && (
                           <span className="text-xs font-black text-amber-700 bg-amber-50 border border-amber-100 px-3 py-1.5 rounded-xl">
                             {item.price}
@@ -601,6 +683,7 @@ export default function FeedPostsPage() {
                         )}
                       </div>
 
+                      {/* Правая сторона: Кнопки навигации */}
                       <div className="flex items-center gap-2">
                         {item.type === 'product' && (
                           <Link 

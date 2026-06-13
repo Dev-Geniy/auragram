@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { updateProfile } from 'firebase/auth';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, auth, storage } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { 
   User, Briefcase, Users, X, Save, CheckCircle2, 
   Settings, Phone, Mail, Globe, Package, 
-  Plus, Trash2, Image as ImageIcon, Eye, Search, Camera, Bell
+  Plus, Trash2, Image as ImageIcon, Eye, Search, Camera, Bell, Loader2
 } from 'lucide-react';
 
 interface ProfilePageProps {
@@ -24,16 +26,19 @@ interface Product {
 }
 
 export default function ProfilePage({ currentSync, setSync, gender, setGender }: ProfilePageProps) {
-  const { user } = useAuthStore();
+  const { user, setUser } = useAuthStore();
   
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [skillInput, setSkillInput] = useState('');
   
-  // Состояния UI
+  // Состояния загрузки файлов
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [isAddingProduct, setIsAddingProduct] = useState(false);
-  const [isPreviewMode, setIsPreviewMode] = useState(false); // Предпросмотр
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
   
   const [newProduct, setNewProduct] = useState<Product>({
     id: '', name: '', price: '', description: '', imageUrl: ''
@@ -46,7 +51,7 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
     role: '',
     skills: [] as string[],
     avatar: '',
-    isPublic: true, // Галочка публичности для Ленты
+    isPublic: true,
     contacts: { phone: '', email: '', website: '' },
     products: [] as Product[]
   });
@@ -63,6 +68,8 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
           setProfile({ 
             ...profile, 
             ...data,
+            // Если в БД нет аватарки, берем из Google Auth
+            avatar: data.avatar || user.photoURL || '',
             isPublic: data.isPublic !== undefined ? data.isPublic : true,
             contacts: data.contacts || { phone: '', email: '', website: '' },
             products: data.products || []
@@ -83,14 +90,47 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
     fetchProfile();
   }, [user]);
 
+  // ФУНКЦИЯ ЗАГРУЗКИ АВАТАРКИ В STORAGE
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    setIsUploadingAvatar(true);
+    try {
+      // Создаем уникальное имя файла
+      const storageRef = ref(storage, `avatars/${user.uid}_${Date.now()}`);
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+      
+      setProfile(prev => ({ ...prev, avatar: downloadURL }));
+    } catch (error) {
+      console.error('Ошибка загрузки изображения:', error);
+      alert('Не удалось загрузить изображение. Проверьте настройки Firebase Storage.');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
   const handleSaveProfile = async () => {
     if (!user) return;
     setIsSaving(true);
     try {
+      // 1. Сохраняем в Firestore
       await setDoc(doc(db, 'users', user.uid), {
         ...profile,
         updatedAt: new Date().toISOString()
       }, { merge: true });
+
+      // 2. ГЛОБАЛЬНЫЙ ФИКС: Обновляем профиль в Firebase Auth, чтобы меню и шапка обновились сразу!
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, {
+          displayName: profile.name,
+          photoURL: profile.avatar
+        });
+        // Обновляем локальный стейт (Zustand), чтобы React перерисовал интерфейс
+        setUser({ ...auth.currentUser }); 
+      }
+
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 4000);
     } catch (error) {
@@ -112,10 +152,7 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
   };
 
   const handleRemoveSkill = (skillToRemove: string) => {
-    setProfile({
-      ...profile,
-      skills: profile.skills.filter(s => s !== skillToRemove)
-    });
+    setProfile({ ...profile, skills: profile.skills.filter(s => s !== skillToRemove) });
   };
 
   const handleAddProduct = () => {
@@ -131,13 +168,9 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
   };
 
   const handleRemoveProduct = (productId: string) => {
-    setProfile({
-      ...profile,
-      products: profile.products.filter(p => p.id !== productId)
-    });
+    setProfile({ ...profile, products: profile.products.filter(p => p.id !== productId) });
   };
 
-  // Единые стили для инпутов (Enterprise Design Code)
   const inputClass = "w-full bg-gray-50 border border-gray-200/60 rounded-2xl px-5 py-4 text-[15px] focus:bg-white focus:ring-4 focus:ring-brand/10 focus:border-brand outline-none transition-all font-semibold text-gray-900 placeholder-gray-400 shadow-[inset_0_2px_4px_rgba(0,0,0,0.01)]";
   const labelClass = "block text-xs font-black text-gray-400 mb-2 uppercase tracking-widest pl-1";
   const sectionClass = "bg-white rounded-[2rem] p-6 md:p-10 shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-gray-100 relative overflow-hidden";
@@ -148,7 +181,6 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
         <div className="max-w-3xl mx-auto space-y-8 animate-pulse">
           <div className="h-12 w-64 bg-gray-200/60 rounded-xl mb-10" />
           <div className="h-64 bg-white rounded-[2rem] border border-gray-100" />
-          <div className="h-96 bg-white rounded-[2rem] border border-gray-100" />
         </div>
       </div>
     );
@@ -157,9 +189,7 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
   return (
     <div className="flex-1 overflow-y-auto bg-[#FAFAFA] p-4 md:p-10 select-none pb-[160px] md:pb-32 relative">
       
-      {/* =========================================
-          ПОЛНОЭКРАННЫЙ ПРЕДПРОСМОТР (MODAL)
-      ========================================= */}
+      {/* ПРЕДПРОСМОТР */}
       {isPreviewMode && (
         <div className="fixed inset-0 z-50 bg-gray-950/40 backdrop-blur-md flex items-center justify-center p-4 md:p-10 overflow-y-auto animate-fade-in">
           <div className="bg-white w-full max-w-md rounded-[2rem] overflow-hidden shadow-2xl relative my-auto">
@@ -169,8 +199,6 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
             >
               <X size={20} />
             </button>
-
-            {/* Обложка предпросмотра */}
             <div className="relative h-64 bg-gray-100 overflow-hidden">
               <img src={profile.avatar} alt="Avatar" className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-gray-950/90 to-transparent"></div>
@@ -183,23 +211,13 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
                 <h3 className="font-black text-2xl text-white drop-shadow-md truncate">{profile.name || 'Без имени'}</h3>
               </div>
             </div>
-
-            {/* Контент предпросмотра */}
             <div className="p-6 md:p-8 flex flex-col gap-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
-              <p className="text-[15px] text-gray-600 font-medium leading-relaxed whitespace-pre-wrap">
-                {profile.role || 'Описание отсутствует...'}
-              </p>
-              
+              <p className="text-[15px] text-gray-600 font-medium leading-relaxed whitespace-pre-wrap">{profile.role || 'Описание отсутствует...'}</p>
               {profile.skills.length > 0 && (
                 <div className="flex flex-wrap gap-2">
-                  {profile.skills.map(skill => (
-                    <span key={skill} className="text-[11px] font-bold bg-gray-100 text-gray-600 px-3 py-1.5 rounded-xl">
-                      {skill}
-                    </span>
-                  ))}
+                  {profile.skills.map(skill => <span key={skill} className="text-[11px] font-bold bg-gray-100 text-gray-600 px-3 py-1.5 rounded-xl">{skill}</span>)}
                 </div>
               )}
-
               {profile.type === 'business' && (
                 <div className="space-y-6 pt-4 border-t border-gray-100">
                   <div className="flex flex-col gap-3">
@@ -207,7 +225,6 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
                     {profile.contacts.phone && <p className="text-sm font-bold flex items-center gap-2"><Phone size={14} className="text-brand"/> {profile.contacts.phone}</p>}
                     {profile.contacts.website && <p className="text-sm font-bold flex items-center gap-2"><Globe size={14} className="text-brand"/> {profile.contacts.website}</p>}
                   </div>
-                  
                   {profile.products.length > 0 && (
                     <div className="grid grid-cols-2 gap-3">
                       {profile.products.map(p => (
@@ -226,12 +243,9 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
         </div>
       )}
 
-      {/* =========================================
-          ОСНОВНОЙ ИНТЕРФЕЙС НАСТРОЕК
-      ========================================= */}
+      {/* ОСНОВНОЙ ИНТЕРФЕЙС НАСТРОЕК */}
       <div className="max-w-3xl mx-auto space-y-8">
         
-        {/* Заголовок страницы */}
         <div className="flex items-center gap-4 mb-4 ml-2">
           <div className="w-12 h-12 bg-white rounded-2xl shadow-sm border border-gray-200/60 flex items-center justify-center shrink-0">
             <Settings size={24} className="text-gray-950" />
@@ -242,34 +256,24 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
           </div>
         </div>
 
-        {/* 🔍 БЛОК 1: НАСТРОЙКИ ПОИСКА (РАДАР) */}
+        {/* 🔍 НАСТРОЙКИ ПОИСКА */}
         <section className={sectionClass}>
           <div className="flex items-center gap-4 mb-8 pb-6 border-b border-gray-100">
-            <div className="w-12 h-12 rounded-2xl bg-gray-950 text-white flex items-center justify-center">
-              <Search size={22} />
-            </div>
+            <div className="w-12 h-12 rounded-2xl bg-gray-950 text-white flex items-center justify-center"><Search size={22} /></div>
             <div>
               <h2 className="text-xl font-black text-gray-900 tracking-tight">Настройки поиска</h2>
               <p className="text-[13px] text-gray-500 font-medium mt-0.5">Настройте алгоритм выдачи в Радаре Aura</p>
             </div>
           </div>
-
           <div className="space-y-8">
             <div>
               <label className={labelClass}>Кого вы ищете?</label>
               <div className="flex flex-col sm:flex-row bg-gray-50 p-1.5 rounded-2xl border border-gray-200/60 gap-1.5">
-                <button onClick={() => setSync('all')} className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-[14px] text-[15px] font-bold transition-all ${currentSync === 'all' ? 'bg-white text-gray-950 shadow-sm border border-gray-200/60' : 'text-gray-500 hover:bg-gray-100'}`}>
-                  <Users size={18} /> Все аккаунты
-                </button>
-                <button onClick={() => setSync('personal')} className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-[14px] text-[15px] font-bold transition-all ${currentSync === 'personal' ? 'bg-white text-brand shadow-sm border border-gray-200/60' : 'text-gray-500 hover:bg-gray-100'}`}>
-                  <User size={18} /> Только люди
-                </button>
-                <button onClick={() => setSync('business')} className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-[14px] text-[15px] font-bold transition-all ${currentSync === 'business' ? 'bg-amber-500 text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'}`}>
-                  <Briefcase size={18} /> Бизнес B2B
-                </button>
+                <button onClick={() => setSync('all')} className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-[14px] text-[15px] font-bold transition-all ${currentSync === 'all' ? 'bg-white text-gray-950 shadow-sm border border-gray-200/60' : 'text-gray-500 hover:bg-gray-100'}`}><Users size={18} /> Все аккаунты</button>
+                <button onClick={() => setSync('personal')} className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-[14px] text-[15px] font-bold transition-all ${currentSync === 'personal' ? 'bg-white text-brand shadow-sm border border-gray-200/60' : 'text-gray-500 hover:bg-gray-100'}`}><User size={18} /> Только люди</button>
+                <button onClick={() => setSync('business')} className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-[14px] text-[15px] font-bold transition-all ${currentSync === 'business' ? 'bg-amber-500 text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'}`}><Briefcase size={18} /> Бизнес B2B</button>
               </div>
             </div>
-
             {currentSync !== 'business' && (
               <div className="animate-fade-in transition-all">
                 <label className={labelClass}>Предпочтительный пол собеседника</label>
@@ -283,12 +287,10 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
           </div>
         </section>
 
-        {/* 👤 БЛОК 2: НАСТРОЙКИ ПРОФИЛЯ */}
+        {/* 👤 НАСТРОЙКИ ПРОФИЛЯ */}
         <section className={sectionClass}>
           <div className="flex items-center gap-4 mb-8 pb-6 border-b border-gray-100">
-            <div className="w-12 h-12 rounded-2xl bg-gray-950 text-white flex items-center justify-center">
-              <User size={22} />
-            </div>
+            <div className="w-12 h-12 rounded-2xl bg-gray-950 text-white flex items-center justify-center"><User size={22} /></div>
             <div className="flex-1 min-w-0">
               <h2 className="text-xl font-black text-gray-900 tracking-tight">Настройки профиля</h2>
               <p className="text-[13px] text-gray-500 font-medium mt-0.5 truncate">Ваша публичная карточка и аватар</p>
@@ -297,38 +299,51 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
 
           <div className="space-y-8">
             
-            {/* Аватар и Ссылка */}
+            {/* Загрузка Аватарки через Storage */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-6 bg-gray-50 p-6 rounded-[2rem] border border-gray-200/60">
-              <div className="relative shrink-0">
+              <div className="relative shrink-0 group">
                 <img src={profile.avatar} alt="Avatar" className="w-24 h-24 rounded-3xl object-cover shadow-md bg-white border-2 border-white" />
-                <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-gray-950 text-white rounded-xl flex items-center justify-center shadow-lg">
-                  <Camera size={14} />
-                </div>
+                
+                {/* Скрытый инпут для выбора файла */}
+                <input 
+                  type="file" 
+                  ref={fileInputRef}
+                  onChange={handleAvatarUpload}
+                  accept="image/png, image/jpeg, image/webp" 
+                  className="hidden" 
+                />
+                
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingAvatar}
+                  className="absolute -bottom-2 -right-2 w-10 h-10 bg-gray-950 hover:bg-brand text-white rounded-xl flex items-center justify-center shadow-lg transition-colors"
+                >
+                  {isUploadingAvatar ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
+                </button>
               </div>
               <div className="flex-1">
-                <label className={labelClass}>Ссылка на новое фото (URL)</label>
-                <input
-                  type="text"
-                  value={profile.avatar}
-                  onChange={(e) => setProfile({...profile, avatar: e.target.value})}
-                  className={inputClass}
-                  placeholder="https://example.com/my-photo.jpg"
-                />
+                <h4 className="text-[15px] font-bold text-gray-900">Фотография профиля</h4>
+                <p className="text-xs text-gray-500 font-medium mt-1 mb-3">Нажмите на иконку камеры, чтобы загрузить изображение с устройства. Максимальный размер 5MB.</p>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={profile.avatar}
+                    onChange={(e) => setProfile({...profile, avatar: e.target.value})}
+                    className={`${inputClass} py-3 text-xs text-gray-400`}
+                    placeholder="Или вставьте прямую ссылку на фото (URL)"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Настройки Приватности Ленты (Тумблер) */}
             <div className="flex items-center justify-between bg-white border border-gray-200/60 p-5 rounded-2xl shadow-sm hover:border-gray-300 transition-all cursor-pointer" onClick={() => setProfile({...profile, isPublic: !profile.isPublic})}>
               <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${profile.isPublic ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                  <Bell size={20} />
-                </div>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${profile.isPublic ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}><Bell size={20} /></div>
                 <div>
                   <h4 className="text-[15px] font-bold text-gray-900">Активность в Ленте</h4>
                   <p className="text-xs text-gray-500 font-medium mt-0.5">Публиковать создание аккаунта и смену фото</p>
                 </div>
               </div>
-              {/* iOS Style Toggle */}
               <div className={`w-14 h-8 flex items-center rounded-full p-1 transition-colors duration-300 ${profile.isPublic ? 'bg-green-500' : 'bg-gray-200'}`}>
                 <div className={`bg-white w-6 h-6 rounded-full shadow-md transform transition-transform duration-300 ${profile.isPublic ? 'translate-x-6' : 'translate-x-0'}`}></div>
               </div>
@@ -337,36 +352,21 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div>
                 <label className={labelClass}>Тип профиля</label>
-                <select 
-                  value={profile.type}
-                  onChange={(e) => setProfile({...profile, type: e.target.value as 'personal' | 'business'})}
-                  className={`${inputClass} appearance-none cursor-pointer ${profile.type === 'business' ? 'border-amber-400 ring-4 ring-amber-500/10' : ''}`}
-                >
+                <select value={profile.type} onChange={(e) => setProfile({...profile, type: e.target.value as 'personal' | 'business'})} className={`${inputClass} appearance-none cursor-pointer ${profile.type === 'business' ? 'border-amber-400 ring-4 ring-amber-500/10' : ''}`}>
                   <option value="personal">👤 Личный (Нетворкинг)</option>
                   <option value="business">💼 Бизнес (Магазин / B2B)</option>
                 </select>
               </div>
-
               <div>
                 <label className={labelClass}>{profile.type === 'business' ? 'Название компании' : 'Отображаемое Имя'}</label>
-                <input
-                  type="text"
-                  value={profile.name}
-                  onChange={(e) => setProfile({...profile, name: e.target.value})}
-                  className={inputClass}
-                  placeholder={profile.type === 'business' ? "ООО Вектор" : "Иван Иванов"}
-                />
+                <input type="text" value={profile.name} onChange={(e) => setProfile({...profile, name: e.target.value})} className={inputClass} placeholder={profile.type === 'business' ? "ООО Вектор" : "Иван Иванов"} />
               </div>
             </div>
 
             {profile.type === 'personal' && (
               <div className="animate-fade-in w-full md:w-1/2 md:pr-4">
                 <label className={labelClass}>Ваш пол</label>
-                <select 
-                  value={profile.userGender}
-                  onChange={(e) => setProfile({...profile, userGender: e.target.value})}
-                  className={`${inputClass} appearance-none cursor-pointer`}
-                >
+                <select value={profile.userGender} onChange={(e) => setProfile({...profile, userGender: e.target.value})} className={`${inputClass} appearance-none cursor-pointer`}>
                   <option value="none">Скрыть из профиля</option>
                   <option value="male">Мужской</option>
                   <option value="female">Женский</option>
@@ -376,86 +376,49 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
 
             <div>
               <label className={labelClass}>{profile.type === 'business' ? 'Описание деятельности и УТП' : 'О себе (Bio)'}</label>
-              <textarea
-                value={profile.role}
-                onChange={(e) => setProfile({...profile, role: e.target.value})}
-                className={`${inputClass} resize-none h-32`}
-                placeholder="Расскажите о себе или вашем бизнесе..."
-              />
+              <textarea value={profile.role} onChange={(e) => setProfile({...profile, role: e.target.value})} className={`${inputClass} resize-none h-32`} placeholder="Расскажите о себе или вашем бизнесе..." />
             </div>
 
-            {/* Теги */}
             <div className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100">
               <div className="flex items-center justify-between mb-4">
                 <label className="text-[13px] font-black text-gray-900 uppercase tracking-wide">Ключевые навыки / Теги</label>
-                <span className={`text-[11px] font-black px-3 py-1 rounded-lg ${profile.skills.length >= 10 ? 'bg-red-100 text-red-700' : 'bg-white border border-gray-200/60 text-gray-500'}`}>
-                  {profile.skills.length} / 10
-                </span>
+                <span className={`text-[11px] font-black px-3 py-1 rounded-lg ${profile.skills.length >= 10 ? 'bg-red-100 text-red-700' : 'bg-white border border-gray-200/60 text-gray-500'}`}>{profile.skills.length} / 10</span>
               </div>
-              
               <div className="flex flex-wrap gap-2 mb-4">
                 {profile.skills.map(skill => (
                   <span key={skill} className="inline-flex items-center gap-2 bg-gray-950 text-white px-4 py-2 rounded-xl text-[13px] font-bold shadow-sm">
-                    {skill}
-                    <button onClick={() => handleRemoveSkill(skill)} className="text-gray-400 hover:text-red-400 transition-colors">
-                      <X size={16} />
-                    </button>
+                    {skill} <button onClick={() => handleRemoveSkill(skill)} className="text-gray-400 hover:text-red-400 transition-colors"><X size={16} /></button>
                   </span>
                 ))}
               </div>
-              <input
-                type="text"
-                value={skillInput}
-                onChange={(e) => setSkillInput(e.target.value)}
-                onKeyDown={handleAddSkill}
-                className={inputClass}
-                placeholder={profile.skills.length >= 10 ? "Достигнут лимит" : "Введите тег и нажмите Enter..."}
-                disabled={profile.skills.length >= 10}
-              />
+              <input type="text" value={skillInput} onChange={(e) => setSkillInput(e.target.value)} onKeyDown={handleAddSkill} className={inputClass} placeholder={profile.skills.length >= 10 ? "Достигнут лимит" : "Введите тег и нажмите Enter..."} disabled={profile.skills.length >= 10} />
             </div>
           </div>
         </section>
 
-        {/* 💼 БЛОК 3: НАСТРОЙКИ БИЗНЕСА */}
+        {/* 💼 НАСТРОЙКИ БИЗНЕСА */}
         {profile.type === 'business' && (
           <section className={`${sectionClass} border-amber-200/60 shadow-[0_4px_20px_rgba(245,158,11,0.05)] animate-fade-in`}>
             <div className="flex items-center gap-4 mb-8 pb-6 border-b border-gray-100">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center">
-                <Briefcase size={22} />
-              </div>
+              <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center"><Briefcase size={22} /></div>
               <div>
                 <h2 className="text-xl font-black text-gray-900 tracking-tight">Настройки бизнеса</h2>
                 <p className="text-[13px] text-gray-500 font-medium mt-0.5">Витрина товаров и контакты</p>
               </div>
             </div>
-
             <div className="space-y-8">
-              {/* Контакты */}
               <div className="space-y-4">
                 <label className={labelClass}>Публичные контакты</label>
-                <div className="relative">
-                  <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400"><Phone size={20} /></div>
-                  <input type="text" placeholder="Телефон (+380...)" value={profile.contacts.phone} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, phone: e.target.value}})} className={`${inputClass} pl-14`} />
-                </div>
-                <div className="relative">
-                  <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400"><Mail size={20} /></div>
-                  <input type="email" placeholder="Email для связи" value={profile.contacts.email} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, email: e.target.value}})} className={`${inputClass} pl-14`} />
-                </div>
-                <div className="relative">
-                  <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400"><Globe size={20} /></div>
-                  <input type="text" placeholder="Сайт или соцсеть (URL)" value={profile.contacts.website} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, website: e.target.value}})} className={`${inputClass} pl-14`} />
-                </div>
+                <div className="relative"><div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400"><Phone size={20} /></div><input type="text" placeholder="Телефон (+380...)" value={profile.contacts.phone} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, phone: e.target.value}})} className={`${inputClass} pl-14`} /></div>
+                <div className="relative"><div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400"><Mail size={20} /></div><input type="email" placeholder="Email для связи" value={profile.contacts.email} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, email: e.target.value}})} className={`${inputClass} pl-14`} /></div>
+                <div className="relative"><div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400"><Globe size={20} /></div><input type="text" placeholder="Сайт или соцсеть (URL)" value={profile.contacts.website} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, website: e.target.value}})} className={`${inputClass} pl-14`} /></div>
               </div>
 
-              {/* Товары */}
               <div className="pt-6 border-t border-gray-100">
                 <div className="flex items-center justify-between mb-6">
                   <label className={labelClass + " mb-0"}>Витрина товаров ({profile.products.length})</label>
-                  <button onClick={() => setIsAddingProduct(!isAddingProduct)} className="bg-amber-100 text-amber-800 hover:bg-amber-500 hover:text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5">
-                    {isAddingProduct ? <X size={16} /> : <Plus size={16} />} {isAddingProduct ? 'Скрыть' : 'Добавить'}
-                  </button>
+                  <button onClick={() => setIsAddingProduct(!isAddingProduct)} className="bg-amber-100 text-amber-800 hover:bg-amber-500 hover:text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5">{isAddingProduct ? <X size={16} /> : <Plus size={16} />} {isAddingProduct ? 'Скрыть' : 'Добавить'}</button>
                 </div>
-
                 {isAddingProduct && (
                   <div className="bg-amber-50/50 border border-amber-200/60 rounded-3xl p-6 mb-6 animate-fade-in">
                     <div className="space-y-4">
@@ -463,27 +426,19 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
                         <input type="text" placeholder="Название товара" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} className={inputClass} />
                         <input type="text" placeholder="Цена (100 $)" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} className={inputClass} />
                       </div>
-                      <div className="relative">
-                        <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400"><ImageIcon size={20} /></div>
-                        <input type="text" placeholder="Ссылка на фото (URL)" value={newProduct.imageUrl} onChange={e => setNewProduct({...newProduct, imageUrl: e.target.value})} className={`${inputClass} pl-14`} />
-                      </div>
+                      <div className="relative"><div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400"><ImageIcon size={20} /></div><input type="text" placeholder="Ссылка на фото (URL)" value={newProduct.imageUrl} onChange={e => setNewProduct({...newProduct, imageUrl: e.target.value})} className={`${inputClass} pl-14`} /></div>
                       <textarea placeholder="Краткое описание товара..." value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} className={`${inputClass} h-24 resize-none`} />
-                      <button onClick={handleAddProduct} disabled={!newProduct.name || !newProduct.price} className="bg-amber-500 text-white px-8 py-4 rounded-xl text-[15px] font-bold uppercase w-full hover:bg-amber-600 disabled:opacity-50 transition-colors">
-                        Сохранить в витрину
-                      </button>
+                      <button onClick={handleAddProduct} disabled={!newProduct.name || !newProduct.price} className="bg-amber-500 text-white px-8 py-4 rounded-xl text-[15px] font-bold uppercase w-full hover:bg-amber-600 disabled:opacity-50 transition-colors">Сохранить в витрину</button>
                     </div>
                   </div>
                 )}
-
                 {profile.products.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {profile.products.map(product => (
                       <div key={product.id} className="bg-white border border-gray-200/80 shadow-sm rounded-2xl overflow-hidden flex flex-col group">
                         <div className="h-40 bg-gray-100 relative overflow-hidden">
                           <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                          <button onClick={() => handleRemoveProduct(product.id)} className="absolute top-3 right-3 w-10 h-10 bg-white/90 backdrop-blur text-red-500 rounded-xl flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50">
-                            <Trash2 size={18} />
-                          </button>
+                          <button onClick={() => handleRemoveProduct(product.id)} className="absolute top-3 right-3 w-10 h-10 bg-white/90 backdrop-blur text-red-500 rounded-xl flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50"><Trash2 size={18} /></button>
                         </div>
                         <div className="p-5 flex flex-col flex-1">
                           <div className="flex justify-between items-start gap-3 mb-2">
@@ -496,11 +451,7 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-10 bg-gray-50 rounded-3xl border border-gray-200 border-dashed">
-                    <Package size={32} className="mx-auto text-gray-300 mb-3" />
-                    <p className="text-[15px] font-bold text-gray-900">Витрина пуста</p>
-                    <p className="text-xs font-medium text-gray-500 mt-1">Добавьте свои товары для маркетплейса</p>
-                  </div>
+                  <div className="text-center py-10 bg-gray-50 rounded-3xl border border-gray-200 border-dashed"><Package size={32} className="mx-auto text-gray-300 mb-3" /><p className="text-[15px] font-bold text-gray-900">Витрина пуста</p><p className="text-xs font-medium text-gray-500 mt-1">Добавьте свои товары для маркетплейса</p></div>
                 )}
               </div>
             </div>
@@ -508,38 +459,17 @@ export default function ProfilePage({ currentSync, setSync, gender, setGender }:
         )}
       </div>
 
-      {/* =========================================
-          ФИКСИРОВАННАЯ НИЖНЯЯ ПАНЕЛЬ
-      ========================================= */}
-      {/* На мобильных (md:hidden) панель поднимается над Bottom Navigation Bar (bottom-[84px]) */}
+      {/* ФИКСИРОВАННАЯ НИЖНЯЯ ПАНЕЛЬ */}
       <div className="fixed bottom-[84px] md:bottom-0 left-0 md:left-[280px] right-0 p-4 md:p-6 bg-white/90 backdrop-blur-xl border-t border-gray-200/60 flex items-center justify-between z-40 shadow-[0_-10px_40px_rgba(0,0,0,0.04)]">
         <div className="max-w-4xl mx-auto w-full flex items-center justify-between px-2 md:px-4 gap-4">
-          
-          <button 
-            onClick={() => setIsPreviewMode(true)}
-            className="flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-950 px-6 py-4 rounded-2xl font-bold text-[15px] transition-colors flex-1 md:flex-none"
-          >
+          <button onClick={() => setIsPreviewMode(true)} className="flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-950 px-6 py-4 rounded-2xl font-bold text-[15px] transition-colors flex-1 md:flex-none">
             <Eye size={20} /> <span className="hidden sm:inline">Предпросмотр</span>
           </button>
-          
           <div className="hidden md:block h-6 mx-auto flex-1 text-center">
-            {showSuccess && (
-              <span className="inline-flex items-center gap-2 text-green-600 text-sm font-bold animate-fade-in bg-green-50 px-4 py-1.5 rounded-full border border-green-100">
-                <CheckCircle2 size={18} /> Сохранено
-              </span>
-            )}
+            {showSuccess && <span className="inline-flex items-center gap-2 text-green-600 text-sm font-bold animate-fade-in bg-green-50 px-4 py-1.5 rounded-full border border-green-100"><CheckCircle2 size={18} /> Сохранено</span>}
           </div>
-          
-          <button
-            onClick={handleSaveProfile}
-            disabled={isSaving}
-            className="bg-gray-950 text-white px-8 py-4 rounded-2xl font-bold text-[15px] hover:bg-brand transition-all shadow-md active:scale-95 flex items-center justify-center gap-2.5 disabled:opacity-70 flex-1 md:flex-none"
-          >
-            {isSaving ? (
-              <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div></>
-            ) : (
-              <><Save size={20} /> <span className="hidden sm:inline">Сохранить</span></>
-            )}
+          <button onClick={handleSaveProfile} disabled={isSaving} className="bg-gray-950 text-white px-8 py-4 rounded-2xl font-bold text-[15px] hover:bg-brand transition-all shadow-md active:scale-95 flex items-center justify-center gap-2.5 disabled:opacity-70 flex-1 md:flex-none">
+            {isSaving ? <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div></> : <><Save size={20} /> <span className="hidden sm:inline">Сохранить</span></>}
           </button>
         </div>
       </div>

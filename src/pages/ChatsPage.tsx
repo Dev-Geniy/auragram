@@ -125,22 +125,22 @@ export default function ChatsPage() {
   );
 
   return (
-    <div className="flex h-full w-full overflow-hidden select-none bg-[#FAFAFA]">
+    <div className="flex flex-col md:flex-row h-full w-full overflow-hidden select-none bg-white md:bg-[#FAFAFA]">
       
-      {/* ЛЕВАЯ ПАНЕЛЬ: КОНТАКТЫ */}
-      <div className="w-[320px] shrink-0 border-r border-gray-200/60 flex flex-col bg-white shadow-[1px_0_10px_rgba(0,0,0,0.01)] z-10">
+      {/* ЛЕВАЯ ПАНЕЛЬ: КОНТАКТЫ (На мобилках - верхний горизонтальный ряд) */}
+      <div className="w-full md:w-[320px] shrink-0 md:border-r border-b border-gray-100 flex flex-col bg-white md:shadow-[1px_0_10px_rgba(0,0,0,0.01)] z-20">
         
         {/* Шапка списка контактов */}
-        <div className="p-5 border-b border-gray-100 shrink-0">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-2xl font-black text-gray-950 tracking-tight">Чаты</h2>
-            <div className="w-8 h-8 bg-gray-50 rounded-full flex items-center justify-center text-gray-400 border border-gray-100">
+        <div className="p-3 md:p-5 shrink-0 flex items-center justify-between md:block">
+          <div className="flex items-center justify-between md:mb-5 w-full md:w-auto">
+            <h2 className="text-xl md:text-2xl font-black text-gray-950 tracking-tight">Чаты</h2>
+            <div className="w-7 h-7 md:w-8 md:h-8 bg-gray-50 rounded-full flex items-center justify-center text-gray-400 border border-gray-100">
               <span className="text-xs font-bold">{contacts.length}</span>
             </div>
           </div>
           
-          {/* Поиск */}
-          <div className="relative flex items-center bg-gray-50 rounded-xl border border-gray-200/60 focus-within:border-gray-300 focus-within:bg-white focus-within:shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all">
+          {/* Поиск (на мобилках скрыт для экономии места) */}
+          <div className="hidden md:flex relative items-center bg-gray-50 rounded-xl border border-gray-200/60 focus-within:border-gray-300 focus-within:bg-white focus-within:shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all">
             <Search className="absolute left-3.5 text-gray-400" size={16} />
             <input 
               type="text" 
@@ -161,13 +161,13 @@ export default function ChatsPage() {
         </div>
         
         {/* Список контактов */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-0.5 custom-scrollbar bg-[#FAFAFA]/50">
+        <div className="flex md:flex-col overflow-x-auto md:overflow-y-auto md:flex-1 px-3 pb-3 md:p-2 space-x-4 md:space-x-0 md:space-y-0.5 scrollbar-none custom-scrollbar bg-white md:bg-[#FAFAFA]/50">
           {isLoadingContacts ? (
             /* Skeleton Loaders */
             [1, 2, 3, 4, 5].map((n) => (
-              <div key={n} className="flex items-center gap-3.5 p-3.5 animate-pulse">
-                <div className="w-12 h-12 bg-gray-200/60 rounded-xl shrink-0" />
-                <div className="flex-1 space-y-2.5">
+              <div key={n} className="flex md:items-center flex-col md:flex-row gap-2 md:gap-3.5 md:p-3.5 animate-pulse shrink-0">
+                <div className="w-14 h-14 md:w-12 md:h-12 bg-gray-200/60 rounded-[18px] md:rounded-xl shrink-0" />
+                <div className="hidden md:block flex-1 space-y-2.5">
                   <div className="h-3 bg-gray-200/60 rounded w-1/2" />
                   <div className="h-2 bg-gray-200/60 rounded w-3/4" />
                 </div>
@@ -178,23 +178,35 @@ export default function ChatsPage() {
               <div 
                 key={contact.id} 
                 onClick={() => setSelectedContact(contact)}
-                className={`flex items-center gap-3.5 p-3.5 rounded-2xl cursor-pointer transition-all duration-200 ${
+                className={`flex flex-col md:flex-row items-center gap-1.5 md:gap-3.5 md:p-3.5 md:rounded-2xl cursor-pointer transition-all duration-200 shrink-0 ${
                   selectedContact?.id === contact.id 
-                    ? 'bg-white shadow-[0_4px_15px_rgba(0,0,0,0.03)] border border-gray-200/60' 
-                    : 'hover:bg-white border border-transparent hover:shadow-[0_2px_8px_rgba(0,0,0,0.01)]'
+                    ? 'md:bg-white md:shadow-[0_4px_15px_rgba(0,0,0,0.03)] md:border md:border-gray-200/60 scale-105 md:scale-100' 
+                    : 'md:hover:bg-white md:border md:border-transparent md:hover:shadow-[0_2px_8px_rgba(0,0,0,0.01)]'
                 }`}
               >
                 <div className="relative shrink-0">
                   <img 
                     src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} 
                     alt={contact.name} 
-                    className="w-12 h-12 rounded-xl object-cover border border-gray-100 bg-gray-50" 
+                    className={`object-cover border bg-gray-50 transition-all ${
+                      selectedContact?.id === contact.id 
+                        ? 'w-[60px] h-[60px] md:w-12 md:h-12 rounded-[20px] md:rounded-xl border-brand/50 shadow-md' 
+                        : 'w-14 h-14 md:w-12 md:h-12 rounded-[18px] md:rounded-xl border-gray-100'
+                    }`} 
                   />
                   {contact.type === 'business' && (
                     <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-amber-500 rounded-full border-[2.5px] border-white" />
                   )}
                 </div>
-                <div className="flex-1 min-w-0">
+                
+                {/* Имя (на мобилках - только первое слово, на ПК - полное) */}
+                <div className="md:hidden w-16 text-center">
+                  <p className={`text-[10px] truncate ${selectedContact?.id === contact.id ? 'font-bold text-gray-900' : 'font-medium text-gray-500'}`}>
+                    {contact.name ? contact.name.split(' ')[0] : '...'}
+                  </p>
+                </div>
+
+                <div className="hidden md:block flex-1 min-w-0">
                   <h4 className={`text-sm font-bold truncate transition-colors ${selectedContact?.id === contact.id ? 'text-gray-950' : 'text-gray-900'}`}>
                     {contact.name || 'Пользователь'}
                   </h4>
@@ -205,38 +217,38 @@ export default function ChatsPage() {
               </div>
             ))
           ) : (
-            <div className="text-center py-10">
-              <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-300 mx-auto mb-3">
-                <Search size={18} />
+            <div className="text-center w-full py-6 md:py-10">
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-300 mx-auto mb-2 md:mb-3">
+                <Search size={16} />
               </div>
-              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Не найдено</p>
+              <p className="text-[10px] md:text-xs text-gray-400 font-bold uppercase tracking-wider">Не найдено</p>
             </div>
           )}
         </div>
       </div>
       
       {/* ПРАВАЯ ПАНЕЛЬ: ОКНО ЧАТА */}
-      <div className="flex-1 flex flex-col bg-white relative">
+      <div className="flex-1 flex flex-col bg-white relative min-h-0">
         {selectedContact ? (
           <>
             {/* Хедер диалога */}
-            <div className="h-[85px] bg-white border-b border-gray-100 flex items-center px-8 shrink-0 justify-between shadow-[0_4px_20px_rgba(0,0,0,0.01)] z-10">
-              <div className="flex items-center gap-4">
+            <div className="h-[60px] md:h-[85px] bg-white border-b border-gray-100 flex items-center px-4 md:px-8 shrink-0 justify-between shadow-[0_4px_20px_rgba(0,0,0,0.01)] z-10">
+              <div className="flex items-center gap-3 md:gap-4">
                 <div className="relative">
                   <img 
                     src={selectedContact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}&background=random`} 
                     alt={selectedContact.name} 
-                    className="w-11 h-11 rounded-xl object-cover border border-gray-100" 
+                    className="w-9 h-9 md:w-11 md:h-11 rounded-xl object-cover border border-gray-100" 
                   />
-                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
+                  <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 md:w-3 md:h-3 bg-green-500 rounded-full border-2 border-white" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-gray-950 leading-tight">{selectedContact.name}</h3>
+                  <h3 className="font-bold text-sm md:text-base text-gray-950 leading-tight">{selectedContact.name}</h3>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     {selectedContact.type === 'business' ? (
-                      <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider bg-amber-50 px-1.5 py-0.5 rounded">Бизнес-аккаунт</span>
+                      <span className="text-[9px] md:text-[10px] font-bold text-amber-600 uppercase tracking-wider bg-amber-50 px-1.5 py-0.5 rounded">Бизнес-аккаунт</span>
                     ) : (
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Личный профиль</span>
+                      <span className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase tracking-wider">Личный профиль</span>
                     )}
                   </div>
                 </div>
@@ -244,12 +256,12 @@ export default function ChatsPage() {
             </div>
             
             {/* Лента сообщений */}
-            <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-4 bg-gray-50/50">
+            <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-4 bg-gray-50/50">
               {messages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center">
                   <ShieldCheck size={48} className="text-gray-200 mb-4" />
-                  <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Сквозное шифрование</p>
-                  <p className="text-xs text-gray-400 mt-2 font-medium">Ваша переписка надежно защищена алгоритмами AuraSync</p>
+                  <p className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-400">Сквозное шифрование</p>
+                  <p className="text-[10px] md:text-xs text-gray-400 mt-2 font-medium max-w-[200px] text-center">Ваша переписка надежно защищена алгоритмами AuraSync</p>
                 </div>
               ) : (
                 messages.map((msg, index) => {
@@ -260,13 +272,13 @@ export default function ChatsPage() {
                   return (
                     <div key={msg.id} className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'} ${isSequential ? 'mt-1' : 'mt-4'}`}>
                       <div 
-                        className={`group relative max-w-[75%] px-4 py-2.5 text-[13px] font-medium tracking-wide flex flex-col gap-1 shadow-sm ${
+                        className={`group relative max-w-[85%] md:max-w-[75%] px-4 py-2.5 text-[13px] font-medium tracking-wide flex flex-col gap-1 shadow-sm ${
                           isMine 
                             ? 'bg-gray-950 text-white rounded-2xl rounded-tr-sm' 
                             : 'bg-white border border-gray-100 text-gray-900 rounded-2xl rounded-tl-sm shadow-[0_2px_10px_rgba(0,0,0,0.02)]'
                         }`}
                       >
-                        <span className="leading-relaxed whitespace-pre-wrap">{msg.text}</span>
+                        <span className="leading-relaxed whitespace-pre-wrap break-words">{msg.text}</span>
                         <span className={`text-[9px] font-bold self-end select-none ${isMine ? 'text-white/50' : 'text-gray-400'}`}>
                           {formatTime(msg.createdAt)}
                         </span>
@@ -280,8 +292,8 @@ export default function ChatsPage() {
             </div>
             
             {/* Панель ввода */}
-            <div className="p-4 md:p-6 bg-white border-t border-gray-100 shrink-0">
-              <form onSubmit={handleSendMessage} className="flex gap-3 max-w-4xl mx-auto items-end">
+            <div className="p-3 md:p-6 bg-white border-t border-gray-100 shrink-0">
+              <form onSubmit={handleSendMessage} className="flex gap-2 md:gap-3 max-w-4xl mx-auto items-end">
                 <div className="flex-1 relative bg-gray-50 border border-gray-200/60 rounded-2xl focus-within:border-gray-300 focus-within:bg-white focus-within:shadow-[0_2px_12px_rgba(0,0,0,0.03)] transition-all">
                   <textarea 
                     value={newMessage}
@@ -293,36 +305,36 @@ export default function ChatsPage() {
                       }
                     }}
                     placeholder="Написать сообщение..." 
-                    className="w-full bg-transparent px-5 py-4 text-sm focus:outline-none text-gray-900 placeholder-gray-400 font-medium resize-none max-h-32 min-h-[52px] scrollbar-none"
+                    className="w-full bg-transparent px-4 md:px-5 py-3.5 md:py-4 text-[13px] md:text-sm focus:outline-none text-gray-900 placeholder-gray-400 font-medium resize-none max-h-24 md:max-h-32 min-h-[44px] md:min-h-[52px] scrollbar-none"
                     rows={1}
                   />
                 </div>
                 <button 
                   type="submit"
                   disabled={!newMessage.trim() || isSending}
-                  className="w-[52px] h-[52px] shrink-0 bg-gray-950 text-white rounded-2xl flex items-center justify-center hover:bg-gray-800 transition-all disabled:opacity-50 disabled:hover:bg-gray-950 shadow-md active:scale-95"
+                  className="w-[44px] h-[44px] md:w-[52px] md:h-[52px] shrink-0 bg-gray-950 text-white rounded-[14px] md:rounded-2xl flex items-center justify-center hover:bg-gray-800 transition-all disabled:opacity-50 disabled:hover:bg-gray-950 shadow-md active:scale-95"
                 >
                   {isSending ? (
-                    <Loader2 size={18} className="animate-spin" />
+                    <Loader2 size={16} className="animate-spin md:w-[18px] md:h-[18px]" />
                   ) : (
-                    <Send size={18} className="ml-0.5" />
+                    <Send size={16} className="ml-0.5 md:w-[18px] md:h-[18px]" />
                   )}
                 </button>
               </form>
-              <div className="max-w-4xl mx-auto mt-2 text-center md:text-left">
+              <div className="hidden md:block max-w-4xl mx-auto mt-2 text-center md:text-left">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Нажмите Enter для отправки</p>
               </div>
             </div>
           </>
         ) : (
           /* Экран "Не выбран диалог" */
-          <div className="flex-1 flex flex-col items-center justify-center bg-[#FAFAFA] border-l border-gray-50">
+          <div className="flex-1 flex flex-col items-center justify-center bg-[#FAFAFA] md:border-l border-gray-50 p-6">
             <div className="w-16 h-16 bg-white border border-gray-100 shadow-sm rounded-2xl flex items-center justify-center mb-6">
               <MessageSquare size={26} className="text-gray-300" />
             </div>
-            <h3 className="text-base font-black text-gray-900 tracking-tight">Ваши диалоги</h3>
+            <h3 className="text-base font-black text-gray-900 tracking-tight text-center">Ваши диалоги</h3>
             <p className="text-xs text-gray-400 mt-2 max-w-[260px] text-center font-medium leading-relaxed">
-              Выберите чат из списка слева, чтобы продолжить общение или найти партнера.
+              Выберите чат из списка, чтобы продолжить общение или найти партнера.
             </p>
           </div>
         )}

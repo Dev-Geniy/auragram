@@ -3,6 +3,7 @@ import { collection, getDocs, addDoc, query, orderBy, serverTimestamp } from 'fi
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Link } from 'react-router-dom';
+import ProfileModal from '../components/ProfileModal'; // ИМПОРТИРУЕМ МОДАЛКУ
 import { 
   Sparkles, MessageSquare, Plus, X, UserPlus, Image as ImageIcon, 
   FileText, ShoppingBag, AlertCircle, Calendar, RefreshCw, Layers, UploadCloud
@@ -49,6 +50,9 @@ export default function FeedPostsPage() {
   const [classicPosts, setClassicPosts] = useState<FirestorePost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'products' | 'classic' | 'events'>('all');
+
+  // Состояние для предпросмотра профиля
+  const [previewProfile, setPreviewProfile] = useState<any | null>(null);
 
   // Состояния формы создания поста
   const [isCreating, setIsCreating] = useState(false);
@@ -104,7 +108,7 @@ export default function FeedPostsPage() {
     }).length;
   }, [classicPosts, user]);
 
-  // 2. Сборка единого сквозного таймлайна (AuraSync Timeline Compiler)
+  // 2. Сборка единого сквозного таймлайна
   const timelineItems = useMemo(() => {
     const items: FeedItem[] = [];
 
@@ -182,8 +186,7 @@ export default function FeedPostsPage() {
     formData.append('image', file);
 
     try {
-      // ВСТАВЬ СЮДА СВОЙ КЛЮЧ ИЛИ ИСПОЛЬЗУЙ ПЕРЕМЕННУЮ ОКРУЖЕНИЯ
-      const apiKey = import.meta.env.VITE_IMGBB_API_KEY || 'твой_ключ_imgbb'; 
+      const apiKey = import.meta.env.VITE_IMGBB_API_KEY || '22de10db6eb1f3ec3fca012dcc566961'; 
       const response = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
         method: 'POST',
         body: formData
@@ -200,7 +203,6 @@ export default function FeedPostsPage() {
       alert('Произошла ошибка при загрузке. Проверьте подключение.');
     } finally {
       setIsUploadingImg(false);
-      // Сбрасываем value инпута, чтобы можно было загрузить тот же файл снова, если нужно
       e.target.value = '';
     }
   };
@@ -212,7 +214,6 @@ export default function FeedPostsPage() {
 
     setIsSending(true);
     try {
-      // Ищем аватар и имя автора в текущем списке пользователей
       const currentUserData = usersList.find(u => u.id === user.uid);
       const authorName = currentUserData?.name || user.displayName || 'Пользователь';
       const authorAvatar = currentUserData?.avatar || user.photoURL || '';
@@ -232,11 +233,19 @@ export default function FeedPostsPage() {
       setText('');
       setImageUrl('');
       setIsCreating(false);
-      await fetchData(); // Мгновенное обновление данных
+      await fetchData(); 
     } catch (error) {
       console.error('Ошибка добавления публикации в ленту:', error);
     } finally {
       setIsSending(false);
+    }
+  };
+
+  // Открытие профиля автора
+  const handleOpenProfile = (authorId: string) => {
+    const profile = usersList.find(u => u.id === authorId);
+    if (profile) {
+      setPreviewProfile(profile);
     }
   };
 
@@ -246,7 +255,7 @@ export default function FeedPostsPage() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#FAFAFA] p-6 md:p-10 select-none">
+    <div className="flex-1 overflow-y-auto bg-[#FAFAFA] p-6 md:p-10 select-none relative">
       <div className="max-w-4xl mx-auto">
         
         {/* ХЕДЕР СТРАНИЦЫ */}
@@ -327,7 +336,6 @@ export default function FeedPostsPage() {
                   </label>
                 </div>
 
-                {/* Предпросмотр картинки, если ссылка уже есть */}
                 {imageUrl && (
                   <div className="mt-3 relative inline-block rounded-xl overflow-hidden border border-gray-200 shadow-sm">
                     <img src={imageUrl} alt="Preview" className="h-24 w-auto object-cover" />
@@ -356,7 +364,7 @@ export default function FeedPostsPage() {
           </div>
         )}
 
-        {/* НАВИГАЦИОННЫЕ ВКЛАДКИ (ТАБЫ) */}
+        {/* НАВИГАЦИОННЫЕ ВКЛАДКИ */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-4 mb-8 text-xs font-bold scrollbar-none border-b border-gray-200/40">
           <button onClick={() => setActiveTab('all')} className={`px-4 py-2 rounded-xl transition-all whitespace-nowrap ${activeTab === 'all' ? 'bg-gray-950 text-white shadow-sm' : 'bg-white text-gray-500 border border-gray-200/60 hover:text-gray-900'}`}>Все события</button>
           <button onClick={() => setActiveTab('products')} className={`px-4 py-2 rounded-xl transition-all whitespace-nowrap ${activeTab === 'products' ? 'bg-amber-500 text-white shadow-sm' : 'bg-white text-gray-500 border border-gray-200/60 hover:text-gray-900'}`}>Товары бизнес-витрин</button>
@@ -378,26 +386,29 @@ export default function FeedPostsPage() {
                 key={item.id} 
                 className="bg-white rounded-3xl p-6 border border-gray-200/60 shadow-[0_4px_20px_rgba(0,0,0,0.01)] hover:shadow-[0_8px_25px_rgba(0,0,0,0.03)] hover:border-gray-300/80 transition-all duration-300 flex flex-col sm:flex-row gap-5"
               >
-                {/* Левая колонка - Изображение поста (если есть) */}
+                {/* Изображение поста */}
                 {item.imageUrl && (
                   <div className="w-full sm:w-44 h-44 rounded-2xl overflow-hidden bg-gray-50 shrink-0 border border-gray-100">
                     <img src={item.imageUrl} alt={item.title || 'Post cover'} className="w-full h-full object-cover" />
                   </div>
                 )}
 
-                {/* Правая колонка - Контентная часть */}
+                {/* Контентная часть */}
                 <div className="flex-1 flex flex-col justify-between min-w-0 py-0.5">
                   <div>
-                    {/* Мета-хедер автора */}
+                    {/* Мета-хедер автора (С КЛИКОМ НА ПРОФИЛЬ) */}
                     <div className="flex items-center justify-between gap-4 mb-3.5">
-                      <div className="flex items-center gap-3 min-w-0">
+                      <div 
+                        className="flex items-center gap-3 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => handleOpenProfile(item.authorId)}
+                      >
                         <img 
                           src={item.authorAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.authorName)}&background=random`} 
                           alt={item.authorName} 
                           className="w-9 h-9 rounded-xl object-cover border border-gray-100 bg-gray-50" 
                         />
                         <div className="min-w-0">
-                          <h4 className="text-sm font-black text-gray-950 truncate">{item.authorName}</h4>
+                          <h4 className="text-sm font-black text-gray-950 truncate hover:text-brand transition-colors">{item.authorName}</h4>
                           <p className="text-[10px] text-gray-400 font-semibold flex items-center gap-1 mt-0.5">
                             <Calendar size={10} /> {formatItemDate(item.timestamp)}
                           </p>
@@ -457,7 +468,8 @@ export default function FeedPostsPage() {
                           </Link>
                         )}
                         <Link 
-                          to="/" 
+                          to="/chats" 
+                          state={{ selectedUserId: item.authorId }}
                           className="px-4 py-2 bg-gray-950 hover:bg-gray-800 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
                         >
                           <MessageSquare size={14} /> Написать
@@ -480,6 +492,15 @@ export default function FeedPostsPage() {
         )}
 
       </div>
+
+      {/* ======= РЕНДЕР МОДАЛКИ ПРЕДПРОСМОТРА ПРОФИЛЯ ======= */}
+      {previewProfile && (
+        <ProfileModal 
+          profile={previewProfile} 
+          onClose={() => setPreviewProfile(null)} 
+        />
+      )}
+      
     </div>
   );
 }

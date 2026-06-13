@@ -1,5 +1,3 @@
-import React from 'react';
-
 interface FeedPageProps {
   currentSync: 'all' | 'business' | 'personal';
   userGender: 'all' | 'male' | 'female';

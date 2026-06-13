@@ -14,10 +14,8 @@ const firebaseConfig = {
 };
 
 // Инициализация Firebase
-const app = initializeApp(firebaseConfig);
-
-// Экспортируем сервисы, чтобы использовать их по всему приложению
+export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const storage = getStorage(app);
+export const storage = getStorage(app); // ЭКСПОРТИРУЕМ STORAGE
 export const googleProvider = new GoogleAuthProvider();

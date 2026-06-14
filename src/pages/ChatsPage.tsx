@@ -2,12 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, updateDoc, doc, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useCartStore } from '../store/useCartStore'; // Подключаем корзину
 import { 
   Send, Search, X, ShieldCheck, 
   Loader2, Paperclip, Check, CheckCheck, 
   Bookmark, ArrowLeft, Image as ExternalLink,
-  Trash2 
+  Trash2, ShoppingBag, Truck, CheckCircle2 // Иконки статусов
 } from 'lucide-react';
 
 interface UserProfile {
@@ -26,12 +27,14 @@ interface Message {
   receiverId: string;
   createdAt: any;
   isRead?: boolean;
-  type?: 'share_card' | string;
+  type?: 'share_card' | 'order_receipt' | 'system_status' | string;
   cardData?: any;
+  orderData?: any; // Данные для чека заказа
+  statusText?: string; // Текст системного статуса
 }
 
 // -----------------------------------------------------
-// ФУНКЦИИ СЖАТИЯ И ЗАГРУЗКИ
+// ФУНКЦИИ СЖАТИЯ И ЗАГРУЗКИ (Оставлены без изменений)
 // -----------------------------------------------------
 const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
   return new Promise((resolve, reject) => {
@@ -118,7 +121,6 @@ const SwipeableContact = ({
 
   return (
     <div className="relative w-full overflow-hidden bg-[#F2F2F7] dark:bg-gray-950">
-      {/* Задний фон (Действия) */}
       <div className="absolute inset-0 flex justify-between">
         <div className={`w-1/2 bg-blue-500 flex items-center pl-4 text-white transition-opacity ${offsetX > 0 ? 'opacity-100' : 'opacity-0'}`}>
           <CheckCheck size={24} />
@@ -128,7 +130,6 @@ const SwipeableContact = ({
         </div>
       </div>
 
-      {/* Сама карточка чата */}
       <div 
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -170,6 +171,8 @@ const SwipeableContact = ({
 export default function ChatsPage() {
   const { user } = useAuthStore();
   const location = useLocation(); 
+  const navigate = useNavigate();
+  const { clearCart } = useCartStore(); // Импортируем очистку корзины
   
   const [globalUsers, setGlobalUsers] = useState<UserProfile[]>([]);
   const [selectedContact, setSelectedContact] = useState<UserProfile | null>(null);
@@ -215,12 +218,59 @@ export default function ChatsPage() {
     setMessageLimit(30);
   }, [selectedContact]);
 
+  // ОБРАБОТКА ПЕРЕХОДА ИЗ КОРЗИНЫ
   useEffect(() => {
-    if (globalUsers.length > 0 && location.state?.selectedUserId) {
-      const contact = globalUsers.find(c => c.id === location.state.selectedUserId);
-      if (contact) setSelectedContact(contact);
-    }
-  }, [globalUsers, location.state]);
+    const processCheckout = async () => {
+      if (globalUsers.length > 0 && location.state?.selectedUserId) {
+        const contact = globalUsers.find(c => c.id === location.state.selectedUserId);
+        if (contact) {
+          setSelectedContact(contact);
+          
+          // Если пришла корзина (checkoutCart)
+          if (location.state.checkoutCart && location.state.checkoutCart.length > 0) {
+            const cartItems = location.state.checkoutCart;
+            const chatId = [user!.uid, contact.id].sort().join('_');
+            
+            // Считаем сумму (предполагаем, что price это число или строка с числом в начале)
+            let totalPrice = 0;
+            const itemsList = cartItems.map((item: any) => {
+              const numPrice = parseFloat(item.price.replace(/[^\d.-]/g, '')) || 0;
+              totalPrice += numPrice * item.quantity;
+              return `${item.name} (${item.quantity} шт)`;
+            }).join('\n');
+
+            const orderData = {
+              items: itemsList,
+              total: totalPrice,
+              status: 'new' // 'new', 'processing', 'shipped', 'completed'
+            };
+
+            // Создаем системное сообщение с заказом
+            try {
+              await addDoc(collection(db, 'messages'), {
+                chatId,
+                text: '🛒 Оформлен новый заказ!',
+                type: 'order_receipt',
+                orderData,
+                senderId: user!.uid,
+                receiverId: contact.id,
+                createdAt: serverTimestamp(),
+                isRead: false
+              });
+              
+              clearCart(contact.id); // Очищаем корзину только этого магазина
+              
+              // Очищаем state роутера, чтобы при рефреше заказ не дублировался
+              navigate('.', { replace: true, state: {} }); 
+            } catch (err) {
+              console.error('Ошибка создания заказа:', err);
+            }
+          }
+        }
+      }
+    };
+    processCheckout();
+  }, [globalUsers, location.state, user, navigate, clearCart]);
 
   // Загрузка сообщений
   useEffect(() => {
@@ -291,6 +341,32 @@ export default function ChatsPage() {
     }
   };
 
+  // ИЗМЕНЕНИЕ СТАТУСА ЗАКАЗА ПРОДАВЦОМ
+  const handleOrderStatusUpdate = async (msgId: string, newStatus: string, statusText: string) => {
+    if (!user || !selectedContact) return;
+    const chatId = [user.uid, selectedContact.id].sort().join('_');
+
+    try {
+      // 1. Обновляем статус в самом чеке
+      await updateDoc(doc(db, 'messages', msgId), {
+        'orderData.status': newStatus
+      });
+
+      // 2. Отправляем системное уведомление в чат
+      await addDoc(collection(db, 'messages'), {
+        chatId,
+        type: 'system_status',
+        statusText,
+        senderId: user.uid, // Продавец отправляет
+        receiverId: selectedContact.id,
+        createdAt: serverTimestamp(),
+        isRead: false
+      });
+    } catch (error) {
+      console.error('Ошибка обновления статуса:', error);
+    }
+  };
+
   const handleImageAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -307,7 +383,6 @@ export default function ChatsPage() {
     }
   };
 
-  // ФУНКЦИИ СВАЙПА
   const hideContact = (contactId: string) => {
     setHiddenContacts(prev => [...prev, contactId]);
     if (selectedContact?.id === contactId) setSelectedContact(null);
@@ -350,7 +425,6 @@ export default function ChatsPage() {
       <div className={`w-full md:w-[320px] lg:w-[380px] shrink-0 bg-white dark:bg-gray-900 md:border-r border-gray-200 dark:border-gray-800 flex flex-col z-10 transition-colors ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
         
         <div className="pt-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
-          {/* Поиск */}
           <div className="px-3 mb-3">
             <div className="relative flex items-center bg-[#F2F2F7] dark:bg-gray-800 rounded-[10px] px-3 py-1.5 focus-within:bg-gray-200/80 dark:focus-within:bg-gray-700 transition-colors">
               <Search className="text-gray-400 dark:text-gray-500 shrink-0" size={18} />
@@ -369,7 +443,6 @@ export default function ChatsPage() {
             </div>
           </div>
           
-          {/* Папки (Вкладки) */}
           <div className="flex px-3 pb-2 gap-2 overflow-x-auto scrollbar-none">
             <button 
               onClick={() => setActiveTab('all')} 
@@ -392,7 +465,6 @@ export default function ChatsPage() {
           </div>
         </div>
         
-        {/* Список контактов */}
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           {filteredContacts.map(contact => (
             <SwipeableContact 
@@ -472,24 +544,70 @@ export default function ChatsPage() {
               {messages.map((msg, index) => {
                 const isMine = msg.senderId === user?.uid;
                 const isSequential = index > 0 && messages[index - 1].senderId === msg.senderId;
+                
                 const isCard = msg.type === 'share_card' && msg.cardData;
+                const isReceipt = msg.type === 'order_receipt' && msg.orderData;
+                const isSystem = msg.type === 'system_status';
 
+                // СИСТЕМНОЕ СООБЩЕНИЕ СТАТУСА (Например: "Заказ отправлен")
+                if (isSystem) {
+                  return (
+                    <div key={msg.id} className="flex justify-center my-3">
+                      <div className="bg-gray-200/80 dark:bg-gray-800/80 backdrop-blur text-gray-600 dark:text-gray-300 text-[12px] font-medium px-4 py-1.5 rounded-full shadow-sm">
+                        {msg.statusText}
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ОБЫЧНОЕ СООБЩЕНИЕ ИЛИ КАРТОЧКА
                 return (
                   <div key={msg.id} className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'} ${isSequential ? 'mt-1' : 'mt-3'}`}>
                     <div className={`relative max-w-[85%] sm:max-w-[70%] flex flex-col ${
                       isMine 
                         ? 'bg-[#E3FECE] dark:bg-[#1E3A8A] text-gray-900 dark:text-white rounded-2xl rounded-tr-sm' 
                         : 'bg-white dark:bg-[#202020] text-gray-900 dark:text-white rounded-2xl rounded-tl-sm border border-gray-100 dark:border-gray-800 shadow-sm'
-                    } ${isCard ? 'p-1.5' : 'px-3 pt-2 pb-1.5 text-[15px] leading-relaxed'}`}>
+                    } ${(isCard || isReceipt) ? 'p-1.5' : 'px-3 pt-2 pb-1.5 text-[15px] leading-relaxed'}`}>
                       
-                      {isCard ? (
+                      {/* ЧЕК ЗАКАЗА (Order Receipt) */}
+                      {isReceipt ? (
+                        <div className="flex flex-col min-w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-blue-200 dark:border-blue-900 shadow-sm">
+                          <div className="bg-blue-50 dark:bg-blue-900/30 p-3 border-b border-blue-100 dark:border-blue-800/50 flex items-center justify-between">
+                            <span className="font-black text-blue-600 dark:text-blue-400 flex items-center gap-1.5"><ShoppingBag size={16}/> ЗАКАЗ</span>
+                            <span className="text-[10px] font-bold uppercase text-gray-500 bg-white dark:bg-gray-700 px-2 py-0.5 rounded-md">
+                              {msg.orderData.status === 'new' && 'Ожидает'}
+                              {msg.orderData.status === 'processing' && 'В работе'}
+                              {msg.orderData.status === 'shipped' && 'Отправлен'}
+                            </span>
+                          </div>
+                          <div className="p-3 text-[13px]">
+                            <p className="whitespace-pre-wrap text-gray-600 dark:text-gray-300 font-medium mb-3">{msg.orderData.items}</p>
+                            <div className="flex justify-between items-center pt-2 border-t border-dashed border-gray-200 dark:border-gray-700">
+                              <span className="font-bold text-gray-400">Итого:</span>
+                              <span className="font-black text-[15px]">{msg.orderData.total > 0 ? `${msg.orderData.total}` : 'Уточняется'}</span>
+                            </div>
+                          </div>
+
+                          {/* Кнопки управления статусом ТОЛЬКО для продавца (того, кто получил заказ) */}
+                          {!isMine && (
+                            <div className="p-2 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 flex gap-2">
+                              {msg.orderData.status === 'new' && (
+                                <button onClick={() => handleOrderStatusUpdate(msg.id, 'processing', '🛠 Продавец взял заказ в работу')} className="flex-1 bg-amber-500 text-white py-1.5 rounded-lg text-[12px] font-bold flex items-center justify-center gap-1"><Package size={14}/> В работу</button>
+                              )}
+                              {msg.orderData.status === 'processing' && (
+                                <button onClick={() => handleOrderStatusUpdate(msg.id, 'shipped', '🚚 Заказ передан в службу доставки')} className="flex-1 bg-blue-500 text-white py-1.5 rounded-lg text-[12px] font-bold flex items-center justify-center gap-1"><Truck size={14}/> Отправлено</button>
+                              )}
+                              {msg.orderData.status === 'shipped' && (
+                                <div className="flex-1 py-1.5 text-center text-[12px] font-bold text-green-500 flex items-center justify-center gap-1"><CheckCircle2 size={14}/> Выполнено</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) 
+                      /* КАРТОЧКА ТОВАРА */
+                      : isCard ? (
                         <div className="flex flex-col w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-200/50 dark:border-gray-700">
-                          <img 
-                            src={msg.cardData!.imageUrl} 
-                            loading="lazy"
-                            className="w-full h-36 object-cover" 
-                            alt="card" 
-                          />
+                          <img src={msg.cardData!.imageUrl} loading="lazy" className="w-full h-36 object-cover" alt="card" />
                           <div className="p-3">
                             <h4 className="font-semibold text-[14px] text-gray-900 dark:text-white line-clamp-1 mb-1">{msg.cardData!.title}</h4>
                             {msg.cardData!.price && <span className="text-[13px] font-bold text-blue-500 dark:text-blue-400">{msg.cardData!.price}</span>}
@@ -498,21 +616,16 @@ export default function ChatsPage() {
                             </a>
                           </div>
                         </div>
-                      ) : (
+                      ) 
+                      /* ТЕКСТ ИЛИ КАРТИНКА */
+                      : (
                         <>
-                          {msg.imageUrl && (
-                            <img 
-                              src={msg.imageUrl} 
-                              loading="lazy"
-                              alt="attachment" 
-                              className="w-full max-w-[280px] h-auto rounded-xl mb-1 object-cover" 
-                            />
-                          )}
+                          {msg.imageUrl && <img src={msg.imageUrl} loading="lazy" alt="attachment" className="w-full max-w-[280px] h-auto rounded-xl mb-1 object-cover" />}
                           {msg.text && <span className="whitespace-pre-wrap break-words">{msg.text}</span>}
                         </>
                       )}
 
-                      <div className={`flex items-center justify-end gap-1 mt-0.5 ml-4 float-right ${isCard && 'px-2 pb-1'}`}>
+                      <div className={`flex items-center justify-end gap-1 mt-0.5 ml-4 float-right ${(isCard || isReceipt) && 'px-2 pb-1'}`}>
                         <span className={`text-[11px] font-medium ${isMine ? 'text-green-700/60 dark:text-blue-200/60' : 'text-gray-400 dark:text-gray-500'}`}>
                           {formatTime(msg.createdAt)}
                         </span>

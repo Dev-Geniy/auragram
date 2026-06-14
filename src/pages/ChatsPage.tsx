@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, updateDoc, doc, orderBy, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useLocation } from 'react-router-dom';
@@ -29,6 +29,41 @@ interface Message {
   cardData?: any;
 }
 
+// -----------------------------------------------------
+// 1. ФУНКЦИЯ СЖАТИЯ ИЗОБРАЖЕНИЙ ПЕРЕД ОТПРАВКОЙ
+// -----------------------------------------------------
+const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const scaleSize = maxWidth / img.width;
+        const width = img.width > maxWidth ? maxWidth : img.width;
+        const height = img.width > maxWidth ? img.height * scaleSize : img.height;
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const newFile = new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() });
+            resolve(newFile);
+          } else {
+            reject(new Error('Ошибка сжатия'));
+          }
+        }, 'image/jpeg', 0.8); // 80% качество
+      };
+    };
+    reader.onerror = error => reject(error);
+  });
+};
+
 const uploadToImgBB = async (file: File): Promise<string> => {
   const formData = new FormData();
   formData.append('image', file);
@@ -47,23 +82,25 @@ export default function ChatsPage() {
   const { user } = useAuthStore();
   const location = useLocation(); 
   
-  // Состояния контактов
   const [globalUsers, setGlobalUsers] = useState<UserProfile[]>([]);
   const [selectedContact, setSelectedContact] = useState<UserProfile | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Состояния чата
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [attachedImage, setAttachedImage] = useState<string>('');
   
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isSending, setIsSending] = useState(false);
+
+  // Состояние лимита сообщений для пагинации
+  const [messageLimit, setMessageLimit] = useState(30);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Загрузка всех пользователей для Глобального Поиска + "Избранное"
+  // Загрузка всех пользователей
   useEffect(() => {
     if (!user) return;
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
@@ -71,11 +108,7 @@ export default function ChatsPage() {
       snapshot.forEach((doc) => {
         if (doc.id === user.uid) {
           loadedUsers.unshift({ 
-            id: doc.id, 
-            name: 'Избранное', 
-            avatar: '', 
-            type: 'personal', 
-            isSaved: true
+            id: doc.id, name: 'Избранное', avatar: '', type: 'personal', isSaved: true
           });
         } else {
           loadedUsers.push({ id: doc.id, ...doc.data() } as UserProfile);
@@ -86,7 +119,11 @@ export default function ChatsPage() {
     return () => unsubscribe();
   }, [user]);
 
-  // 2. Обработка перехода из других страниц (например, Написать из Маркета)
+  // Сброс лимита при смене чата
+  useEffect(() => {
+    setMessageLimit(30);
+  }, [selectedContact]);
+
   useEffect(() => {
     if (globalUsers.length > 0 && location.state?.selectedUserId) {
       const contact = globalUsers.find(c => c.id === location.state.selectedUserId);
@@ -94,12 +131,21 @@ export default function ChatsPage() {
     }
   }, [globalUsers, location.state]);
 
-  // 3. Загрузка сообщений и маркировка как прочитанных
+  // -----------------------------------------------------
+  // 2. ЗАГРУЗКА И ПАГИНАЦИЯ СООБЩЕНИЙ
+  // -----------------------------------------------------
   useEffect(() => {
     if (!user || !selectedContact) return;
 
     const chatId = [user.uid, selectedContact.id].sort().join('_');
-    const q = query(collection(db, 'messages'), where('chatId', '==', chatId));
+    
+    // Запрашиваем с лимитом и сортировкой (сначала новые)
+    const q = query(
+      collection(db, 'messages'), 
+      where('chatId', '==', chatId),
+      orderBy('createdAt', 'desc'),
+      limit(messageLimit)
+    );
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const loadedMessages: Message[] = [];
@@ -114,18 +160,30 @@ export default function ChatsPage() {
         }
       });
       
-      loadedMessages.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis?.() || Date.now();
-        const timeB = b.createdAt?.toMillis?.() || Date.now();
-        return timeA - timeB;
-      });
+      // Разворачиваем массив, чтобы старые были сверху, а новые снизу
+      loadedMessages.reverse();
       
       setMessages(loadedMessages);
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+
+      // Скроллим вниз только если это начальная загрузка или пришло новое сообщение
+      // (чтобы не сбрасывать скролл при подгрузке истории)
+      if (messageLimit === 30) {
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }), 100);
+      }
     });
 
     return () => unsubscribe();
-  }, [user, selectedContact]);
+  }, [user, selectedContact, messageLimit]);
+
+  // Функция срабатывает при прокрутке чата
+  const handleScroll = () => {
+    if (chatContainerRef.current) {
+      // Если доскроллили до самого верха (с небольшим запасом)
+      if (chatContainerRef.current.scrollTop === 0) {
+        setMessageLimit((prev) => prev + 30);
+      }
+    }
+  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -146,6 +204,9 @@ export default function ChatsPage() {
       });
       setNewMessage('');
       setAttachedImage('');
+      // При отправке нового сообщения сбрасываем лимит и скроллим вниз
+      setMessageLimit(30);
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (error) {
       console.error('Ошибка отправки:', error);
     } finally {
@@ -158,7 +219,9 @@ export default function ChatsPage() {
     if (!file) return;
     setIsUploadingImage(true);
     try {
-      const url = await uploadToImgBB(file);
+      // Сжимаем перед загрузкой
+      const compressedFile = await compressImage(file, 800);
+      const url = await uploadToImgBB(compressedFile);
       setAttachedImage(url);
     } catch (error) {
       alert('Не удалось загрузить изображение.');
@@ -221,6 +284,7 @@ export default function ChatsPage() {
                 <img 
                   src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} 
                   alt={contact.name} 
+                  loading="lazy" // 3. ЛЕНИВАЯ ЗАГРУЗКА
                   className="w-12 h-12 rounded-full object-cover shrink-0 bg-gray-100" 
                 />
               )}
@@ -258,7 +322,12 @@ export default function ChatsPage() {
                     <Bookmark size={18} />
                   </div>
                 ) : (
-                  <img src={selectedContact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}`} alt={selectedContact.name} className="w-10 h-10 rounded-full object-cover" />
+                  <img 
+                    src={selectedContact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}`} 
+                    alt={selectedContact.name} 
+                    loading="lazy" // 3. ЛЕНИВАЯ ЗАГРУЗКА
+                    className="w-10 h-10 rounded-full object-cover" 
+                  />
                 )}
                 <div>
                   <h3 className="font-semibold text-[15px] text-gray-900 leading-tight">
@@ -271,14 +340,25 @@ export default function ChatsPage() {
               </div>
             </div>
             
-            {/* Сообщения */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+            {/* Область сообщений с обработчиком скролла */}
+            <div 
+              ref={chatContainerRef}
+              onScroll={handleScroll}
+              className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar"
+            >
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-full opacity-50">
                   <ShieldCheck size={48} className="text-gray-400 mb-2" />
                   <p className="text-[13px] font-medium text-gray-500 bg-gray-200/50 px-4 py-1.5 rounded-full">
                     Здесь пока нет сообщений
                   </p>
+                </div>
+              )}
+
+              {/* Если загружено максимальное количество текущего лимита, показываем лоадер сверху */}
+              {messages.length >= messageLimit && (
+                <div className="flex justify-center py-2">
+                  <Loader2 size={20} className="animate-spin text-gray-400" />
                 </div>
               )}
 
@@ -297,7 +377,12 @@ export default function ChatsPage() {
                       
                       {isCard ? (
                         <div className="flex flex-col w-[260px] bg-white rounded-xl overflow-hidden border border-gray-200/50">
-                          <img src={msg.cardData!.imageUrl} className="w-full h-36 object-cover" alt="card" />
+                          <img 
+                            src={msg.cardData!.imageUrl} 
+                            loading="lazy" // 3. ЛЕНИВАЯ ЗАГРУЗКА
+                            className="w-full h-36 object-cover" 
+                            alt="card" 
+                          />
                           <div className="p-3">
                             <h4 className="font-semibold text-[14px] text-gray-900 line-clamp-1 mb-1">{msg.cardData!.title}</h4>
                             {msg.cardData!.price && <span className="text-[13px] font-bold text-blue-500">{msg.cardData!.price}</span>}
@@ -309,13 +394,17 @@ export default function ChatsPage() {
                       ) : (
                         <>
                           {msg.imageUrl && (
-                            <img src={msg.imageUrl} alt="attachment" className="w-full max-w-[280px] h-auto rounded-xl mb-1 object-cover" />
+                            <img 
+                              src={msg.imageUrl} 
+                              loading="lazy" // 3. ЛЕНИВАЯ ЗАГРУЗКА
+                              alt="attachment" 
+                              className="w-full max-w-[280px] h-auto rounded-xl mb-1 object-cover" 
+                            />
                           )}
                           {msg.text && <span className="whitespace-pre-wrap break-words">{msg.text}</span>}
                         </>
                       )}
 
-                      {/* Время и статус прочтения (как в TG: в углу пузыря) */}
                       <div className={`flex items-center justify-end gap-1 mt-0.5 ml-4 float-right ${isCard && 'px-2 pb-1'}`}>
                         <span className={`text-[11px] font-medium ${isMine ? 'text-green-700/60' : 'text-gray-400'}`}>
                           {formatTime(msg.createdAt)}

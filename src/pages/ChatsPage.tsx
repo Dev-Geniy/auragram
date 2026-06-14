@@ -7,7 +7,7 @@ import {
   Send, Search, X, ShieldCheck, 
   Loader2, Paperclip, Check, CheckCheck, 
   Bookmark, ArrowLeft, Image as ExternalLink,
-  Trash2 // Добавили иконку корзины
+  Trash2 
 } from 'lucide-react';
 
 interface UserProfile {
@@ -31,7 +31,7 @@ interface Message {
 }
 
 // -----------------------------------------------------
-// ФУНКЦИИ СЖАТИЯ И ЗАГРУЗКИ (Оставлены без изменений)
+// ФУНКЦИИ СЖАТИЯ И ЗАГРУЗКИ
 // -----------------------------------------------------
 const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
   return new Promise((resolve, reject) => {
@@ -101,7 +101,6 @@ const SwipeableContact = ({
     const currentX = e.touches[0].clientX;
     const diff = currentX - startX.current;
     
-    // Ограничиваем свайп 80 пикселями в обе стороны
     if (diff > 80) setOffsetX(80);
     else if (diff < -80) setOffsetX(-80);
     else setOffsetX(diff);
@@ -110,15 +109,15 @@ const SwipeableContact = ({
   const handleTouchEnd = () => {
     isDragging.current = false;
     if (offsetX > 60) {
-      onMarkRead(contact.id); // Свайп вправо = Прочитано
+      onMarkRead(contact.id); 
     } else if (offsetX < -60) {
-      onHide(contact.id); // Свайп влево = Удалить/Скрыть
+      onHide(contact.id); 
     }
-    setOffsetX(0); // Возвращаем на место
+    setOffsetX(0); 
   };
 
   return (
-    <div className="relative w-full overflow-hidden bg-[#F2F2F7]">
+    <div className="relative w-full overflow-hidden bg-[#F2F2F7] dark:bg-gray-950">
       {/* Задний фон (Действия) */}
       <div className="absolute inset-0 flex justify-between">
         <div className={`w-1/2 bg-blue-500 flex items-center pl-4 text-white transition-opacity ${offsetX > 0 ? 'opacity-100' : 'opacity-0'}`}>
@@ -136,8 +135,10 @@ const SwipeableContact = ({
         onTouchEnd={handleTouchEnd}
         onClick={onClick}
         style={{ transform: `translateX(${offsetX}px)` }}
-        className={`relative z-10 flex items-center gap-3 px-4 py-3 cursor-pointer transition-transform duration-200 ${
-          isSelected ? 'bg-blue-500 text-white' : 'bg-white hover:bg-gray-50 text-gray-900'
+        className={`relative z-10 flex items-center gap-3 px-4 py-3 cursor-pointer transition-all duration-200 ${
+          isSelected 
+            ? 'bg-blue-500 text-white' 
+            : 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 dark:text-white'
         }`}
       >
         {contact.isSaved ? (
@@ -149,15 +150,15 @@ const SwipeableContact = ({
             src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} 
             alt={contact.name} 
             loading="lazy"
-            className="w-12 h-12 rounded-full object-cover shrink-0 bg-gray-100" 
+            className="w-12 h-12 rounded-full object-cover shrink-0 bg-gray-100 dark:bg-gray-800" 
           />
         )}
         
-        <div className="flex-1 min-w-0 border-b border-gray-100/50 pb-2">
-          <h4 className={`font-semibold text-[15px] truncate ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+        <div className="flex-1 min-w-0 border-b border-gray-100/50 dark:border-gray-800/50 pb-2">
+          <h4 className={`font-semibold text-[15px] truncate ${isSelected ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
             {contact.name}
           </h4>
-          <p className={`text-[13px] truncate ${isSelected ? 'text-white/80' : 'text-gray-500'}`}>
+          <p className={`text-[13px] truncate ${isSelected ? 'text-white/80' : 'text-gray-500 dark:text-gray-400'}`}>
             {contact.isSaved ? 'Сохраненные сообщения' : contact.type === 'business' ? 'Бизнес-аккаунт' : 'Пользователь'}
           </p>
         </div>
@@ -173,11 +174,9 @@ export default function ChatsPage() {
   const [globalUsers, setGlobalUsers] = useState<UserProfile[]>([]);
   const [selectedContact, setSelectedContact] = useState<UserProfile | null>(null);
   
-  // Состояния для поиска и вкладок (Папки)
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'personal' | 'business'>('all');
   
-  // Состояние для скрытых (удаленных) чатов
   const [hiddenContacts, setHiddenContacts] = useState<string[]>([]);
   
   const [messages, setMessages] = useState<Message[]>([]);
@@ -335,39 +334,35 @@ export default function ChatsPage() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Фильтрация (Поиск + Вкладки + Скрытые)
   const filteredContacts = globalUsers.filter(c => {
-    // 1. Убираем скрытые
     if (hiddenContacts.includes(c.id)) return false;
-    // 2. Поиск
     const matchSearch = c.name?.toLowerCase().includes(searchQuery.toLowerCase().trim());
     if (!matchSearch) return false;
-    // 3. Вкладки (Папки)
     if (activeTab === 'personal') return c.type !== 'business' || c.isSaved;
     if (activeTab === 'business') return c.type === 'business';
-    return true; // activeTab === 'all'
+    return true; 
   });
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-white md:bg-[#F2F2F7]">
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-white dark:bg-gray-950 transition-colors">
       
       {/* ЛЕВАЯ ПАНЕЛЬ: СПИСОК ЧАТОВ */}
-      <div className={`w-full md:w-[320px] lg:w-[380px] shrink-0 bg-white md:border-r border-gray-200 flex flex-col z-10 ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`w-full md:w-[320px] lg:w-[380px] shrink-0 bg-white dark:bg-gray-900 md:border-r border-gray-200 dark:border-gray-800 flex flex-col z-10 transition-colors ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
         
-        <div className="pt-3 border-b border-gray-100 shrink-0">
+        <div className="pt-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
           {/* Поиск */}
           <div className="px-3 mb-3">
-            <div className="relative flex items-center bg-[#F2F2F7] rounded-[10px] px-3 py-1.5 focus-within:bg-gray-200/80 transition-colors">
-              <Search className="text-gray-400 shrink-0" size={18} />
+            <div className="relative flex items-center bg-[#F2F2F7] dark:bg-gray-800 rounded-[10px] px-3 py-1.5 focus-within:bg-gray-200/80 dark:focus-within:bg-gray-700 transition-colors">
+              <Search className="text-gray-400 dark:text-gray-500 shrink-0" size={18} />
               <input 
                 type="text" 
                 placeholder="Поиск..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-transparent pl-2 pr-8 py-1 text-[15px] focus:outline-none text-gray-900 placeholder-gray-500"
+                className="w-full bg-transparent pl-2 pr-8 py-1 text-[15px] focus:outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
               />
               {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="absolute right-3 text-gray-400 hover:text-gray-600">
+                <button onClick={() => setSearchQuery('')} className="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                   <X size={16} />
                 </button>
               )}
@@ -378,26 +373,26 @@ export default function ChatsPage() {
           <div className="flex px-3 pb-2 gap-2 overflow-x-auto scrollbar-none">
             <button 
               onClick={() => setActiveTab('all')} 
-              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors ${activeTab === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors ${activeTab === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
             >
               Все
             </button>
             <button 
               onClick={() => setActiveTab('personal')} 
-              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors ${activeTab === 'personal' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors ${activeTab === 'personal' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
             >
               Личные
             </button>
             <button 
               onClick={() => setActiveTab('business')} 
-              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors ${activeTab === 'business' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors ${activeTab === 'business' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
             >
               Магазины
             </button>
           </div>
         </div>
         
-        {/* Список контактов со Свайпом */}
+        {/* Список контактов */}
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           {filteredContacts.map(contact => (
             <SwipeableContact 
@@ -410,7 +405,7 @@ export default function ChatsPage() {
             />
           ))}
           {filteredContacts.length === 0 && (
-             <div className="text-center mt-10 text-gray-400 text-[14px]">
+             <div className="text-center mt-10 text-gray-400 dark:text-gray-500 text-[14px]">
                В этой папке пусто
              </div>
           )}
@@ -418,14 +413,14 @@ export default function ChatsPage() {
       </div>
       
       {/* ПРАВАЯ ПАНЕЛЬ: ЧАТ */}
-      <div className={`flex-1 flex flex-col bg-[#EFEFEF] md:bg-chat-pattern relative min-w-0 z-20 ${!selectedContact ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`flex-1 flex flex-col bg-[#EFEFEF] dark:bg-[#0F0F0F] relative min-w-0 z-20 transition-colors ${!selectedContact ? 'hidden md:flex' : 'flex'}`}>
         
         {selectedContact ? (
           <>
-            <div className="h-[60px] bg-white/95 backdrop-blur-md border-b border-gray-200/60 flex items-center px-4 shrink-0 shadow-sm z-10">
+            <div className="h-[60px] bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200/60 dark:border-gray-800 flex items-center px-4 shrink-0 shadow-sm z-10 transition-colors">
               <button 
                 onClick={() => setSelectedContact(null)}
-                className="md:hidden mr-3 text-blue-500 p-1"
+                className="md:hidden mr-3 text-blue-500 dark:text-blue-400 p-1"
               >
                 <ArrowLeft size={24} />
               </button>
@@ -440,14 +435,14 @@ export default function ChatsPage() {
                     src={selectedContact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}`} 
                     alt={selectedContact.name} 
                     loading="lazy"
-                    className="w-10 h-10 rounded-full object-cover" 
+                    className="w-10 h-10 rounded-full object-cover bg-gray-100 dark:bg-gray-800" 
                   />
                 )}
                 <div>
-                  <h3 className="font-semibold text-[15px] text-gray-900 leading-tight">
+                  <h3 className="font-semibold text-[15px] text-gray-900 dark:text-white leading-tight">
                     {selectedContact.name}
                   </h3>
-                  <span className="text-[12px] text-blue-500 font-medium">
+                  <span className="text-[12px] text-blue-500 dark:text-blue-400 font-medium">
                     {selectedContact.isSaved ? 'Избранное' : 'в сети'}
                   </span>
                 </div>
@@ -461,8 +456,8 @@ export default function ChatsPage() {
             >
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-full opacity-50">
-                  <ShieldCheck size={48} className="text-gray-400 mb-2" />
-                  <p className="text-[13px] font-medium text-gray-500 bg-gray-200/50 px-4 py-1.5 rounded-full">
+                  <ShieldCheck size={48} className="text-gray-400 dark:text-gray-600 mb-2" />
+                  <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 bg-gray-200/50 dark:bg-gray-800/50 px-4 py-1.5 rounded-full">
                     Здесь пока нет сообщений
                   </p>
                 </div>
@@ -470,7 +465,7 @@ export default function ChatsPage() {
 
               {messages.length >= messageLimit && (
                 <div className="flex justify-center py-2">
-                  <Loader2 size={20} className="animate-spin text-gray-400" />
+                  <Loader2 size={20} className="animate-spin text-gray-400 dark:text-gray-600" />
                 </div>
               )}
 
@@ -483,12 +478,12 @@ export default function ChatsPage() {
                   <div key={msg.id} className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'} ${isSequential ? 'mt-1' : 'mt-3'}`}>
                     <div className={`relative max-w-[85%] sm:max-w-[70%] flex flex-col ${
                       isMine 
-                        ? 'bg-[#E3FECE] text-gray-900 rounded-2xl rounded-tr-sm' 
-                        : 'bg-white text-gray-900 rounded-2xl rounded-tl-sm border border-gray-100 shadow-sm'
+                        ? 'bg-[#E3FECE] dark:bg-[#1E3A8A] text-gray-900 dark:text-white rounded-2xl rounded-tr-sm' 
+                        : 'bg-white dark:bg-[#202020] text-gray-900 dark:text-white rounded-2xl rounded-tl-sm border border-gray-100 dark:border-gray-800 shadow-sm'
                     } ${isCard ? 'p-1.5' : 'px-3 pt-2 pb-1.5 text-[15px] leading-relaxed'}`}>
                       
                       {isCard ? (
-                        <div className="flex flex-col w-[260px] bg-white rounded-xl overflow-hidden border border-gray-200/50">
+                        <div className="flex flex-col w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-200/50 dark:border-gray-700">
                           <img 
                             src={msg.cardData!.imageUrl} 
                             loading="lazy"
@@ -496,9 +491,9 @@ export default function ChatsPage() {
                             alt="card" 
                           />
                           <div className="p-3">
-                            <h4 className="font-semibold text-[14px] text-gray-900 line-clamp-1 mb-1">{msg.cardData!.title}</h4>
-                            {msg.cardData!.price && <span className="text-[13px] font-bold text-blue-500">{msg.cardData!.price}</span>}
-                            <a href={msg.cardData!.link} target="_blank" rel="noopener noreferrer" className="mt-2 flex items-center justify-center gap-1.5 bg-blue-50 text-blue-600 py-1.5 rounded-lg text-[13px] font-medium">
+                            <h4 className="font-semibold text-[14px] text-gray-900 dark:text-white line-clamp-1 mb-1">{msg.cardData!.title}</h4>
+                            {msg.cardData!.price && <span className="text-[13px] font-bold text-blue-500 dark:text-blue-400">{msg.cardData!.price}</span>}
+                            <a href={msg.cardData!.link} target="_blank" rel="noopener noreferrer" className="mt-2 flex items-center justify-center gap-1.5 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 py-1.5 rounded-lg text-[13px] font-medium">
                               Смотреть <ExternalLink size={14} />
                             </a>
                           </div>
@@ -518,11 +513,11 @@ export default function ChatsPage() {
                       )}
 
                       <div className={`flex items-center justify-end gap-1 mt-0.5 ml-4 float-right ${isCard && 'px-2 pb-1'}`}>
-                        <span className={`text-[11px] font-medium ${isMine ? 'text-green-700/60' : 'text-gray-400'}`}>
+                        <span className={`text-[11px] font-medium ${isMine ? 'text-green-700/60 dark:text-blue-200/60' : 'text-gray-400 dark:text-gray-500'}`}>
                           {formatTime(msg.createdAt)}
                         </span>
                         {isMine && !selectedContact.isSaved && (
-                          <span className="text-green-600/70">
+                          <span className={`${isMine ? 'text-green-600/70 dark:text-blue-300/80' : ''}`}>
                             {msg.isRead ? <CheckCheck size={14} /> : <Check size={14} />}
                           </span>
                         )}
@@ -536,18 +531,18 @@ export default function ChatsPage() {
             
             {attachedImage && (
               <div className="absolute bottom-[70px] left-4 z-20">
-                <div className="relative w-16 h-16 bg-white rounded-xl shadow-lg border border-gray-200 p-1">
+                <div className="relative w-16 h-16 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-1">
                   <img src={attachedImage} alt="preview" className="w-full h-full object-cover rounded-lg" />
-                  <button onClick={() => setAttachedImage('')} className="absolute -top-2 -right-2 bg-gray-900 text-white w-5 h-5 rounded-full flex items-center justify-center"><X size={12} /></button>
+                  <button onClick={() => setAttachedImage('')} className="absolute -top-2 -right-2 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 w-5 h-5 rounded-full flex items-center justify-center"><X size={12} /></button>
                 </div>
               </div>
             )}
 
-            <div className="bg-white px-3 py-2 pb-safe md:pb-3 border-t border-gray-200 shrink-0">
+            <div className="bg-white dark:bg-gray-900 px-3 py-2 pb-safe md:pb-3 border-t border-gray-200 dark:border-gray-800 shrink-0 transition-colors">
               <form onSubmit={handleSendMessage} className="flex items-end gap-2 max-w-4xl mx-auto relative">
                 <input type="file" ref={fileInputRef} onChange={handleImageAttach} accept="image/*" className="hidden" />
                 
-                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploadingImage} className="p-2 text-gray-400 hover:text-blue-500 transition-colors shrink-0 mb-1">
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploadingImage} className="p-2 text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors shrink-0 mb-1">
                   {isUploadingImage ? <Loader2 size={24} className="animate-spin" /> : <Paperclip size={24} />}
                 </button>
 
@@ -556,7 +551,7 @@ export default function ChatsPage() {
                   onChange={(e) => setNewMessage(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); } }}
                   placeholder="Сообщение..." 
-                  className="flex-1 bg-transparent text-[16px] max-h-32 min-h-[40px] py-2 outline-none text-gray-900 resize-none custom-scrollbar"
+                  className="flex-1 bg-transparent text-[16px] max-h-32 min-h-[40px] py-2 outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none custom-scrollbar"
                   rows={1}
                 />
 
@@ -564,7 +559,7 @@ export default function ChatsPage() {
                   type="submit" 
                   disabled={(!newMessage.trim() && !attachedImage) || isSending || isUploadingImage} 
                   className={`p-2 shrink-0 mb-1 rounded-full transition-colors ${
-                    (newMessage.trim() || attachedImage) ? 'text-blue-500 hover:bg-blue-50' : 'text-gray-300'
+                    (newMessage.trim() || attachedImage) ? 'text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10' : 'text-gray-300 dark:text-gray-600'
                   }`}
                 >
                   {isSending ? <Loader2 size={24} className="animate-spin" /> : <Send size={24} />}
@@ -573,8 +568,8 @@ export default function ChatsPage() {
             </div>
           </>
         ) : (
-          <div className="flex-1 hidden md:flex flex-col items-center justify-center bg-gray-50/50">
-            <div className="bg-white/50 px-4 py-1.5 rounded-full font-medium text-[14px] text-gray-500 shadow-sm border border-gray-200/50">
+          <div className="flex-1 hidden md:flex flex-col items-center justify-center bg-gray-50/50 dark:bg-gray-950/50 transition-colors">
+            <div className="bg-white/50 dark:bg-gray-800/50 px-4 py-1.5 rounded-full font-medium text-[14px] text-gray-500 dark:text-gray-400 shadow-sm border border-gray-200/50 dark:border-gray-800">
               Выберите чат, чтобы начать общение
             </div>
           </div>

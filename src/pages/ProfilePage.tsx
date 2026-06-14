@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { 
   Camera, User, Briefcase, 
   Phone, Globe, Package, Plus, Trash2, Image as ImageIcon, 
-  Loader2, Edit2, Moon, Sun, Bot, Wand2, Sparkles
+  Loader2, Edit2, Moon, Sun, Bot, Sparkles
 } from 'lucide-react';
 
 interface Product {

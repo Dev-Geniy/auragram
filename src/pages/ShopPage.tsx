@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { useCartStore } from '../store/useCartStore'; // Подключаем корзину
 import { 
   ArrowLeft, MessageCircle, Share2, 
-  Phone, Mail, Globe, Package, Loader2, CheckCircle
+  Phone, Mail, Globe, Package, Loader2, CheckCircle,
+  ShoppingCart, Plus, Minus
 } from 'lucide-react';
 
 interface Product {
@@ -33,6 +35,13 @@ export default function ShopPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCopied, setIsCopied] = useState(false);
 
+  // Извлекаем методы корзины
+  const { items, addItem, removeItem, getItemsByShop } = useCartStore();
+  
+  // Товары в корзине ТОЛЬКО для этого магазина
+  const shopCartItems = id ? getItemsByShop(id) : [];
+  const cartTotalItems = shopCartItems.reduce((sum, item) => sum + item.quantity, 0);
+
   useEffect(() => {
     const fetchShop = async () => {
       if (!id) return;
@@ -52,7 +61,6 @@ export default function ShopPage() {
     fetchShop();
   }, [id]);
 
-  // Минималистичная функция Поделиться (Нативный Share API или копирование ссылки)
   const handleShare = async (item?: Product) => {
     const baseUrl = window.location.origin;
     const link = item 
@@ -78,6 +86,16 @@ export default function ShopPage() {
     }
   };
 
+  // Переход в чат с передачей данных корзины
+  const handleCheckout = () => {
+    navigate('/chats', { 
+      state: { 
+        selectedUserId: shop?.id, 
+        checkoutCart: shopCartItems // Передаем корзину в чат!
+      } 
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="flex-1 bg-[#F2F2F7] dark:bg-gray-950 flex justify-center items-center transition-colors">
@@ -100,9 +118,9 @@ export default function ShopPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#F2F2F7] dark:bg-gray-950 pb-24 select-none custom-scrollbar relative transition-colors">
+    <div className="flex-1 overflow-y-auto bg-[#F2F2F7] dark:bg-gray-950 pb-32 select-none custom-scrollbar relative transition-colors">
       
-      {/* ПЛАВАЮЩИЙ ХЕДЕР С КНОПКОЙ НАЗАД */}
+      {/* ПЛАВАЮЩИЙ ХЕДЕР */}
       <div className="sticky top-0 z-20 bg-[#F2F2F7]/90 dark:bg-gray-950/90 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-gray-200/60 dark:border-gray-800 transition-colors">
         <button 
           onClick={() => navigate(-1)} 
@@ -120,7 +138,7 @@ export default function ShopPage() {
 
       <div className="max-w-2xl mx-auto p-4 space-y-4">
         
-        {/* КАРТОЧКА ПРОФИЛЯ (Стиль Telegram) */}
+        {/* КАРТОЧКА ПРОФИЛЯ */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 flex flex-col items-center text-center shadow-sm border border-gray-200/50 dark:border-gray-800 transition-colors">
           <img 
             src={shop.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(shop.name)}&background=random`} 
@@ -139,7 +157,7 @@ export default function ShopPage() {
             <Link 
               to="/chats" 
               state={{ selectedUserId: shop.id }}
-              className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-[15px] flex justify-center items-center gap-2 transition-colors"
+              className="flex-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-900 dark:text-white py-2.5 rounded-xl font-semibold text-[15px] flex justify-center items-center gap-2 transition-colors"
             >
               <MessageCircle size={18} /> Написать
             </Link>
@@ -175,44 +193,57 @@ export default function ShopPage() {
 
           {shop.products && shop.products.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {shop.products.map(product => (
-                <div key={product.id} className="bg-white dark:bg-gray-900 border border-gray-200/50 dark:border-gray-800 rounded-xl overflow-hidden shadow-sm flex flex-col relative group transition-colors">
-                  
-                  {/* Кнопка Поделиться товаром */}
-                  <button 
-                    onClick={(e) => { e.preventDefault(); handleShare(product); }}
-                    className="absolute top-2 right-2 z-10 w-8 h-8 bg-white/90 dark:bg-gray-800/90 backdrop-blur rounded-full flex items-center justify-center text-gray-500 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 shadow-sm transition-colors"
-                    title="Поделиться товаром"
-                  >
-                    <Share2 size={14} />
-                  </button>
+              {shop.products.map(product => {
+                const cartItem = shopCartItems.find(item => item.id === product.id);
+                const quantityInCart = cartItem ? cartItem.quantity : 0;
 
-                  <div className="h-32 sm:h-40 bg-gray-100 dark:bg-gray-800 relative overflow-hidden shrink-0 transition-colors">
-                    {product.imageUrl ? (
-                      <img 
-                        src={product.imageUrl} 
-                        alt={product.name} 
-                        loading="lazy"
-                        className="w-full h-full object-cover" 
-                      />
-                    ) : (
-                      <Package className="absolute inset-0 m-auto text-gray-300 dark:text-gray-600" size={32} />
-                    )}
+                return (
+                  <div key={product.id} className="bg-white dark:bg-gray-900 border border-gray-200/50 dark:border-gray-800 rounded-xl overflow-hidden shadow-sm flex flex-col relative group transition-colors">
+                    
+                    {/* Кнопка Поделиться */}
+                    <button 
+                      onClick={(e) => { e.preventDefault(); handleShare(product); }}
+                      className="absolute top-2 right-2 z-10 w-8 h-8 bg-white/90 dark:bg-gray-800/90 backdrop-blur rounded-full flex items-center justify-center text-gray-500 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 shadow-sm transition-colors"
+                    >
+                      <Share2 size={14} />
+                    </button>
+
+                    <div className="h-32 sm:h-40 bg-gray-100 dark:bg-gray-800 relative overflow-hidden shrink-0 transition-colors">
+                      {product.imageUrl ? (
+                        <img src={product.imageUrl} alt={product.name} loading="lazy" className="w-full h-full object-cover" />
+                      ) : (
+                        <Package className="absolute inset-0 m-auto text-gray-300 dark:text-gray-600" size={32} />
+                      )}
+                    </div>
+                    
+                    <div className="p-3 flex flex-col flex-1">
+                      <h3 className="font-medium text-gray-900 dark:text-white text-[13px] leading-tight line-clamp-2 mb-1 transition-colors">
+                        {product.name}
+                      </h3>
+                      <p className="text-[14px] font-bold text-gray-900 dark:text-white mt-auto mb-2 transition-colors">
+                        {product.price}
+                      </p>
+
+                      {/* КНОПКА КОРЗИНЫ */}
+                      {quantityInCart > 0 ? (
+                        <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/30 rounded-lg p-1 border border-blue-100 dark:border-blue-800/50 transition-colors">
+                          <button onClick={() => removeItem(product.id)} className="w-7 h-7 flex items-center justify-center text-blue-600 dark:text-blue-400 hover:bg-white dark:hover:bg-gray-800 rounded-md shadow-sm transition-colors"><Minus size={14}/></button>
+                          <span className="font-bold text-[13px] text-blue-700 dark:text-blue-300">{quantityInCart} шт</span>
+                          <button onClick={() => addItem(product, shop.id, shop.name)} className="w-7 h-7 flex items-center justify-center text-blue-600 dark:text-blue-400 hover:bg-white dark:hover:bg-gray-800 rounded-md shadow-sm transition-colors"><Plus size={14}/></button>
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={() => addItem(product, shop.id, shop.name)}
+                          className="w-full flex items-center justify-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white py-1.5 rounded-lg text-[13px] font-semibold transition-colors"
+                        >
+                          <ShoppingCart size={14} /> В корзину
+                        </button>
+                      )}
+
+                    </div>
                   </div>
-                  
-                  <div className="p-3 flex flex-col flex-1">
-                    <h3 className="font-medium text-gray-900 dark:text-white text-[13px] leading-tight line-clamp-2 mb-1 transition-colors">
-                      {product.name}
-                    </h3>
-                    <p className="text-[12px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed mb-2 transition-colors">
-                      {product.description || 'Нет описания'}
-                    </p>
-                    <p className="text-[14px] font-bold text-gray-900 dark:text-white mt-auto transition-colors">
-                      {product.price}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="py-12 text-center bg-white dark:bg-gray-900 rounded-2xl border border-gray-200/50 dark:border-gray-800 text-gray-400 dark:text-gray-500 transition-colors">
@@ -223,6 +254,27 @@ export default function ShopPage() {
         </div>
 
       </div>
+
+      {/* ПЛАВАЮЩАЯ ПАНЕЛЬ ЗАКАЗА (Отображается, если в корзине магазина есть товары) */}
+      {cartTotalItems > 0 && (
+        <div className="fixed bottom-[80px] md:bottom-6 left-0 right-0 px-4 flex justify-center z-40 animate-fade-in">
+          <button 
+            onClick={handleCheckout}
+            className="w-full max-w-sm bg-blue-500 hover:bg-blue-600 text-white shadow-[0_8px_30px_rgba(59,130,246,0.3)] rounded-2xl px-6 py-4 flex items-center justify-between transition-transform active:scale-95"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                <ShoppingCart size={16} className="text-white" />
+              </div>
+              <span className="font-bold text-[15px]">Оформить заказ</span>
+            </div>
+            <span className="font-black text-[15px] bg-white text-blue-600 px-3 py-1 rounded-lg">
+              {cartTotalItems} шт
+            </span>
+          </button>
+        </div>
+      )}
+
     </div>
   );
 }

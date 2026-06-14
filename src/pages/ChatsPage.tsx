@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, updateDoc, doc, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, orderBy, limit, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -8,8 +8,8 @@ import {
   Send, Search, X, ShieldCheck, 
   Loader2, Paperclip, Check, CheckCheck, 
   Bookmark, ArrowLeft, Image as ExternalLink,
-  ShoppingBag, Truck, CheckCircle2, Package, 
-  Users, Zap, Clock, Archive, ArchiveRestore, Reply
+  Trash2, ShoppingBag, Truck, CheckCircle2, Package, 
+  Users, Zap, Clock, Archive, ArchiveRestore, Reply 
 } from 'lucide-react';
 
 interface UserProfile {
@@ -239,22 +239,22 @@ export default function ChatsPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [attachedImage, setAttachedImage] = useState<string>('');
-  
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [messageLimit, setMessageLimit] = useState(30);
   
+  const currentChatRef = useRef<string | null>(null); // Защита от мигания при скролле
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ОНЛАЙН СТАТУС: Обновление активности
+  // ОНЛАЙН СТАТУС
   useEffect(() => {
     if (!user) return;
     const updatePresence = async () => {
-      try { await updateDoc(doc(db, 'users', user.uid), { lastSeen: serverTimestamp() }); } catch (error) {}
+      try { await updateDoc(doc(db, 'users', user.uid), { lastSeen: Timestamp.now() }); } catch (error) {}
     };
     updatePresence();
     const interval = setInterval(updatePresence, 60000); 
@@ -273,9 +273,7 @@ export default function ChatsPage() {
       snapshot.forEach((doc) => {
         if (doc.id === user.uid) {
           setCurrentUserProfile(doc.data());
-          loadedUsers.unshift({ 
-            id: doc.id, name: 'Избранное', avatar: '', type: 'personal', isSaved: true
-          });
+          loadedUsers.unshift({ id: doc.id, name: 'Избранное', avatar: '', type: 'personal', isSaved: true });
         } else {
           loadedUsers.push({ id: doc.id, ...doc.data() } as UserProfile);
         }
@@ -314,14 +312,12 @@ export default function ChatsPage() {
                 orderData,
                 senderId: user!.uid,
                 receiverId: contact.id,
-                createdAt: new Date(), // ИСПОЛЬЗУЕМ LOKAL DATE ЧТОБЫ ИЗБЕЖАТЬ ЗАДЕРЖКИ
+                createdAt: Timestamp.now(), // 🔥 МОМЕНТАЛЬНО!
                 isRead: false
               });
               clearCart(contact.id);
               navigate('.', { replace: true, state: {} }); 
-            } catch (err) {
-              console.error('Ошибка:', err);
-            }
+            } catch (err) {}
           }
         }
       }
@@ -329,18 +325,24 @@ export default function ChatsPage() {
     processCheckout();
   }, [globalUsers, location.state, user, navigate, clearCart]);
 
-  // ЗАГРУЗКА СООБЩЕНИЙ С ИСПРАВЛЕНИЕМ МЕРЦАНИЯ И ЗАДЕРЖКИ
+  // ЗАГРУЗКА СООБЩЕНИЙ С ИДЕАЛЬНЫМ РЕНДЕРОМ
   useEffect(() => {
     if (!user || !selectedContact) {
       setMessages([]);
+      currentChatRef.current = null;
       return;
     }
 
-    setMessages([]); 
-    setMessageLimit(30);
-    setReplyingTo(null); 
-
     const chatId = [user.uid, selectedContact.id].sort().join('_');
+    
+    // 🔥 Очищаем массив сообщений ТОЛЬКО если мы реально переключились на другого человека
+    if (currentChatRef.current !== chatId) {
+      setMessages([]); 
+      setMessageLimit(30);
+      setReplyingTo(null); 
+      currentChatRef.current = chatId;
+    }
+
     const q = query(
       collection(db, 'messages'), 
       where('chatId', '==', chatId),
@@ -348,11 +350,10 @@ export default function ChatsPage() {
       limit(messageLimit)
     );
     
-    // ДОБАВЛЕН includeMetadataChanges, чтобы мгновенно ловить локальные события
-    const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const loadedMessages: Message[] = [];
       snapshot.forEach((docSnap) => {
-        const data = docSnap.data({ serverTimestamps: 'estimate' }); 
+        const data = docSnap.data(); 
         const msg = { id: docSnap.id, ...data } as Message;
         loadedMessages.push(msg);
 
@@ -364,7 +365,7 @@ export default function ChatsPage() {
       setMessages(loadedMessages);
 
       if (messageLimit === 30) {
-        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }), 50);
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }), 100);
       }
     });
 
@@ -392,7 +393,7 @@ export default function ChatsPage() {
       imageUrl: attachedImage,
       senderId: user.uid,
       receiverId: selectedContact.id,
-      createdAt: new Date(), // ИСПОЛЬЗУЕМ LOCAL DATE ДЛЯ МОМЕНТАЛЬНОГО ОТОБРАЖЕНИЯ БЕЗ ИСЧЕЗНОВЕНИЯ
+      createdAt: Timestamp.now(), // 🔥 МОМЕНТАЛЬНАЯ ОТПРАВКА
       isRead: false
     };
 
@@ -406,7 +407,7 @@ export default function ChatsPage() {
       setNewMessage('');
       setAttachedImage('');
       setReplyingTo(null); 
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (error) {
       console.error('Ошибка отправки:', error);
     } finally {
@@ -430,19 +431,15 @@ export default function ChatsPage() {
     if (!user || !selectedContact) return;
     const chatId = [user.uid, selectedContact.id].sort().join('_');
     
-    // ⚡ Оптимистичное обновление: сразу меняем статус в интерфейсе, чтобы не ждать ответа сервера
-    setMessages(prev => prev.map(msg => 
-      msg.id === msgId ? { ...msg, orderData: { ...msg.orderData, status: newStatus } } : msg
-    ));
-
     try {
       await updateDoc(doc(db, 'messages', msgId), { 'orderData.status': newStatus });
       await addDoc(collection(db, 'messages'), {
         chatId, type: 'system_status', statusText,
         senderId: user.uid, receiverId: selectedContact.id,
-        createdAt: new Date(), isRead: false // Моментальное системное сообщение
+        createdAt: Timestamp.now(), // 🔥 МОМЕНТАЛЬНАЯ ОТПРАВКА СТАТУСА
+        isRead: false 
       });
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (error) {}
   };
 
@@ -478,7 +475,6 @@ export default function ChatsPage() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // ОНЛАЙН СТАТУС: Безотказная математическая логика
   const getOnlineStatus = (lastSeen: any) => {
     if (!lastSeen) return 'был(а) давно';
     const last = lastSeen.toDate ? lastSeen.toDate() : new Date(lastSeen);
@@ -497,7 +493,6 @@ export default function ChatsPage() {
     return `был(а) ${last.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}`;
   };
 
-  // РАЗДЕЛИТЕЛИ ДАТ: Логика отрисовки
   const formatDateDivider = (timestamp: any) => {
     if (!timestamp) return '';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -543,7 +538,6 @@ export default function ChatsPage() {
     activeTab === 'clients' && 
     selectedContact && !selectedContact.isSaved;
 
-  // Динамически получаем свежие данные открытого контакта (чтобы статус обновлялся без ререндера списка сообщений)
   const activeContactData = globalUsers.find(u => u.id === selectedContact?.id) || selectedContact;
 
   return (
@@ -706,7 +700,6 @@ export default function ChatsPage() {
                 const isReceipt = msg.type === 'order_receipt' && msg.orderData;
                 const isSystem = msg.type === 'system_status';
 
-                // Вычисляем, изменился ли день для отрисовки разделителя
                 const currentMsgDateStr = msg.createdAt ? (msg.createdAt.toDate ? msg.createdAt.toDate() : new Date(msg.createdAt)).toDateString() : new Date().toDateString();
                 const prevMsg = index > 0 ? messages[index - 1] : null;
                 const prevMsgDateStr = prevMsg?.createdAt ? (prevMsg.createdAt.toDate ? prevMsg.createdAt.toDate() : new Date(prevMsg.createdAt)).toDateString() : null;
@@ -716,7 +709,6 @@ export default function ChatsPage() {
                 return (
                   <div key={msg.id}>
                     
-                    {/* РАЗДЕЛИТЕЛЬ ДАТЫ */}
                     {showDateDivider && (
                       <div className="flex justify-center my-4">
                         <span className="bg-black/10 dark:bg-white/10 backdrop-blur-sm text-gray-600 dark:text-gray-300 text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
@@ -732,7 +724,6 @@ export default function ChatsPage() {
                         </div>
                       </div>
                     ) : (
-                      // СВАЙП ДЛЯ ОТВЕТА (REPLY)
                       <SwipeableMessage onReply={() => setReplyingTo(msg)} isMine={isMine}>
                         <div className={`relative max-w-[85%] sm:max-w-[70%] flex flex-col ${
                           isMine 
@@ -740,7 +731,6 @@ export default function ChatsPage() {
                             : 'bg-white dark:bg-[#202020] text-gray-900 dark:text-white rounded-2xl rounded-tl-sm border border-gray-100 dark:border-gray-800 shadow-sm'
                         } ${(isCard || isReceipt) ? 'p-1.5' : 'px-3 pt-2 pb-1.5 text-[15px] leading-relaxed'} ${isSequential && !showDateDivider ? (isMine ? 'mt-0.5' : 'mt-0.5') : 'mt-2'}`}>
                           
-                          {/* БЛОК ЦИТИРОВАНИЯ */}
                           {msg.replyToText && (
                             <div className="mb-1.5 pl-2 border-l-[3px] border-blue-500 bg-black/5 dark:bg-black/20 rounded-r-md py-1 pr-2">
                               <span className="text-[11px] font-bold text-blue-600 dark:text-blue-300 block mb-0.5">{msg.replyToSender}</span>
@@ -819,7 +809,6 @@ export default function ChatsPage() {
               <div ref={messagesEndRef} className="h-2" />
             </div>
             
-            {/* ПАНЕЛЬ СООБЩЕНИЯ, НА КОТОРОЕ ОТВЕЧАЕМ */}
             {replyingTo && (
               <div className="mx-3 mt-1 bg-gray-100 dark:bg-gray-800 rounded-t-xl border-l-[3px] border-blue-500 flex items-center justify-between px-3 py-2 animate-fade-in shadow-sm">
                 <div className="flex flex-col min-w-0 pr-4">

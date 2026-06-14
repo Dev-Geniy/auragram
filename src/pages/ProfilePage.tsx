@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { 
   Camera, User, Briefcase, 
   Phone, Globe, Package, Plus, Trash2, Image as ImageIcon, 
-  Loader2, Edit2, Moon, Sun, Bot, Sparkles
+  Loader2, Edit2, Moon, Sun, Zap, MessageSquareText
 } from 'lucide-react';
 
 interface Product {
@@ -18,7 +18,7 @@ interface Product {
 }
 
 // -----------------------------------------------------
-// ФУНКЦИИ СЖАТИЯ И ЗАГРУЗКИ (Без изменений)
+// ФУНКЦИИ СЖАТИЯ И ЗАГРУЗКИ
 // -----------------------------------------------------
 const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
   return new Promise((resolve, reject) => {
@@ -70,9 +70,6 @@ export default function ProfilePage() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isUploadingProductImg, setIsUploadingProductImage] = useState(false);
   
-  // Состояние генерации ИИ
-  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
-  
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const productImgInputRef = useRef<HTMLInputElement>(null);
   const editProductImgInputRef = useRef<HTMLInputElement>(null);
@@ -88,11 +85,12 @@ export default function ProfilePage() {
     avatar: '',
     contacts: { phone: '', email: '', website: '' },
     products: [] as Product[],
-    // НОВЫЕ НАСТРОЙКИ ИИ
+    // Оставляем ключ aiSettings для обратной совместимости в базе, 
+    // но по факту используем как настройки шаблонов
     aiSettings: {
       isEnabled: false,
-      contextPrompt: '', // Инструкции для ИИ (Доставка, тон общения)
-      followUps: true // Напоминать о забытых диалогах
+      contextPrompt: '', 
+      followUps: true 
     }
   });
 
@@ -226,39 +224,6 @@ export default function ProfilePage() {
     setEditingProduct(null);
   };
 
-// -----------------------------------------------------
-  // ФУНКЦИЯ ГЕНЕРАЦИИ ОПИСАНИЯ ТОВАРА ЧЕРЕЗ POLLINATIONS.AI
-  // -----------------------------------------------------
-  const generateAIDescription = async (isEdit: boolean = false) => {
-    const product = isEdit ? editingProduct : newProduct;
-    if (!product || !product.name) {
-      alert('Сначала введите название товара!');
-      return;
-    }
-
-    setIsGeneratingAi(true);
-    try {
-      const prompt = `Ты маркетолог. Напиши сочное, лаконичное и продающее описание для товара: "${product.name}", цена: ${product.price || 'не указана'}. Без воды. Максимум 3 предложения. На русском языке. В конце добавь призыв к покупке.`;
-      
-      // ИЗМЕНЕНО НА GET-ЗАПРОС
-      const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}`);
-      
-      if (!response.ok) throw new Error('API Error');
-      const text = await response.text();
-      
-      if (isEdit && editingProduct) {
-        setEditingProduct({ ...editingProduct, description: text });
-      } else {
-        setNewProduct({ ...newProduct, description: text });
-      }
-    } catch (error) {
-      console.error('Ошибка ИИ:', error);
-      alert('Ошибка при генерации описания');
-    } finally {
-      setIsGeneratingAi(false);
-    }
-  };
-
   const blockClass = "bg-white dark:bg-gray-900 rounded-2xl overflow-hidden border border-gray-200/50 dark:border-gray-800 mb-6 transition-colors";
   const inputRowClass = "flex items-center px-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0";
   const inputClass = "flex-1 bg-transparent text-[15px] font-medium text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none ml-3 w-full";
@@ -328,13 +293,13 @@ export default function ProfilePage() {
         {profile.type === 'business' && (
           <div className="animate-fade-in">
             
-            {/* НОВЫЙ БЛОК: ИИ-АССИСТЕНТ */}
-            <h2 className="text-[13px] font-semibold text-indigo-500 dark:text-indigo-400 uppercase tracking-wide px-4 mb-2 flex items-center gap-1.5"><Bot size={16}/> ИИ-Ассистент</h2>
+            {/* БЛОК: ШАБЛОНЫ ОТВЕТОВ */}
+            <h2 className="text-[13px] font-semibold text-indigo-500 dark:text-indigo-400 uppercase tracking-wide px-4 mb-2 mt-6 flex items-center gap-1.5"><Zap size={16}/> Шаблоны ответов</h2>
             <div className={`${blockClass} border-indigo-100 dark:border-indigo-900/50`}>
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 cursor-pointer" onClick={() => setProfile({...profile, aiSettings: {...profile.aiSettings, isEnabled: !profile.aiSettings.isEnabled}})}>
                 <div>
-                  <span className="text-[15px] font-bold text-gray-900 dark:text-white block">Умные ответы в чате</span>
-                  <span className="text-[12px] text-gray-500 dark:text-gray-400 block mt-0.5">Генерация ответов одной кнопкой</span>
+                  <span className="text-[15px] font-bold text-gray-900 dark:text-white block">Быстрые ответы в чате</span>
+                  <span className="text-[12px] text-gray-500 dark:text-gray-400 block mt-0.5">Вставка заготовленного текста одной кнопкой</span>
                 </div>
                 <div className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${profile.aiSettings.isEnabled ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
                   <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${profile.aiSettings.isEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
@@ -344,19 +309,22 @@ export default function ProfilePage() {
               {profile.aiSettings.isEnabled && (
                 <>
                   <div className="flex flex-col px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                    <span className="text-[14px] font-semibold text-gray-900 dark:text-gray-100 mb-1">Инструкции для ИИ (Промпт)</span>
-                    <span className="text-[11px] text-gray-500 dark:text-gray-400 mb-2">Напишите здесь условия доставки, оплаты и стиль общения, чтобы ИИ отвечал правильно.</span>
+                    <span className="text-[14px] font-semibold text-gray-900 dark:text-gray-100 mb-1">Текст шаблона</span>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 mb-2">Напишите здесь приветствие или условия работы, чтобы отправлять их в чат в один клик.</span>
                     <textarea 
                       value={profile.aiSettings.contextPrompt} 
                       onChange={(e) => setProfile({...profile, aiSettings: {...profile.aiSettings, contextPrompt: e.target.value}})} 
                       className="w-full bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/50 rounded-xl p-3 text-[14px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none h-24 custom-scrollbar" 
-                      placeholder="Пример: Мы отправляем Новой Почтой в день заказа. Оплата на карту или наложка. Общайся вежливо, предлагай скидку 5% на второй товар." 
+                      placeholder="Пример: Здравствуйте! Мы отправляем Новой Почтой в день заказа. Подсказать вам реквизиты для оплаты?" 
                     />
                   </div>
                   <div className="flex items-center justify-between px-4 py-3 cursor-pointer" onClick={() => setProfile({...profile, aiSettings: {...profile.aiSettings, followUps: !profile.aiSettings.followUps}})}>
-                    <div>
-                      <span className="text-[14px] font-semibold text-gray-900 dark:text-white block">Напоминать о забытых клиентах</span>
-                      <span className="text-[11px] text-gray-500 dark:text-gray-400 block mt-0.5">Кнопка Follow-up в чате при долгом молчании</span>
+                    <div className="flex items-center gap-2">
+                      <MessageSquareText size={18} className="text-gray-400" />
+                      <div>
+                        <span className="text-[14px] font-semibold text-gray-900 dark:text-white block">Кнопка Напоминания</span>
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400 block mt-0.5">Показать кнопку "Напоминание" для забытых диалогов</span>
+                      </div>
                     </div>
                     <div className={`w-10 h-5 rounded-full flex items-center p-1 transition-colors ${profile.aiSettings.followUps ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
                       <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${profile.aiSettings.followUps ? 'translate-x-5' : 'translate-x-0'}`} />
@@ -398,23 +366,12 @@ export default function ProfilePage() {
                   </div>
                 </div>
                 
-                {/* МАГИЯ ИИ: Кнопка генерации описания */}
-                <div className="relative mb-3">
-                  <textarea 
-                    placeholder="Описание товара..." 
-                    value={editingProduct ? editingProduct.description : newProduct.description} 
-                    onChange={e => editingProduct ? setEditingProduct({...editingProduct, description: e.target.value}) : setNewProduct({...newProduct, description: e.target.value})} 
-                    className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 pt-3 rounded-lg text-sm outline-none resize-none h-24 custom-scrollbar transition-colors" 
-                  />
-                  <button 
-                    onClick={(e) => { e.preventDefault(); generateAIDescription(!!editingProduct); }}
-                    disabled={isGeneratingAi || !(editingProduct ? editingProduct.name : newProduct.name)}
-                    title="Сгенерировать продающее описание через ИИ"
-                    className="absolute right-2 bottom-2 bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-900/40 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 p-1.5 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center"
-                  >
-                    {isGeneratingAi ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                  </button>
-                </div>
+                <textarea 
+                  placeholder="Описание товара..." 
+                  value={editingProduct ? editingProduct.description : newProduct.description} 
+                  onChange={e => editingProduct ? setEditingProduct({...editingProduct, description: e.target.value}) : setNewProduct({...newProduct, description: e.target.value})} 
+                  className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-lg text-sm outline-none resize-none h-24 custom-scrollbar transition-colors mb-3" 
+                />
 
                 <input type="file" ref={productImgInputRef} onChange={(e) => handleProductImageChange(e, false)} accept="image/*" className="hidden" />
                 <input type="file" ref={editProductImgInputRef} onChange={(e) => handleProductImageChange(e, true)} accept="image/*" className="hidden" />

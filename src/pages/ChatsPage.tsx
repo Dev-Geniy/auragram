@@ -6,7 +6,7 @@ import { useLocation } from 'react-router-dom';
 import { 
   Send, Search, X, ShieldCheck, 
   Loader2, Paperclip, Check, CheckCheck, 
-  Bookmark, ArrowLeft, Image as ImageIcon, ExternalLink
+  Bookmark, ArrowLeft, Image as ExternalLink
 } from 'lucide-react';
 
 interface UserProfile {

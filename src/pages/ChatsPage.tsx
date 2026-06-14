@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, updateDoc, doc, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, updateDoc, doc, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useLocation } from 'react-router-dom';
 import { 
   Send, Search, X, ShieldCheck, 
   Loader2, Paperclip, Check, CheckCheck, 
-  Bookmark, ArrowLeft, Image as ExternalLink
+  Bookmark, ArrowLeft, Image as ExternalLink,
+  Trash2 // Добавили иконку корзины
 } from 'lucide-react';
 
 interface UserProfile {
@@ -30,7 +31,7 @@ interface Message {
 }
 
 // -----------------------------------------------------
-// 1. ФУНКЦИЯ СЖАТИЯ ИЗОБРАЖЕНИЙ ПЕРЕД ОТПРАВКОЙ
+// ФУНКЦИИ СЖАТИЯ И ЗАГРУЗКИ (Оставлены без изменений)
 // -----------------------------------------------------
 const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
   return new Promise((resolve, reject) => {
@@ -57,7 +58,7 @@ const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
           } else {
             reject(new Error('Ошибка сжатия'));
           }
-        }, 'image/jpeg', 0.8); // 80% качество
+        }, 'image/jpeg', 0.8);
       };
     };
     reader.onerror = error => reject(error);
@@ -78,13 +79,106 @@ const uploadToImgBB = async (file: File): Promise<string> => {
   throw new Error('Ошибка загрузки');
 };
 
+// -----------------------------------------------------
+// КОМПОНЕНТ ДЛЯ СВАЙПОВ (Нативный свайп влево/вправо)
+// -----------------------------------------------------
+const SwipeableContact = ({ 
+  contact, isSelected, onClick, onHide, onMarkRead 
+}: { 
+  contact: UserProfile, isSelected: boolean, onClick: () => void, onHide: (id: string) => void, onMarkRead: (id: string) => void 
+}) => {
+  const [offsetX, setOffsetX] = useState(0);
+  const startX = useRef(0);
+  const isDragging = useRef(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    startX.current = e.touches[0].clientX;
+    isDragging.current = true;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging.current) return;
+    const currentX = e.touches[0].clientX;
+    const diff = currentX - startX.current;
+    
+    // Ограничиваем свайп 80 пикселями в обе стороны
+    if (diff > 80) setOffsetX(80);
+    else if (diff < -80) setOffsetX(-80);
+    else setOffsetX(diff);
+  };
+
+  const handleTouchEnd = () => {
+    isDragging.current = false;
+    if (offsetX > 60) {
+      onMarkRead(contact.id); // Свайп вправо = Прочитано
+    } else if (offsetX < -60) {
+      onHide(contact.id); // Свайп влево = Удалить/Скрыть
+    }
+    setOffsetX(0); // Возвращаем на место
+  };
+
+  return (
+    <div className="relative w-full overflow-hidden bg-[#F2F2F7]">
+      {/* Задний фон (Действия) */}
+      <div className="absolute inset-0 flex justify-between">
+        <div className={`w-1/2 bg-blue-500 flex items-center pl-4 text-white transition-opacity ${offsetX > 0 ? 'opacity-100' : 'opacity-0'}`}>
+          <CheckCheck size={24} />
+        </div>
+        <div className={`w-1/2 bg-red-500 flex items-center justify-end pr-4 text-white transition-opacity ${offsetX < 0 ? 'opacity-100' : 'opacity-0'}`}>
+          <Trash2 size={24} />
+        </div>
+      </div>
+
+      {/* Сама карточка чата */}
+      <div 
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={onClick}
+        style={{ transform: `translateX(${offsetX}px)` }}
+        className={`relative z-10 flex items-center gap-3 px-4 py-3 cursor-pointer transition-transform duration-200 ${
+          isSelected ? 'bg-blue-500 text-white' : 'bg-white hover:bg-gray-50 text-gray-900'
+        }`}
+      >
+        {contact.isSaved ? (
+          <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-500 text-white'}`}>
+            <Bookmark size={20} />
+          </div>
+        ) : (
+          <img 
+            src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} 
+            alt={contact.name} 
+            loading="lazy"
+            className="w-12 h-12 rounded-full object-cover shrink-0 bg-gray-100" 
+          />
+        )}
+        
+        <div className="flex-1 min-w-0 border-b border-gray-100/50 pb-2">
+          <h4 className={`font-semibold text-[15px] truncate ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+            {contact.name}
+          </h4>
+          <p className={`text-[13px] truncate ${isSelected ? 'text-white/80' : 'text-gray-500'}`}>
+            {contact.isSaved ? 'Сохраненные сообщения' : contact.type === 'business' ? 'Бизнес-аккаунт' : 'Пользователь'}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function ChatsPage() {
   const { user } = useAuthStore();
   const location = useLocation(); 
   
   const [globalUsers, setGlobalUsers] = useState<UserProfile[]>([]);
   const [selectedContact, setSelectedContact] = useState<UserProfile | null>(null);
+  
+  // Состояния для поиска и вкладок (Папки)
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'all' | 'personal' | 'business'>('all');
+  
+  // Состояние для скрытых (удаленных) чатов
+  const [hiddenContacts, setHiddenContacts] = useState<string[]>([]);
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -93,14 +187,13 @@ export default function ChatsPage() {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isSending, setIsSending] = useState(false);
 
-  // Состояние лимита сообщений для пагинации
   const [messageLimit, setMessageLimit] = useState(30);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Загрузка всех пользователей
+  // Загрузка контактов
   useEffect(() => {
     if (!user) return;
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
@@ -119,7 +212,6 @@ export default function ChatsPage() {
     return () => unsubscribe();
   }, [user]);
 
-  // Сброс лимита при смене чата
   useEffect(() => {
     setMessageLimit(30);
   }, [selectedContact]);
@@ -131,15 +223,11 @@ export default function ChatsPage() {
     }
   }, [globalUsers, location.state]);
 
-  // -----------------------------------------------------
-  // 2. ЗАГРУЗКА И ПАГИНАЦИЯ СООБЩЕНИЙ
-  // -----------------------------------------------------
+  // Загрузка сообщений
   useEffect(() => {
     if (!user || !selectedContact) return;
 
     const chatId = [user.uid, selectedContact.id].sort().join('_');
-    
-    // Запрашиваем с лимитом и сортировкой (сначала новые)
     const q = query(
       collection(db, 'messages'), 
       where('chatId', '==', chatId),
@@ -149,24 +237,17 @@ export default function ChatsPage() {
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const loadedMessages: Message[] = [];
-      
       snapshot.forEach((docSnap) => {
         const msg = { id: docSnap.id, ...docSnap.data() } as Message;
         loadedMessages.push(msg);
 
-        // Читаем чужие сообщения
         if (msg.receiverId === user.uid && !msg.isRead && msg.senderId !== user.uid) {
           updateDoc(doc(db, 'messages', msg.id), { isRead: true }).catch(() => {});
         }
       });
-      
-      // Разворачиваем массив, чтобы старые были сверху, а новые снизу
       loadedMessages.reverse();
-      
       setMessages(loadedMessages);
 
-      // Скроллим вниз только если это начальная загрузка или пришло новое сообщение
-      // (чтобы не сбрасывать скролл при подгрузке истории)
       if (messageLimit === 30) {
         setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }), 100);
       }
@@ -175,10 +256,8 @@ export default function ChatsPage() {
     return () => unsubscribe();
   }, [user, selectedContact, messageLimit]);
 
-  // Функция срабатывает при прокрутке чата
   const handleScroll = () => {
     if (chatContainerRef.current) {
-      // Если доскроллили до самого верха (с небольшим запасом)
       if (chatContainerRef.current.scrollTop === 0) {
         setMessageLimit((prev) => prev + 30);
       }
@@ -204,7 +283,6 @@ export default function ChatsPage() {
       });
       setNewMessage('');
       setAttachedImage('');
-      // При отправке нового сообщения сбрасываем лимит и скроллим вниз
       setMessageLimit(30);
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (error) {
@@ -219,7 +297,6 @@ export default function ChatsPage() {
     if (!file) return;
     setIsUploadingImage(true);
     try {
-      // Сжимаем перед загрузкой
       const compressedFile = await compressImage(file, 800);
       const url = await uploadToImgBB(compressedFile);
       setAttachedImage(url);
@@ -231,15 +308,45 @@ export default function ChatsPage() {
     }
   };
 
+  // ФУНКЦИИ СВАЙПА
+  const hideContact = (contactId: string) => {
+    setHiddenContacts(prev => [...prev, contactId]);
+    if (selectedContact?.id === contactId) setSelectedContact(null);
+  };
+
+  const markChatAsRead = async (contactId: string) => {
+    if (!user) return;
+    const chatId = [user.uid, contactId].sort().join('_');
+    const q = query(collection(db, 'messages'), where('chatId', '==', chatId), where('receiverId', '==', user.uid), where('isRead', '==', false));
+    
+    try {
+      const querySnapshot = await getDocs(q);
+      querySnapshot.forEach((docSnap) => {
+        updateDoc(doc(db, 'messages', docSnap.id), { isRead: true });
+      });
+    } catch (error) {
+      console.error('Ошибка отметки прочитанным:', error);
+    }
+  };
+
   const formatTime = (timestamp: any) => {
     if (!timestamp) return '';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const filteredContacts = globalUsers.filter(c => 
-    c.name?.toLowerCase().includes(searchQuery.toLowerCase().trim())
-  );
+  // Фильтрация (Поиск + Вкладки + Скрытые)
+  const filteredContacts = globalUsers.filter(c => {
+    // 1. Убираем скрытые
+    if (hiddenContacts.includes(c.id)) return false;
+    // 2. Поиск
+    const matchSearch = c.name?.toLowerCase().includes(searchQuery.toLowerCase().trim());
+    if (!matchSearch) return false;
+    // 3. Вкладки (Папки)
+    if (activeTab === 'personal') return c.type !== 'business' || c.isSaved;
+    if (activeTab === 'business') return c.type === 'business';
+    return true; // activeTab === 'all'
+  });
 
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-white md:bg-[#F2F2F7]">
@@ -247,58 +354,66 @@ export default function ChatsPage() {
       {/* ЛЕВАЯ ПАНЕЛЬ: СПИСОК ЧАТОВ */}
       <div className={`w-full md:w-[320px] lg:w-[380px] shrink-0 bg-white md:border-r border-gray-200 flex flex-col z-10 ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
         
-        {/* Поиск */}
-        <div className="p-3 border-b border-gray-100 shrink-0">
-          <div className="relative flex items-center bg-[#F2F2F7] rounded-[10px] px-3 py-1.5 focus-within:bg-gray-200/80 transition-colors">
-            <Search className="text-gray-400 shrink-0" size={18} />
-            <input 
-              type="text" 
-              placeholder="Поиск по имени..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-transparent pl-2 pr-8 py-1.5 text-[15px] focus:outline-none text-gray-900 placeholder-gray-500"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-3 text-gray-400 hover:text-gray-600">
-                <X size={16} />
-              </button>
-            )}
+        <div className="pt-3 border-b border-gray-100 shrink-0">
+          {/* Поиск */}
+          <div className="px-3 mb-3">
+            <div className="relative flex items-center bg-[#F2F2F7] rounded-[10px] px-3 py-1.5 focus-within:bg-gray-200/80 transition-colors">
+              <Search className="text-gray-400 shrink-0" size={18} />
+              <input 
+                type="text" 
+                placeholder="Поиск..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-transparent pl-2 pr-8 py-1 text-[15px] focus:outline-none text-gray-900 placeholder-gray-500"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-3 text-gray-400 hover:text-gray-600">
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+          </div>
+          
+          {/* Папки (Вкладки) */}
+          <div className="flex px-3 pb-2 gap-2 overflow-x-auto scrollbar-none">
+            <button 
+              onClick={() => setActiveTab('all')} 
+              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors ${activeTab === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >
+              Все
+            </button>
+            <button 
+              onClick={() => setActiveTab('personal')} 
+              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors ${activeTab === 'personal' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >
+              Личные
+            </button>
+            <button 
+              onClick={() => setActiveTab('business')} 
+              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors ${activeTab === 'business' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >
+              Магазины
+            </button>
           </div>
         </div>
         
-        {/* Список контактов */}
+        {/* Список контактов со Свайпом */}
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           {filteredContacts.map(contact => (
-            <div 
-              key={contact.id} 
+            <SwipeableContact 
+              key={contact.id}
+              contact={contact}
+              isSelected={selectedContact?.id === contact.id}
               onClick={() => setSelectedContact(contact)}
-              className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${
-                selectedContact?.id === contact.id ? 'bg-blue-500 text-white' : 'hover:bg-gray-50 text-gray-900'
-              }`}
-            >
-              {contact.isSaved ? (
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${selectedContact?.id === contact.id ? 'bg-white/20 text-white' : 'bg-blue-500 text-white'}`}>
-                  <Bookmark size={20} />
-                </div>
-              ) : (
-                <img 
-                  src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} 
-                  alt={contact.name} 
-                  loading="lazy" // 3. ЛЕНИВАЯ ЗАГРУЗКА
-                  className="w-12 h-12 rounded-full object-cover shrink-0 bg-gray-100" 
-                />
-              )}
-              
-              <div className="flex-1 min-w-0 border-b border-gray-100/50 pb-2">
-                <h4 className={`font-semibold text-[15px] truncate ${selectedContact?.id === contact.id ? 'text-white' : 'text-gray-900'}`}>
-                  {contact.name}
-                </h4>
-                <p className={`text-[13px] truncate ${selectedContact?.id === contact.id ? 'text-white/80' : 'text-gray-500'}`}>
-                  {contact.isSaved ? 'Сохраненные сообщения' : contact.type === 'business' ? 'Бизнес-аккаунт' : 'Пользователь'}
-                </p>
-              </div>
-            </div>
+              onHide={hideContact}
+              onMarkRead={markChatAsRead}
+            />
           ))}
+          {filteredContacts.length === 0 && (
+             <div className="text-center mt-10 text-gray-400 text-[14px]">
+               В этой папке пусто
+             </div>
+          )}
         </div>
       </div>
       
@@ -307,7 +422,6 @@ export default function ChatsPage() {
         
         {selectedContact ? (
           <>
-            {/* Хедер чата */}
             <div className="h-[60px] bg-white/95 backdrop-blur-md border-b border-gray-200/60 flex items-center px-4 shrink-0 shadow-sm z-10">
               <button 
                 onClick={() => setSelectedContact(null)}
@@ -325,7 +439,7 @@ export default function ChatsPage() {
                   <img 
                     src={selectedContact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}`} 
                     alt={selectedContact.name} 
-                    loading="lazy" // 3. ЛЕНИВАЯ ЗАГРУЗКА
+                    loading="lazy"
                     className="w-10 h-10 rounded-full object-cover" 
                   />
                 )}
@@ -340,7 +454,6 @@ export default function ChatsPage() {
               </div>
             </div>
             
-            {/* Область сообщений с обработчиком скролла */}
             <div 
               ref={chatContainerRef}
               onScroll={handleScroll}
@@ -355,7 +468,6 @@ export default function ChatsPage() {
                 </div>
               )}
 
-              {/* Если загружено максимальное количество текущего лимита, показываем лоадер сверху */}
               {messages.length >= messageLimit && (
                 <div className="flex justify-center py-2">
                   <Loader2 size={20} className="animate-spin text-gray-400" />
@@ -379,7 +491,7 @@ export default function ChatsPage() {
                         <div className="flex flex-col w-[260px] bg-white rounded-xl overflow-hidden border border-gray-200/50">
                           <img 
                             src={msg.cardData!.imageUrl} 
-                            loading="lazy" // 3. ЛЕНИВАЯ ЗАГРУЗКА
+                            loading="lazy"
                             className="w-full h-36 object-cover" 
                             alt="card" 
                           />
@@ -396,7 +508,7 @@ export default function ChatsPage() {
                           {msg.imageUrl && (
                             <img 
                               src={msg.imageUrl} 
-                              loading="lazy" // 3. ЛЕНИВАЯ ЗАГРУЗКА
+                              loading="lazy"
                               alt="attachment" 
                               className="w-full max-w-[280px] h-auto rounded-xl mb-1 object-cover" 
                             />
@@ -422,7 +534,6 @@ export default function ChatsPage() {
               <div ref={messagesEndRef} className="h-2" />
             </div>
             
-            {/* Предпросмотр изображения */}
             {attachedImage && (
               <div className="absolute bottom-[70px] left-4 z-20">
                 <div className="relative w-16 h-16 bg-white rounded-xl shadow-lg border border-gray-200 p-1">
@@ -432,7 +543,6 @@ export default function ChatsPage() {
               </div>
             )}
 
-            {/* Панель ввода */}
             <div className="bg-white px-3 py-2 pb-safe md:pb-3 border-t border-gray-200 shrink-0">
               <form onSubmit={handleSendMessage} className="flex items-end gap-2 max-w-4xl mx-auto relative">
                 <input type="file" ref={fileInputRef} onChange={handleImageAttach} accept="image/*" className="hidden" />

@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+// Импортируем модули для инициализации базы данных с кэшированием
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 // Your web app's Firebase configuration
@@ -16,6 +17,11 @@ const firebaseConfig = {
 // Инициализация Firebase
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Инициализация Firestore с включенным оффлайн-кэшированием (для нескольких вкладок)
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
+
 export const storage = getStorage(app); // ЭКСПОРТИРУЕМ STORAGE
 export const googleProvider = new GoogleAuthProvider();

@@ -2,12 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
-import { useLocation, Link } from 'react-router-dom';
-import ProfileModal from '../components/ProfileModal'; 
+import { useLocation } from 'react-router-dom';
 import { 
-  MessageSquare, Send, Search, X, ShieldCheck, 
-  Loader2, Clock, Image as ImageIcon, Heart, ExternalLink,
-  Check, CheckCheck, Bookmark
+  Send, Search, X, ShieldCheck, 
+  Loader2, Paperclip, Check, CheckCheck, 
+  Bookmark, ArrowLeft, Image as ImageIcon, ExternalLink
 } from 'lucide-react';
 
 interface UserProfile {
@@ -15,135 +14,87 @@ interface UserProfile {
   name: string;
   avatar: string;
   type: string;
-  role: string;
-  skills?: string[];
-  contacts?: { phone?: string; website?: string; email?: string; };
-  products?: any[];
-  isSaved?: boolean; // Флаг для чата "Избранное"
+  isSaved?: boolean;
 }
 
 interface Message {
   id: string;
   text: string;
   imageUrl?: string;
-  likes?: string[];
   senderId: string;
   receiverId: string;
   createdAt: any;
-  isRead?: boolean; // Флаг прочтения
+  isRead?: boolean;
   type?: 'share_card' | string;
-  cardData?: {
-    type: 'shop' | 'product';
-    title: string;
-    imageUrl: string;
-    link: string;
-    description: string;
-    price?: string;
-  };
+  cardData?: any;
 }
 
 const uploadToImgBB = async (file: File): Promise<string> => {
   const formData = new FormData();
   formData.append('image', file);
-  const API_KEY = '22de10db6eb1f3ec3fca012dcc566961';
+  const API_KEY = '22de10db6eb1f3ec3fca012dcc566961'; 
   
   const res = await fetch(`https://api.imgbb.com/1/upload?key=${API_KEY}`, {
     method: 'POST',
     body: formData,
   });
-  
   const data = await res.json();
-  if (data.success) {
-    return data.data.url;
-  } else {
-    throw new Error('Ошибка загрузки ImgBB');
-  }
+  if (data.success) return data.data.url;
+  throw new Error('Ошибка загрузки');
 };
 
 export default function ChatsPage() {
   const { user } = useAuthStore();
   const location = useLocation(); 
   
-  const [contacts, setContacts] = useState<UserProfile[]>([]);
+  // Состояния контактов
+  const [globalUsers, setGlobalUsers] = useState<UserProfile[]>([]);
   const [selectedContact, setSelectedContact] = useState<UserProfile | null>(null);
-  
-  const [previewProfile, setPreviewProfile] = useState<UserProfile | null>(null);
-
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({}); // Счетчики непрочитанных
-  
-  const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   
+  // Состояния чата
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
   const [attachedImage, setAttachedImage] = useState<string>('');
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const [isLoadingContacts, setIsLoadingContacts] = useState(true);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isSending, setIsSending] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Загрузка контактов и формирование "Избранного"
+  // 1. Загрузка всех пользователей для Глобального Поиска + "Избранное"
   useEffect(() => {
     if (!user) return;
-    setIsLoadingContacts(true);
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const loadedContacts: UserProfile[] = [];
+      const loadedUsers: UserProfile[] = [];
       snapshot.forEach((doc) => {
         if (doc.id === user.uid) {
-          // Создаем чат "Избранное" из собственного профиля
-          loadedContacts.unshift({ 
+          loadedUsers.unshift({ 
             id: doc.id, 
             name: 'Избранное', 
             avatar: '', 
             type: 'personal', 
-            role: 'Сохраненные сообщения',
             isSaved: true
-          } as UserProfile);
+          });
         } else {
-          loadedContacts.push({ id: doc.id, ...doc.data() } as UserProfile);
+          loadedUsers.push({ id: doc.id, ...doc.data() } as UserProfile);
         }
       });
-      setContacts(loadedContacts);
-      setIsLoadingContacts(false);
-    }, (error) => {
-      console.error('Ошибка при синхронизации контактов:', error);
-      setIsLoadingContacts(false);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  // 1.5. Слушатель непрочитанных сообщений для бейджиков
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, 'messages'), where('receiverId', '==', user.uid), where('isRead', '==', false));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const counts: Record<string, number> = {};
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        // Сообщения себе (в Избранное) не считаем непрочитанными
-        if (data.senderId !== user.uid) {
-          counts[data.senderId] = (counts[data.senderId] || 0) + 1;
-        }
-      });
-      setUnreadCounts(counts);
+      setGlobalUsers(loadedUsers);
     });
     return () => unsubscribe();
   }, [user]);
 
-  // 2. АВТОМАТИЧЕСКИЙ ВЫБОР ДИАЛОГА
+  // 2. Обработка перехода из других страниц (например, Написать из Маркета)
   useEffect(() => {
-    if (contacts.length > 0 && location.state?.selectedUserId) {
-      const contactToSelect = contacts.find(c => c.id === location.state.selectedUserId);
-      if (contactToSelect && selectedContact?.id !== contactToSelect.id) {
-        setSelectedContact(contactToSelect);
-      }
+    if (globalUsers.length > 0 && location.state?.selectedUserId) {
+      const contact = globalUsers.find(c => c.id === location.state.selectedUserId);
+      if (contact) setSelectedContact(contact);
     }
-  }, [contacts, location.state]);
+  }, [globalUsers, location.state]);
 
-  // 3. Подписка на сообщения выбранного диалога + Чтение
+  // 3. Загрузка сообщений и маркировка как прочитанных
   useEffect(() => {
     if (!user || !selectedContact) return;
 
@@ -154,13 +105,12 @@ export default function ChatsPage() {
       const loadedMessages: Message[] = [];
       
       snapshot.forEach((docSnap) => {
-        const msgData = docSnap.data() as Message;
-        msgData.id = docSnap.id;
-        loadedMessages.push(msgData);
+        const msg = { id: docSnap.id, ...docSnap.data() } as Message;
+        loadedMessages.push(msg);
 
-        // МАРКИРУЕМ КАК ПРОЧИТАННОЕ: если сообщение адресовано нам и еще не прочитано
-        if (msgData.receiverId === user.uid && !msgData.isRead && msgData.senderId !== user.uid) {
-          updateDoc(doc(db, 'messages', msgData.id), { isRead: true }).catch(err => console.log(err));
+        // Читаем чужие сообщения
+        if (msg.receiverId === user.uid && !msg.isRead && msg.senderId !== user.uid) {
+          updateDoc(doc(db, 'messages', msg.id), { isRead: true }).catch(() => {});
         }
       });
       
@@ -171,25 +121,46 @@ export default function ChatsPage() {
       });
       
       setMessages(loadedMessages);
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     });
 
     return () => unsubscribe();
   }, [user, selectedContact]);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !selectedContact || (!newMessage.trim() && !attachedImage) || isSending) return;
+
+    setIsSending(true);
+    const chatId = [user.uid, selectedContact.id].sort().join('_');
+
+    try {
+      await addDoc(collection(db, 'messages'), {
+        chatId,
+        text: newMessage.trim(),
+        imageUrl: attachedImage,
+        senderId: user.uid,
+        receiverId: selectedContact.id,
+        createdAt: serverTimestamp(),
+        isRead: false
+      });
+      setNewMessage('');
+      setAttachedImage('');
+    } catch (error) {
+      console.error('Ошибка отправки:', error);
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   const handleImageAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
     setIsUploadingImage(true);
     try {
       const url = await uploadToImgBB(file);
       setAttachedImage(url);
     } catch (error) {
-      console.error(error);
       alert('Не удалось загрузить изображение.');
     } finally {
       setIsUploadingImage(false);
@@ -197,387 +168,219 @@ export default function ChatsPage() {
     }
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !selectedContact || (!newMessage.trim() && !attachedImage) || isSending || isUploadingImage) return;
-
-    const textToSend = newMessage.trim();
-    const imageToSend = attachedImage;
-    
-    setNewMessage('');
-    setAttachedImage('');
-    setIsSending(true);
-
-    const chatId = [user.uid, selectedContact.id].sort().join('_');
-
-    try {
-      await addDoc(collection(db, 'messages'), {
-        chatId,
-        text: textToSend,
-        imageUrl: imageToSend,
-        likes: [],
-        senderId: user.uid,
-        receiverId: selectedContact.id,
-        createdAt: serverTimestamp(),
-        isRead: false // По умолчанию не прочитано
-      });
-    } catch (error) {
-      console.error('Ошибка отправки сообщения:', error);
-      setNewMessage(textToSend);
-      setAttachedImage(imageToSend);
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  const handleLikeMessage = async (msgId: string, currentLikes: string[] = []) => {
-    if (!user) return;
-    const msgRef = doc(db, 'messages', msgId);
-    
-    const hasLiked = currentLikes.includes(user.uid);
-    const newLikes = hasLiked 
-      ? currentLikes.filter(id => id !== user.uid) 
-      : [...currentLikes, user.uid];
-
-    try {
-      await updateDoc(msgRef, { likes: newLikes });
-    } catch (error) {
-      console.error("Ошибка при обновлении лайка:", error);
-    }
-  };
-
   const formatTime = (timestamp: any) => {
-    if (!timestamp) return <Clock size={10} className="inline opacity-70" />;
+    if (!timestamp) return '';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const filteredContacts = contacts.filter(c => 
-    (c.name || '').toLowerCase().includes(searchQuery.toLowerCase().trim())
+  const filteredContacts = globalUsers.filter(c => 
+    c.name?.toLowerCase().includes(searchQuery.toLowerCase().trim())
   );
 
   return (
-    <div className="flex flex-col md:flex-row h-full w-full overflow-hidden select-none bg-white md:bg-[#FAFAFA] relative">
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-white md:bg-[#F2F2F7]">
       
-      {/* ЛЕВАЯ ПАНЕЛЬ */}
-      <div className="w-full md:w-[320px] shrink-0 md:border-r border-b border-gray-100 flex flex-col bg-white md:shadow-[1px_0_10px_rgba(0,0,0,0.01)] z-20">
-        <div className="p-3 md:p-5 shrink-0 flex items-center justify-between md:block">
-          <div className="flex items-center justify-between md:mb-5 w-full md:w-auto">
-            <h2 className="text-xl md:text-2xl font-black text-gray-950 tracking-tight">Чаты</h2>
-            <div className="w-7 h-7 md:w-8 md:h-8 bg-gray-50 rounded-full flex items-center justify-center text-gray-400 border border-gray-100">
-              <span className="text-xs font-bold">{contacts.length}</span>
-            </div>
-          </div>
-          <div className="hidden md:flex relative items-center bg-gray-50 rounded-xl border border-gray-200/60 focus-within:border-gray-300 focus-within:bg-white focus-within:shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all">
-            <Search className="absolute left-3.5 text-gray-400" size={16} />
+      {/* ЛЕВАЯ ПАНЕЛЬ: СПИСОК ЧАТОВ */}
+      <div className={`w-full md:w-[320px] lg:w-[380px] shrink-0 bg-white md:border-r border-gray-200 flex flex-col z-10 ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
+        
+        {/* Поиск */}
+        <div className="p-3 border-b border-gray-100 shrink-0">
+          <div className="relative flex items-center bg-[#F2F2F7] rounded-[10px] px-3 py-1.5 focus-within:bg-gray-200/80 transition-colors">
+            <Search className="text-gray-400 shrink-0" size={18} />
             <input 
               type="text" 
-              placeholder="Поиск диалога..." 
+              placeholder="Поиск по имени..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-transparent pl-10 pr-10 py-3 text-xs focus:outline-none text-gray-900 placeholder-gray-400 font-semibold"
+              className="w-full bg-transparent pl-2 pr-8 py-1.5 text-[15px] focus:outline-none text-gray-900 placeholder-gray-500"
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-3 text-gray-400 hover:text-gray-600 transition-colors"><X size={14} /></button>
+              <button onClick={() => setSearchQuery('')} className="absolute right-3 text-gray-400 hover:text-gray-600">
+                <X size={16} />
+              </button>
             )}
           </div>
         </div>
         
-        <div className="flex md:flex-col overflow-x-auto md:overflow-y-auto md:flex-1 px-3 pb-3 md:p-2 space-x-4 md:space-x-0 md:space-y-0.5 scrollbar-none custom-scrollbar bg-white md:bg-[#FAFAFA]/50">
-          {isLoadingContacts ? (
-            [1, 2, 3, 4, 5].map((n) => (
-              <div key={n} className="flex md:items-center flex-col md:flex-row gap-2 md:gap-3.5 md:p-3.5 animate-pulse shrink-0">
-                <div className="w-14 h-14 md:w-12 md:h-12 bg-gray-200/60 rounded-[18px] md:rounded-xl shrink-0" />
-                <div className="hidden md:block flex-1 space-y-2.5">
-                  <div className="h-3 bg-gray-200/60 rounded w-1/2" />
-                  <div className="h-2 bg-gray-200/60 rounded w-3/4" />
+        {/* Список контактов */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          {filteredContacts.map(contact => (
+            <div 
+              key={contact.id} 
+              onClick={() => setSelectedContact(contact)}
+              className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${
+                selectedContact?.id === contact.id ? 'bg-blue-500 text-white' : 'hover:bg-gray-50 text-gray-900'
+              }`}
+            >
+              {contact.isSaved ? (
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${selectedContact?.id === contact.id ? 'bg-white/20 text-white' : 'bg-blue-500 text-white'}`}>
+                  <Bookmark size={20} />
                 </div>
+              ) : (
+                <img 
+                  src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} 
+                  alt={contact.name} 
+                  className="w-12 h-12 rounded-full object-cover shrink-0 bg-gray-100" 
+                />
+              )}
+              
+              <div className="flex-1 min-w-0 border-b border-gray-100/50 pb-2">
+                <h4 className={`font-semibold text-[15px] truncate ${selectedContact?.id === contact.id ? 'text-white' : 'text-gray-900'}`}>
+                  {contact.name}
+                </h4>
+                <p className={`text-[13px] truncate ${selectedContact?.id === contact.id ? 'text-white/80' : 'text-gray-500'}`}>
+                  {contact.isSaved ? 'Сохраненные сообщения' : contact.type === 'business' ? 'Бизнес-аккаунт' : 'Пользователь'}
+                </p>
               </div>
-            ))
-          ) : filteredContacts.length > 0 ? (
-            filteredContacts.map(contact => {
-              const unread = unreadCounts[contact.id] || 0;
-              return (
-                <div 
-                  key={contact.id} 
-                  onClick={() => setSelectedContact(contact)}
-                  className={`flex flex-col md:flex-row items-center gap-1.5 md:gap-3.5 md:p-3.5 md:rounded-2xl cursor-pointer transition-all duration-200 shrink-0 ${
-                    selectedContact?.id === contact.id 
-                      ? 'md:bg-white md:shadow-[0_4px_15px_rgba(0,0,0,0.03)] md:border md:border-gray-200/60 scale-105 md:scale-100' 
-                      : 'md:hover:bg-white md:border md:border-transparent md:hover:shadow-[0_2px_8px_rgba(0,0,0,0.01)]'
-                  }`}
-                >
-                  {/* АВАТАРКА С КЛИКОМ ДЛЯ ОТКРЫТИЯ ПРОФИЛЯ */}
-                  <div 
-                    className="relative shrink-0"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (!contact.isSaved) setPreviewProfile(contact);
-                    }}
-                  >
-                    {contact.isSaved ? (
-                      <div className={`flex items-center justify-center text-white transition-all ${
-                        selectedContact?.id === contact.id 
-                          ? 'w-[60px] h-[60px] md:w-12 md:h-12 rounded-[20px] md:rounded-xl bg-brand shadow-md' 
-                          : 'w-14 h-14 md:w-12 md:h-12 rounded-[18px] md:rounded-xl bg-gray-900'
-                      }`}>
-                        <Bookmark size={20} />
-                      </div>
-                    ) : (
-                      <img 
-                        src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} 
-                        alt={contact.name} 
-                        className={`object-cover border bg-gray-50 transition-all hover:scale-105 ${
-                          selectedContact?.id === contact.id 
-                            ? 'w-[60px] h-[60px] md:w-12 md:h-12 rounded-[20px] md:rounded-xl border-brand/50 shadow-md' 
-                            : 'w-14 h-14 md:w-12 md:h-12 rounded-[18px] md:rounded-xl border-gray-100'
-                        }`} 
-                      />
-                    )}
-                    
-                    {contact.type === 'business' && !contact.isSaved && <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-amber-500 rounded-full border-[2.5px] border-white" />}
-                    
-                    {/* БЕЙДЖ НЕПРОЧИТАННЫХ СООБЩЕНИЙ */}
-                    {unread > 0 && (
-                      <div className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-4 h-4 md:w-5 md:h-5 flex items-center justify-center rounded-full border-2 border-white shadow-sm z-10 animate-scale-up">
-                        {unread > 99 ? '99+' : unread}
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="md:hidden w-16 text-center">
-                    <p className={`text-[10px] truncate ${selectedContact?.id === contact.id ? 'font-bold text-gray-900' : 'font-medium text-gray-500'}`}>
-                      {contact.name ? contact.name.split(' ')[0] : '...'}
-                    </p>
-                  </div>
-
-                  <div className="hidden md:block flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <h4 className={`text-sm font-bold truncate transition-colors ${selectedContact?.id === contact.id ? 'text-gray-950' : 'text-gray-900'}`}>
-                        {contact.name || 'Пользователь'}
-                      </h4>
-                    </div>
-                    <p className={`text-[11px] truncate mt-1 tracking-wide ${unread > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-400'}`}>
-                      {contact.role || 'Связь защищена'}
-                    </p>
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <div className="text-center w-full py-6 md:py-10">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-300 mx-auto mb-2 md:mb-3">
-                <Search size={16} />
-              </div>
-              <p className="text-[10px] md:text-xs text-gray-400 font-bold uppercase tracking-wider">Не найдено</p>
             </div>
-          )}
+          ))}
         </div>
       </div>
       
-      {/* ПРАВАЯ ПАНЕЛЬ */}
-      <div className="flex-1 flex flex-col bg-white relative min-h-0 z-10">
+      {/* ПРАВАЯ ПАНЕЛЬ: ЧАТ */}
+      <div className={`flex-1 flex flex-col bg-[#EFEFEF] md:bg-chat-pattern relative min-w-0 z-20 ${!selectedContact ? 'hidden md:flex' : 'flex'}`}>
+        
         {selectedContact ? (
           <>
-            <div className="h-[60px] md:h-[85px] bg-white border-b border-gray-100 flex items-center px-4 md:px-8 shrink-0 justify-between shadow-[0_4px_20px_rgba(0,0,0,0.01)] z-10">
-              <div className="flex items-center gap-3 md:gap-4">
-                
-                <div 
-                  className={`relative ${!selectedContact.isSaved && 'cursor-pointer hover:opacity-80 transition-opacity'}`}
-                  onClick={() => !selectedContact.isSaved && setPreviewProfile(selectedContact)}
-                >
-                  {selectedContact.isSaved ? (
-                     <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl bg-gray-900 text-white flex items-center justify-center shadow-sm">
-                       <Bookmark size={20} />
-                     </div>
-                  ) : (
-                    <>
-                      <img src={selectedContact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}&background=random`} alt={selectedContact.name} className="w-9 h-9 md:w-11 md:h-11 rounded-xl object-cover border border-gray-100" />
-                      <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 md:w-3 md:h-3 bg-green-500 rounded-full border-2 border-white" />
-                    </>
-                  )}
-                </div>
-                
-                <div className={!selectedContact.isSaved ? "cursor-pointer" : ""} onClick={() => !selectedContact.isSaved && setPreviewProfile(selectedContact)}>
-                  <h3 className="font-bold text-sm md:text-base text-gray-950 leading-tight hover:text-brand transition-colors">{selectedContact.name}</h3>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    {selectedContact.isSaved ? (
-                      <span className="text-[9px] md:text-[10px] font-bold text-brand uppercase tracking-wider bg-brand/10 px-1.5 py-0.5 rounded">Ваши заметки</span>
-                    ) : selectedContact.type === 'business' ? (
-                      <span className="text-[9px] md:text-[10px] font-bold text-amber-600 uppercase tracking-wider bg-amber-50 px-1.5 py-0.5 rounded">Бизнес-аккаунт</span>
-                    ) : (
-                      <span className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase tracking-wider">Личный профиль</span>
-                    )}
+            {/* Хедер чата */}
+            <div className="h-[60px] bg-white/95 backdrop-blur-md border-b border-gray-200/60 flex items-center px-4 shrink-0 shadow-sm z-10">
+              <button 
+                onClick={() => setSelectedContact(null)}
+                className="md:hidden mr-3 text-blue-500 p-1"
+              >
+                <ArrowLeft size={24} />
+              </button>
+              
+              <div className="flex items-center gap-3 cursor-pointer">
+                {selectedContact.isSaved ? (
+                  <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center">
+                    <Bookmark size={18} />
                   </div>
+                ) : (
+                  <img src={selectedContact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}`} alt={selectedContact.name} className="w-10 h-10 rounded-full object-cover" />
+                )}
+                <div>
+                  <h3 className="font-semibold text-[15px] text-gray-900 leading-tight">
+                    {selectedContact.name}
+                  </h3>
+                  <span className="text-[12px] text-blue-500 font-medium">
+                    {selectedContact.isSaved ? 'Избранное' : 'в сети'}
+                  </span>
                 </div>
-
               </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-3 bg-gray-50/50 custom-scrollbar">
-              {messages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center">
-                  <ShieldCheck size={48} className="text-gray-200 mb-4" />
-                  <p className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-gray-400">Сквозное шифрование</p>
-                  <p className="text-[10px] md:text-xs text-gray-400 mt-2 font-medium max-w-[200px] text-center">Ваша переписка защищена алгоритмами Aura</p>
+            {/* Сообщения */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+              {messages.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full opacity-50">
+                  <ShieldCheck size={48} className="text-gray-400 mb-2" />
+                  <p className="text-[13px] font-medium text-gray-500 bg-gray-200/50 px-4 py-1.5 rounded-full">
+                    Здесь пока нет сообщений
+                  </p>
                 </div>
-              ) : (
-                messages.map((msg, index) => {
-                  const isMine = msg.senderId === user?.uid;
-                  const isSequential = index > 0 && messages[index - 1].senderId === msg.senderId;
-                  const hasLikes = msg.likes && msg.likes.length > 0;
-                  const isLikedByMe = msg.likes?.includes(user?.uid || '');
+              )}
 
-                  const isCard = msg.type === 'share_card' && msg.cardData;
+              {messages.map((msg, index) => {
+                const isMine = msg.senderId === user?.uid;
+                const isSequential = index > 0 && messages[index - 1].senderId === msg.senderId;
+                const isCard = msg.type === 'share_card' && msg.cardData;
 
-                  return (
-                    <div key={msg.id} className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'} ${isSequential ? 'mt-1' : 'mt-4'}`}>
-                      <div className="group relative max-w-[85%] md:max-w-[75%]">
-                        
-                        <div className={`relative flex flex-col gap-1.5 shadow-sm transition-all ${
-                          isMine 
-                            ? 'bg-gray-950 text-white rounded-2xl rounded-tr-sm' 
-                            : 'bg-white border border-gray-100 text-gray-900 rounded-2xl rounded-tl-sm shadow-[0_2px_10px_rgba(0,0,0,0.02)]'
-                        } ${isCard ? 'p-1.5' : 'px-4 py-2.5 text-[13px] font-medium tracking-wide'}`}>
-                          
-                          {isCard ? (
-                            <div className="flex flex-col w-[240px] md:w-[280px] bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100/50">
-                              <div className="relative h-32 md:h-36 bg-gray-100 shrink-0">
-                                <img src={msg.cardData!.imageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(msg.cardData!.title)}`} className="w-full h-full object-cover" alt="card cover" />
-                                <div className="absolute top-2 left-2 bg-white/95 backdrop-blur-md px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider text-gray-900 shadow-sm border border-white/50">
-                                  {msg.cardData!.type === 'shop' ? 'Магазин' : 'Товар'}
-                                </div>
-                              </div>
-                              <div className="p-4 flex flex-col">
-                                <h4 className="font-bold text-sm text-gray-900 line-clamp-1 mb-1.5">{msg.cardData!.title}</h4>
-                                {msg.cardData!.description && (
-                                  <p className="text-[11px] text-gray-500 font-medium line-clamp-2 leading-relaxed mb-3">
-                                    {msg.cardData!.description}
-                                  </p>
-                                )}
-                                <div className="flex items-center justify-between mt-auto">
-                                  {msg.cardData!.price ? (
-                                    <span className="text-xs font-black text-amber-700 bg-amber-50 px-2 py-1 rounded-lg">
-                                      {msg.cardData!.price}
-                                    </span>
-                                  ) : <span />}
-                                  
-                                  <Link 
-                                    to={msg.cardData!.link.replace(window.location.origin, '')} 
-                                    className="flex items-center gap-1.5 bg-gray-900 text-white px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-brand transition-colors active:scale-95 shrink-0"
-                                  >
-                                    Подробнее <ExternalLink size={12} />
-                                  </Link>
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              {msg.imageUrl && (
-                                <div className="w-full max-w-[250px] rounded-xl overflow-hidden mb-1 border border-white/10">
-                                  <img src={msg.imageUrl} alt="attachment" className="w-full h-auto object-cover" />
-                                </div>
-                              )}
-                              {msg.text && <span className="leading-relaxed whitespace-pre-wrap break-words">{msg.text}</span>}
-                            </>
-                          )}
-
-                          {/* ВРЕМЯ И ГАЛОЧКИ ПРОЧТЕНИЯ */}
-                          <div className={`flex items-center gap-1 self-end mt-1 ${isCard && 'px-2 pb-1'}`}>
-                            <span className={`text-[9px] font-bold select-none ${isMine ? 'text-white/50' : 'text-gray-400'}`}>
-                              {formatTime(msg.createdAt)}
-                            </span>
-                            {/* Отображаем статус только для своих сообщений, и если это не чат с самим собой */}
-                            {isMine && !selectedContact.isSaved && (
-                              <span className="ml-0.5">
-                                {msg.isRead ? (
-                                  <CheckCheck size={12} className="text-blue-400" />
-                                ) : (
-                                  <Check size={12} className="text-white/50" />
-                                )}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className={`absolute ${isMine ? '-left-8' : '-right-8'} bottom-1 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity`}>
-                            <button onClick={() => handleLikeMessage(msg.id, msg.likes)} className="p-1.5 rounded-full bg-white border border-gray-100 shadow-sm text-gray-400 hover:text-pink-500 hover:bg-pink-50 transition-colors">
-                              <Heart size={14} className={isLikedByMe ? "fill-pink-500 text-pink-500" : ""} />
-                            </button>
+                return (
+                  <div key={msg.id} className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'} ${isSequential ? 'mt-1' : 'mt-3'}`}>
+                    <div className={`relative max-w-[85%] sm:max-w-[70%] flex flex-col ${
+                      isMine 
+                        ? 'bg-[#E3FECE] text-gray-900 rounded-2xl rounded-tr-sm' 
+                        : 'bg-white text-gray-900 rounded-2xl rounded-tl-sm border border-gray-100 shadow-sm'
+                    } ${isCard ? 'p-1.5' : 'px-3 pt-2 pb-1.5 text-[15px] leading-relaxed'}`}>
+                      
+                      {isCard ? (
+                        <div className="flex flex-col w-[260px] bg-white rounded-xl overflow-hidden border border-gray-200/50">
+                          <img src={msg.cardData!.imageUrl} className="w-full h-36 object-cover" alt="card" />
+                          <div className="p-3">
+                            <h4 className="font-semibold text-[14px] text-gray-900 line-clamp-1 mb-1">{msg.cardData!.title}</h4>
+                            {msg.cardData!.price && <span className="text-[13px] font-bold text-blue-500">{msg.cardData!.price}</span>}
+                            <a href={msg.cardData!.link} target="_blank" rel="noopener noreferrer" className="mt-2 flex items-center justify-center gap-1.5 bg-blue-50 text-blue-600 py-1.5 rounded-lg text-[13px] font-medium">
+                              Смотреть <ExternalLink size={14} />
+                            </a>
                           </div>
                         </div>
+                      ) : (
+                        <>
+                          {msg.imageUrl && (
+                            <img src={msg.imageUrl} alt="attachment" className="w-full max-w-[280px] h-auto rounded-xl mb-1 object-cover" />
+                          )}
+                          {msg.text && <span className="whitespace-pre-wrap break-words">{msg.text}</span>}
+                        </>
+                      )}
 
-                        {hasLikes && (
-                          <div className={`absolute -bottom-3 ${isMine ? 'right-2' : 'left-2'} bg-white border border-gray-100 shadow-sm rounded-full px-2 py-0.5 flex items-center gap-1 z-10 animate-fade-in`}>
-                            <Heart size={10} className="fill-pink-500 text-pink-500" />
-                            <span className="text-[9px] font-black text-gray-600">{msg.likes?.length}</span>
-                          </div>
+                      {/* Время и статус прочтения (как в TG: в углу пузыря) */}
+                      <div className={`flex items-center justify-end gap-1 mt-0.5 ml-4 float-right ${isCard && 'px-2 pb-1'}`}>
+                        <span className={`text-[11px] font-medium ${isMine ? 'text-green-700/60' : 'text-gray-400'}`}>
+                          {formatTime(msg.createdAt)}
+                        </span>
+                        {isMine && !selectedContact.isSaved && (
+                          <span className="text-green-600/70">
+                            {msg.isRead ? <CheckCheck size={14} /> : <Check size={14} />}
+                          </span>
                         )}
                       </div>
                     </div>
-                  );
-                })
-              )}
-              <div ref={messagesEndRef} className="h-4" />
+                  </div>
+                );
+              })}
+              <div ref={messagesEndRef} className="h-2" />
             </div>
             
+            {/* Предпросмотр изображения */}
             {attachedImage && (
-              <div className="absolute bottom-[72px] md:bottom-[90px] left-4 md:left-8 z-20 animate-fade-in">
-                <div className="relative w-24 h-24 bg-white rounded-xl shadow-lg border border-gray-200 p-1">
+              <div className="absolute bottom-[70px] left-4 z-20">
+                <div className="relative w-16 h-16 bg-white rounded-xl shadow-lg border border-gray-200 p-1">
                   <img src={attachedImage} alt="preview" className="w-full h-full object-cover rounded-lg" />
-                  <button onClick={() => setAttachedImage('')} className="absolute -top-2 -right-2 bg-gray-950 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-md">
-                    <X size={12} />
-                  </button>
+                  <button onClick={() => setAttachedImage('')} className="absolute -top-2 -right-2 bg-gray-900 text-white w-5 h-5 rounded-full flex items-center justify-center"><X size={12} /></button>
                 </div>
               </div>
             )}
 
-            <div className="p-3 md:p-6 bg-white border-t border-gray-100 shrink-0">
-              <form onSubmit={handleSendMessage} className="flex gap-2 md:gap-3 max-w-4xl mx-auto items-end">
+            {/* Панель ввода */}
+            <div className="bg-white px-3 py-2 pb-safe md:pb-3 border-t border-gray-200 shrink-0">
+              <form onSubmit={handleSendMessage} className="flex items-end gap-2 max-w-4xl mx-auto relative">
                 <input type="file" ref={fileInputRef} onChange={handleImageAttach} accept="image/*" className="hidden" />
-                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploadingImage} className="w-[44px] h-[44px] md:w-[52px] md:h-[52px] shrink-0 bg-gray-50 text-gray-500 rounded-[14px] md:rounded-2xl flex items-center justify-center hover:bg-gray-100 hover:text-brand transition-all border border-gray-200/60">
-                  {isUploadingImage ? <Loader2 size={18} className="animate-spin" /> : <ImageIcon size={20} />}
+                
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploadingImage} className="p-2 text-gray-400 hover:text-blue-500 transition-colors shrink-0 mb-1">
+                  {isUploadingImage ? <Loader2 size={24} className="animate-spin" /> : <Paperclip size={24} />}
                 </button>
 
-                <div className="flex-1 relative bg-gray-50 border border-gray-200/60 rounded-[14px] md:rounded-2xl focus-within:border-gray-300 focus-within:bg-white focus-within:shadow-[0_2px_12px_rgba(0,0,0,0.03)] transition-all">
-                  <textarea 
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); }
-                    }}
-                    placeholder="Написать сообщение..." 
-                    className="w-full bg-transparent px-4 md:px-5 py-3.5 md:py-4 text-[13px] md:text-sm focus:outline-none text-gray-900 placeholder-gray-400 font-medium resize-none max-h-24 md:max-h-32 min-h-[44px] md:min-h-[52px] scrollbar-none"
-                    rows={1}
-                  />
-                </div>
+                <textarea 
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); } }}
+                  placeholder="Сообщение..." 
+                  className="flex-1 bg-transparent text-[16px] max-h-32 min-h-[40px] py-2 outline-none text-gray-900 resize-none custom-scrollbar"
+                  rows={1}
+                />
 
-                <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isSending || isUploadingImage} className="w-[44px] h-[44px] md:w-[52px] md:h-[52px] shrink-0 bg-gray-950 text-white rounded-[14px] md:rounded-2xl flex items-center justify-center hover:bg-gray-800 transition-all disabled:opacity-50 disabled:hover:bg-gray-950 shadow-md active:scale-95">
-                  {isSending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} className="ml-0.5" />}
+                <button 
+                  type="submit" 
+                  disabled={(!newMessage.trim() && !attachedImage) || isSending || isUploadingImage} 
+                  className={`p-2 shrink-0 mb-1 rounded-full transition-colors ${
+                    (newMessage.trim() || attachedImage) ? 'text-blue-500 hover:bg-blue-50' : 'text-gray-300'
+                  }`}
+                >
+                  {isSending ? <Loader2 size={24} className="animate-spin" /> : <Send size={24} />}
                 </button>
               </form>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center bg-[#FAFAFA] md:border-l border-gray-50 p-6">
-            <div className="w-16 h-16 bg-white border border-gray-100 shadow-sm rounded-2xl flex items-center justify-center mb-6">
-              <MessageSquare size={26} className="text-gray-300" />
+          <div className="flex-1 hidden md:flex flex-col items-center justify-center bg-gray-50/50">
+            <div className="bg-white/50 px-4 py-1.5 rounded-full font-medium text-[14px] text-gray-500 shadow-sm border border-gray-200/50">
+              Выберите чат, чтобы начать общение
             </div>
-            <h3 className="text-base font-black text-gray-900 tracking-tight text-center">Ваши диалоги</h3>
-            <p className="text-xs text-gray-400 mt-2 max-w-[260px] text-center font-medium leading-relaxed">
-              Выберите чат из списка, чтобы продолжить общение или отправить фото.
-            </p>
           </div>
         )}
       </div>
-
-      {/* ======= РЕНДЕР МОДАЛКИ ПРЕДПРОСМОТРА ПРОФИЛЯ ======= */}
-      {previewProfile && (
-        <ProfileModal 
-          profile={previewProfile} 
-          onClose={() => setPreviewProfile(null)} 
-        />
-      )}
-
     </div>
   );
 }

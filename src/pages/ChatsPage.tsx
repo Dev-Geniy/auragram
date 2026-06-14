@@ -9,7 +9,7 @@ import {
   Loader2, Paperclip, Check, CheckCheck, 
   Bookmark, ArrowLeft, Image as ExternalLink,
   Trash2, ShoppingBag, Truck, CheckCircle2, Package, 
-  Users, Zap, Clock // Изменили иконки для быстрых ответов
+  Users, Zap, Clock, Archive, ArchiveRestore // Добавлены иконки архива
 } from 'lucide-react';
 
 interface UserProfile {
@@ -84,12 +84,15 @@ const uploadToImgBB = async (file: File): Promise<string> => {
 };
 
 // -----------------------------------------------------
-// КОМПОНЕНТ ДЛЯ СВАЙПОВ
+// КОМПОНЕНТ ДЛЯ СВАЙПОВ (Обновлен под Архив)
 // -----------------------------------------------------
 const SwipeableContact = ({ 
-  contact, isSelected, onClick, onHide, onMarkRead 
+  contact, isSelected, onClick, onSwipeAction, onMarkRead,
+  actionIcon: ActionIcon, actionColorClass, actionBgClass 
 }: { 
-  contact: UserProfile, isSelected: boolean, onClick: () => void, onHide: (id: string) => void, onMarkRead: (id: string) => void 
+  contact: UserProfile, isSelected: boolean, onClick: () => void, 
+  onSwipeAction: (id: string) => void, onMarkRead: (id: string) => void,
+  actionIcon: any, actionColorClass: string, actionBgClass: string
 }) => {
   const [offsetX, setOffsetX] = useState(0);
   const startX = useRef(0);
@@ -115,19 +118,19 @@ const SwipeableContact = ({
     if (offsetX > 60) {
       onMarkRead(contact.id); 
     } else if (offsetX < -60) {
-      onHide(contact.id); 
+      onSwipeAction(contact.id); // Вызываем действие (Архив или Разархивация)
     }
     setOffsetX(0); 
   };
 
   return (
-    <div className="relative w-full overflow-hidden bg-[#F2F2F7] dark:bg-gray-950">
+    <div className="relative w-full overflow-hidden bg-[#F2F2F7] dark:bg-gray-950 border-b border-gray-100/50 dark:border-gray-800/50">
       <div className="absolute inset-0 flex justify-between">
         <div className={`w-1/2 bg-blue-50 flex items-center pl-4 text-white transition-opacity ${offsetX > 0 ? 'opacity-100' : 'opacity-0'}`}>
           <CheckCheck size={24} className="text-blue-500" />
         </div>
-        <div className={`w-1/2 bg-red-50 flex items-center justify-end pr-4 text-white transition-opacity ${offsetX < 0 ? 'opacity-100' : 'opacity-0'}`}>
-          <Trash2 size={24} className="text-red-500" />
+        <div className={`w-1/2 flex items-center justify-end pr-4 text-white transition-opacity ${offsetX < 0 ? 'opacity-100' : 'opacity-0'} ${actionBgClass}`}>
+          <ActionIcon size={24} className={actionColorClass} />
         </div>
       </div>
 
@@ -156,7 +159,7 @@ const SwipeableContact = ({
           />
         )}
         
-        <div className="flex-1 min-w-0 border-b border-gray-100/50 dark:border-gray-800/50 pb-2">
+        <div className="flex-1 min-w-0 pb-1">
           <h4 className={`font-semibold text-[15px] truncate ${isSelected ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
             {contact.name}
           </h4>
@@ -180,26 +183,32 @@ export default function ChatsPage() {
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   
   const [searchQuery, setSearchQuery] = useState('');
-  
   const [activeTab, setActiveTab] = useState<'all' | 'personal' | 'business' | 'clients'>('all');
   
-  const [hiddenContacts, setHiddenContacts] = useState<string[]>([]);
+  // 📁 НОВЫЕ СОСТОЯНИЯ АРХИВА
+  const [isArchiveMode, setIsArchiveMode] = useState(false);
+  const [archivedContacts, setArchivedContacts] = useState<string[]>([]);
+  
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [attachedImage, setAttachedImage] = useState<string>('');
   
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isSending, setIsSending] = useState(false);
-
   const [messageLimit, setMessageLimit] = useState(30);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Загрузка контактов и данных текущего профиля
+  // Загрузка контактов и данных
   useEffect(() => {
     if (!user) return;
+    
+    // Подгружаем архивные чаты из памяти
+    const savedArchive = localStorage.getItem(`archive_${user.uid}`);
+    if (savedArchive) setArchivedContacts(JSON.parse(savedArchive));
+
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
       const loadedUsers: UserProfile[] = [];
       snapshot.forEach((doc) => {
@@ -224,7 +233,6 @@ export default function ChatsPage() {
         const contact = globalUsers.find(c => c.id === location.state.selectedUserId);
         if (contact) {
           setSelectedContact(contact);
-          
           if (location.state.checkoutCart && location.state.checkoutCart.length > 0) {
             const cartItems = location.state.checkoutCart;
             const chatId = [user!.uid, contact.id].sort().join('_');
@@ -236,11 +244,7 @@ export default function ChatsPage() {
               return `${item.name} (${item.quantity} шт)`;
             }).join('\n');
 
-            const orderData = {
-              items: itemsList,
-              total: totalPrice,
-              status: 'new'
-            };
+            const orderData = { items: itemsList, total: totalPrice, status: 'new' };
 
             try {
               await addDoc(collection(db, 'messages'), {
@@ -253,11 +257,10 @@ export default function ChatsPage() {
                 createdAt: serverTimestamp(),
                 isRead: false
               });
-              
               clearCart(contact.id);
               navigate('.', { replace: true, state: {} }); 
             } catch (err) {
-              console.error('Ошибка создания заказа:', err);
+              console.error('Ошибка:', err);
             }
           }
         }
@@ -266,17 +269,14 @@ export default function ChatsPage() {
     processCheckout();
   }, [globalUsers, location.state, user, navigate, clearCart]);
 
-  // Загрузка сообщений
+  // ЗАГРУЗКА СООБЩЕНИЙ С ИСПРАВЛЕНИЕМ ЗАДЕРЖКИ
   useEffect(() => {
     if (!user || !selectedContact) {
-      setMessages([]); // Очищаем чат, если ничего не выбрано
+      setMessages([]);
       return;
     }
 
-    // 🔥 ИСПРАВЛЕНИЕ ГАЛЛЮЦИНАЦИЙ: 
-    // Мгновенно очищаем массив сообщений, чтобы при переключении 
-    // не моргали сообщения предыдущего человека.
-    setMessages([]);
+    setMessages([]); // Мгновенная очистка при переключении (исправление галлюцинаций)
     setMessageLimit(30);
 
     const chatId = [user.uid, selectedContact.id].sort().join('_');
@@ -290,7 +290,9 @@ export default function ChatsPage() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const loadedMessages: Message[] = [];
       snapshot.forEach((docSnap) => {
-        const msg = { id: docSnap.id, ...docSnap.data() } as Message;
+        // 🔥 ИСПРАВЛЕНИЕ: estimate заставляет новые сообщения появляться МОМЕНТАЛЬНО!
+        const data = docSnap.data({ serverTimestamps: 'estimate' }); 
+        const msg = { id: docSnap.id, ...data } as Message;
         loadedMessages.push(msg);
 
         if (msg.receiverId === user.uid && !msg.isRead && msg.senderId !== user.uid) {
@@ -335,7 +337,6 @@ export default function ChatsPage() {
       });
       setNewMessage('');
       setAttachedImage('');
-      setMessageLimit(30);
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (error) {
       console.error('Ошибка отправки:', error);
@@ -344,11 +345,8 @@ export default function ChatsPage() {
     }
   };
 
-  // -----------------------------------------------------
   // ФУНКЦИИ ШАБЛОНОВ БЕЗ ИИ
-  // -----------------------------------------------------
   const insertQuickReply = () => {
-    // Вставляем текст из настроек, который продавец сохранил заранее
     if (!currentUserProfile?.aiSettings?.contextPrompt) {
       alert("Сначала добавьте текст быстрого ответа в настройках профиля (поле Промпт)!");
       return;
@@ -357,29 +355,20 @@ export default function ChatsPage() {
   };
 
   const insertFollowUp = () => {
-    // Стандартное дружелюбное напоминание (можно позже вынести в настройки)
     setNewMessage("Здравствуйте! 👋 Вы ранее интересовались нашими товарами. Подскажите, актуален ли еще ваш запрос? Буду рад(а) помочь!");
   };
-  // -----------------------------------------------------
 
   const handleOrderStatusUpdate = async (msgId: string, newStatus: string, statusText: string) => {
     if (!user || !selectedContact) return;
     const chatId = [user.uid, selectedContact.id].sort().join('_');
-
     try {
       await updateDoc(doc(db, 'messages', msgId), { 'orderData.status': newStatus });
       await addDoc(collection(db, 'messages'), {
-        chatId,
-        type: 'system_status',
-        statusText,
-        senderId: user.uid, 
-        receiverId: selectedContact.id,
-        createdAt: serverTimestamp(),
-        isRead: false
+        chatId, type: 'system_status', statusText,
+        senderId: user.uid, receiverId: selectedContact.id,
+        createdAt: serverTimestamp(), isRead: false
       });
-    } catch (error) {
-      console.error('Ошибка обновления статуса:', error);
-    }
+    } catch (error) {}
   };
 
   const handleImageAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -398,24 +387,14 @@ export default function ChatsPage() {
     }
   };
 
-  const hideContact = (contactId: string) => {
-    setHiddenContacts(prev => [...prev, contactId]);
-    if (selectedContact?.id === contactId) setSelectedContact(null);
-  };
-
   const markChatAsRead = async (contactId: string) => {
     if (!user) return;
     const chatId = [user.uid, contactId].sort().join('_');
     const q = query(collection(db, 'messages'), where('chatId', '==', chatId), where('receiverId', '==', user.uid), where('isRead', '==', false));
-    
     try {
       const querySnapshot = await getDocs(q);
-      querySnapshot.forEach((docSnap) => {
-        updateDoc(doc(db, 'messages', docSnap.id), { isRead: true });
-      });
-    } catch (error) {
-      console.error('Ошибка отметки прочитанным:', error);
-    }
+      querySnapshot.forEach((docSnap) => updateDoc(doc(db, 'messages', docSnap.id), { isRead: true }));
+    } catch (error) {}
   };
 
   const formatTime = (timestamp: any) => {
@@ -424,21 +403,40 @@ export default function ChatsPage() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // ЛОГИКА ФИЛЬТРАЦИИ ДЛЯ ВКЛАДОК
+  // -----------------------------------------------------
+  // 📁 ФУНКЦИИ АРХИВАЦИИ
+  // -----------------------------------------------------
+  const handleArchive = (contactId: string) => {
+    const newArchived = [...archivedContacts, contactId];
+    setArchivedContacts(newArchived);
+    localStorage.setItem(`archive_${user?.uid}`, JSON.stringify(newArchived));
+    if (selectedContact?.id === contactId) setSelectedContact(null); // Закрываем чат, если он открыт
+  };
+
+  const handleUnarchive = (contactId: string) => {
+    const newArchived = archivedContacts.filter(id => id !== contactId);
+    setArchivedContacts(newArchived);
+    localStorage.setItem(`archive_${user?.uid}`, JSON.stringify(newArchived));
+  };
+
+  // ФИЛЬТРАЦИЯ КОНТАКТОВ ДЛЯ ТЕКУЩЕГО ОТОБРАЖЕНИЯ
   const filteredContacts = globalUsers.filter(c => {
-    if (hiddenContacts.includes(c.id)) return false;
     const matchSearch = c.name?.toLowerCase().includes(searchQuery.toLowerCase().trim());
     if (!matchSearch) return false;
     
+    // Если мы внутри Архива, показываем только архивированные
+    if (isArchiveMode) return archivedContacts.includes(c.id);
+    
+    // Если мы в обычных вкладках, прячем архивированные
+    if (archivedContacts.includes(c.id)) return false;
+
     if (activeTab === 'personal') return c.type !== 'business' || c.isSaved;
     if (activeTab === 'business') return c.type === 'business';
-    
     if (activeTab === 'clients') return c.type !== 'business' && !c.isSaved;
     
     return true; 
   });
 
-  // КНОПКИ ШАБЛОНОВ ДОСТУПНЫ ТОЛЬКО: бизнес аккаунту + включен "умный" тумблер + вкладка КЛИЕНТЫ
   const isTemplatesAllowed = 
     currentUserProfile?.type === 'business' && 
     currentUserProfile?.aiSettings?.isEnabled && 
@@ -451,71 +449,104 @@ export default function ChatsPage() {
       {/* ЛЕВАЯ ПАНЕЛЬ: СПИСОК ЧАТОВ */}
       <div className={`w-full md:w-[320px] lg:w-[380px] shrink-0 bg-white dark:bg-gray-900 md:border-r border-gray-200 dark:border-gray-800 flex flex-col z-10 transition-colors ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
         
-        <div className="pt-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
-          <div className="px-3 mb-3">
-            <div className="relative flex items-center bg-[#F2F2F7] dark:bg-gray-800 rounded-[10px] px-3 py-1.5 focus-within:bg-gray-200/80 dark:focus-within:bg-gray-700 transition-colors">
-              <Search className="text-gray-400 dark:text-gray-500 shrink-0" size={18} />
-              <input 
-                type="text" 
-                placeholder="Поиск..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-transparent pl-2 pr-8 py-1 text-[15px] focus:outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                  <X size={16} />
+        {/* Хедер левой панели: Если в архиве — кнопка назад, иначе обычный поиск и табы */}
+        {isArchiveMode ? (
+          <div className="pt-4 pb-3 border-b border-gray-100 dark:border-gray-800 shrink-0 bg-blue-50/50 dark:bg-gray-800/50">
+            <button onClick={() => setIsArchiveMode(false)} className="flex items-center gap-2 px-4 text-blue-600 dark:text-blue-400 font-bold transition-colors hover:opacity-80">
+              <ArrowLeft size={20} />
+              Вернуться к чатам
+            </button>
+          </div>
+        ) : (
+          <div className="pt-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
+            <div className="px-3 mb-3">
+              <div className="relative flex items-center bg-[#F2F2F7] dark:bg-gray-800 rounded-[10px] px-3 py-1.5 focus-within:bg-gray-200/80 dark:focus-within:bg-gray-700 transition-colors">
+                <Search className="text-gray-400 dark:text-gray-500 shrink-0" size={18} />
+                <input 
+                  type="text" 
+                  placeholder="Поиск..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-transparent pl-2 pr-8 py-1 text-[15px] focus:outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} className="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex px-3 pb-2 gap-2 overflow-x-auto scrollbar-none">
+              <button 
+                onClick={() => setActiveTab('all')} 
+                className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+              >
+                Все
+              </button>
+              <button 
+                onClick={() => setActiveTab('personal')} 
+                className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'personal' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+              >
+                Личные
+              </button>
+              <button 
+                onClick={() => setActiveTab('business')} 
+                className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'business' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+              >
+                Магазины
+              </button>
+              {currentUserProfile?.type === 'business' && (
+                <button 
+                  onClick={() => setActiveTab('clients')} 
+                  className={`px-4 py-1.5 rounded-full text-[13px] font-medium flex items-center gap-1.5 transition-colors shrink-0 ${activeTab === 'clients' ? 'bg-indigo-500 text-white' : 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20'}`}
+                >
+                  <Users size={14} /> Заказы
                 </button>
               )}
             </div>
           </div>
-          
-          <div className="flex px-3 pb-2 gap-2 overflow-x-auto scrollbar-none">
-            <button 
-              onClick={() => setActiveTab('all')} 
-              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
-            >
-              Все
-            </button>
-            <button 
-              onClick={() => setActiveTab('personal')} 
-              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'personal' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
-            >
-              Личные
-            </button>
-            <button 
-              onClick={() => setActiveTab('business')} 
-              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'business' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
-            >
-              Магазины
-            </button>
-
-            {/* ВКЛАДКА КЛИЕНТЫ/ЗАКАЗЫ - ДОСТУПНА ТОЛЬКО БИЗНЕСУ */}
-            {currentUserProfile?.type === 'business' && (
-              <button 
-                onClick={() => setActiveTab('clients')} 
-                className={`px-4 py-1.5 rounded-full text-[13px] font-medium flex items-center gap-1.5 transition-colors shrink-0 ${activeTab === 'clients' ? 'bg-indigo-500 text-white' : 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20'}`}
-              >
-                <Users size={14} /> Заказы
-              </button>
-            )}
-          </div>
-        </div>
+        )}
         
         <div className="flex-1 overflow-y-auto custom-scrollbar">
+          
+          {/* ПАПКА АРХИВА (Показываем только во вкладке "Все" если есть архивные чаты) */}
+          {!isArchiveMode && archivedContacts.length > 0 && activeTab === 'all' && (
+            <div 
+              onClick={() => setIsArchiveMode(true)}
+              className="flex items-center gap-3 px-4 py-3 cursor-pointer bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors border-b border-gray-100/50 dark:border-gray-800/50"
+            >
+              <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+                <Archive size={22} className="text-blue-500 dark:text-blue-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-bold text-[15px] text-gray-900 dark:text-white">Архив</h4>
+                <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400">Сохраненные чаты ({archivedContacts.length})</p>
+              </div>
+            </div>
+          )}
+
           {filteredContacts.map(contact => (
             <SwipeableContact 
               key={contact.id}
               contact={contact}
               isSelected={selectedContact?.id === contact.id}
               onClick={() => setSelectedContact(contact)}
-              onHide={hideContact}
+              onSwipeAction={isArchiveMode ? handleUnarchive : handleArchive}
               onMarkRead={markChatAsRead}
+              // Динамические стили для свайпа: Разархивировать (синий) или Архивить (оранжевый)
+              actionIcon={isArchiveMode ? ArchiveRestore : Archive}
+              actionBgClass={isArchiveMode ? "bg-blue-50" : "bg-orange-50"}
+              actionColorClass={isArchiveMode ? "text-blue-500" : "text-orange-500"}
             />
           ))}
+          
           {filteredContacts.length === 0 && (
-             <div className="text-center mt-10 text-gray-400 dark:text-gray-500 text-[14px]">
-               В этой папке пусто
+             <div className="flex flex-col items-center justify-center mt-10 opacity-50">
+               <ArchiveRestore size={48} className="text-gray-400 dark:text-gray-600 mb-2" />
+               <div className="text-gray-500 dark:text-gray-400 text-[14px] font-medium">
+                 {isArchiveMode ? 'В архиве пусто' : 'В этой папке пусто'}
+               </div>
              </div>
           )}
         </div>
@@ -526,36 +557,46 @@ export default function ChatsPage() {
         
         {selectedContact ? (
           <>
-            <div className="h-[60px] bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200/60 dark:border-gray-800 flex items-center px-4 shrink-0 shadow-sm z-10 transition-colors">
-              <button 
-                onClick={() => setSelectedContact(null)}
-                className="md:hidden mr-3 text-blue-500 dark:text-blue-400 p-1"
-              >
-                <ArrowLeft size={24} />
-              </button>
-              
-              <div className="flex items-center gap-3 cursor-pointer">
-                {selectedContact.isSaved ? (
-                  <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center">
-                    <Bookmark size={18} />
+            <div className="h-[60px] bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200/60 dark:border-gray-800 flex items-center justify-between px-4 shrink-0 shadow-sm z-10 transition-colors">
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => setSelectedContact(null)}
+                  className="md:hidden text-blue-500 dark:text-blue-400 p-1"
+                >
+                  <ArrowLeft size={24} />
+                </button>
+                
+                <div className="flex items-center gap-3 cursor-pointer">
+                  {selectedContact.isSaved ? (
+                    <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center">
+                      <Bookmark size={18} />
+                    </div>
+                  ) : (
+                    <img 
+                      src={selectedContact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}`} 
+                      alt={selectedContact.name} 
+                      loading="lazy"
+                      className="w-10 h-10 rounded-full object-cover bg-gray-100 dark:bg-gray-800" 
+                    />
+                  )}
+                  <div>
+                    <h3 className="font-semibold text-[15px] text-gray-900 dark:text-white leading-tight">
+                      {selectedContact.name}
+                    </h3>
+                    <span className="text-[12px] text-blue-500 dark:text-blue-400 font-medium">
+                      {selectedContact.isSaved ? 'Избранное' : 'в сети'}
+                    </span>
                   </div>
-                ) : (
-                  <img 
-                    src={selectedContact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}`} 
-                    alt={selectedContact.name} 
-                    loading="lazy"
-                    className="w-10 h-10 rounded-full object-cover bg-gray-100 dark:bg-gray-800" 
-                  />
-                )}
-                <div>
-                  <h3 className="font-semibold text-[15px] text-gray-900 dark:text-white leading-tight">
-                    {selectedContact.name}
-                  </h3>
-                  <span className="text-[12px] text-blue-500 dark:text-blue-400 font-medium">
-                    {selectedContact.isSaved ? 'Избранное' : 'в сети'}
-                  </span>
                 </div>
               </div>
+
+              {/* Кнопка "Вернуться к чатам" на десктопе */}
+              <button 
+                onClick={() => setSelectedContact(null)} 
+                className="hidden md:flex items-center gap-1.5 text-[13px] font-bold text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
+              >
+                Закрыть чат <X size={16} />
+              </button>
             </div>
             
             <div 
@@ -604,7 +645,6 @@ export default function ChatsPage() {
                         : 'bg-white dark:bg-[#202020] text-gray-900 dark:text-white rounded-2xl rounded-tl-sm border border-gray-100 dark:border-gray-800 shadow-sm'
                     } ${(isCard || isReceipt) ? 'p-1.5' : 'px-3 pt-2 pb-1.5 text-[15px] leading-relaxed'}`}>
                       
-                      {/* ЧЕК ЗАКАЗА */}
                       {isReceipt ? (
                         <div className="flex flex-col min-w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-blue-200 dark:border-blue-900 shadow-sm">
                           <div className="bg-blue-50 dark:bg-blue-900/30 p-3 border-b border-blue-100 dark:border-blue-800/50 flex items-center justify-between">
@@ -638,7 +678,6 @@ export default function ChatsPage() {
                           )}
                         </div>
                       ) 
-                      /* КАРТОЧКА ТОВАРА */
                       : isCard ? (
                         <div className="flex flex-col w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-200/50 dark:border-gray-700">
                           <img src={msg.cardData!.imageUrl} loading="lazy" className="w-full h-36 object-cover" alt="card" />
@@ -651,7 +690,6 @@ export default function ChatsPage() {
                           </div>
                         </div>
                       ) 
-                      /* ТЕКСТ ИЛИ КАРТИНКА */
                       : (
                         <>
                           {msg.imageUrl && <img src={msg.imageUrl} loading="lazy" alt="attachment" className="w-full max-w-[280px] h-auto rounded-xl mb-1 object-cover" />}

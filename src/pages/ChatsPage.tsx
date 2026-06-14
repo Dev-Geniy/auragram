@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, orderBy, limit, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -8,8 +8,8 @@ import {
   Send, Search, X, ShieldCheck, 
   Loader2, Paperclip, Check, CheckCheck, 
   Bookmark, ArrowLeft, Image as ExternalLink,
-  ShoppingBag, Truck, CheckCircle2, Package, 
-  Users, Zap, Clock, Archive, ArchiveRestore, Reply
+  Trash2, ShoppingBag, Truck, CheckCircle2, Package, 
+  Users, Zap, Clock, Archive, ArchiveRestore, Reply 
 } from 'lucide-react';
 
 interface UserProfile {
@@ -52,13 +52,19 @@ const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
         const scaleSize = maxWidth / img.width;
         const width = img.width > maxWidth ? maxWidth : img.width;
         const height = img.width > maxWidth ? img.height * scaleSize : img.height;
+        
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
+        
         canvas.toBlob((blob) => {
-          if (blob) resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
-          else reject(new Error('Ошибка сжатия'));
+          if (blob) {
+            const newFile = new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() });
+            resolve(newFile);
+          } else {
+            reject(new Error('Ошибка сжатия'));
+          }
         }, 'image/jpeg', 0.8);
       };
     };
@@ -70,7 +76,11 @@ const uploadToImgBB = async (file: File): Promise<string> => {
   const formData = new FormData();
   formData.append('image', file);
   const API_KEY = '22de10db6eb1f3ec3fca012dcc566961'; 
-  const res = await fetch(`https://api.imgbb.com/1/upload?key=${API_KEY}`, { method: 'POST', body: formData });
+  
+  const res = await fetch(`https://api.imgbb.com/1/upload?key=${API_KEY}`, {
+    method: 'POST',
+    body: formData,
+  });
   const data = await res.json();
   if (data.success) return data.data.url;
   throw new Error('Ошибка загрузки');
@@ -143,7 +153,9 @@ const SwipeableContact = ({
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isDragging.current) return;
-    const diff = e.touches[0].clientX - startX.current;
+    const currentX = e.touches[0].clientX;
+    const diff = currentX - startX.current;
+    
     if (diff > 80) setOffsetX(80);
     else if (diff < -80) setOffsetX(-80);
     else setOffsetX(diff);
@@ -151,8 +163,11 @@ const SwipeableContact = ({
 
   const handleTouchEnd = () => {
     isDragging.current = false;
-    if (offsetX > 60) onMarkRead(contact.id); 
-    else if (offsetX < -60) onSwipeAction(contact.id);
+    if (offsetX > 60) {
+      onMarkRead(contact.id); 
+    } else if (offsetX < -60) {
+      onSwipeAction(contact.id);
+    }
     setOffsetX(0); 
   };
 
@@ -174,18 +189,31 @@ const SwipeableContact = ({
         onClick={onClick}
         style={{ transform: `translateX(${offsetX}px)` }}
         className={`relative z-10 flex items-center gap-3 px-4 py-3 cursor-pointer transition-all duration-200 ${
-          isSelected ? 'bg-blue-500 text-white' : 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 dark:text-white'
+          isSelected 
+            ? 'bg-blue-500 text-white' 
+            : 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 dark:text-white'
         }`}
       >
         {contact.isSaved ? (
-          <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-500 text-white'}`}><Bookmark size={20} /></div>
+          <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-500 text-white'}`}>
+            <Bookmark size={20} />
+          </div>
         ) : (
-          <img src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} alt={contact.name} loading="lazy" className="w-12 h-12 rounded-full object-cover shrink-0 bg-gray-100 dark:bg-gray-800" />
+          <img 
+            src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} 
+            alt={contact.name} 
+            loading="lazy"
+            className="w-12 h-12 rounded-full object-cover shrink-0 bg-gray-100 dark:bg-gray-800" 
+          />
         )}
         
         <div className="flex-1 min-w-0 pb-1">
-          <h4 className={`font-semibold text-[15px] truncate ${isSelected ? 'text-white' : 'text-gray-900 dark:text-white'}`}>{contact.name}</h4>
-          <p className={`text-[13px] truncate ${isSelected ? 'text-white/80' : 'text-gray-500 dark:text-gray-400'}`}>{contact.isSaved ? 'Сохраненные сообщения' : contact.type === 'business' ? 'Бизнес-аккаунт' : 'Клиент'}</p>
+          <h4 className={`font-semibold text-[15px] truncate ${isSelected ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
+            {contact.name}
+          </h4>
+          <p className={`text-[13px] truncate ${isSelected ? 'text-white/80' : 'text-gray-500 dark:text-gray-400'}`}>
+            {contact.isSaved ? 'Сохраненные сообщения' : contact.type === 'business' ? 'Бизнес-аккаунт' : 'Клиент'}
+          </p>
         </div>
       </div>
     </div>
@@ -215,10 +243,9 @@ export default function ChatsPage() {
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   
   const [isUploadingImage, setIsUploadingImage] = useState(false);
-  const [isSending, setIsSending] = useState(false);
   const [messageLimit, setMessageLimit] = useState(30);
   
-  const prevChatIdRef = useRef<string | null>(null); // Защита от мигания
+  const currentChatRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -227,17 +254,18 @@ export default function ChatsPage() {
   useEffect(() => {
     if (!user) return;
     const updatePresence = async () => {
-      // 🔥 Используем new Date() вместо serverTimestamp()
-      try { await updateDoc(doc(db, 'users', user.uid), { lastSeen: new Date() }); } catch (error) {}
+      // Используем Timestamp.now() вместо serverTimestamp() чтобы избежать проблем
+      try { await updateDoc(doc(db, 'users', user.uid), { lastSeen: Timestamp.now() }); } catch (error) {}
     };
     updatePresence();
     const interval = setInterval(updatePresence, 60000); 
     return () => clearInterval(interval);
   }, [user?.uid]);
 
-  // Загрузка профилей
+  // Загрузка контактов и Архива
   useEffect(() => {
     if (!user) return;
+    
     const savedArchive = localStorage.getItem(`archive_${user.uid}`);
     if (savedArchive) setArchivedContacts(JSON.parse(savedArchive));
 
@@ -263,6 +291,7 @@ export default function ChatsPage() {
         const contact = globalUsers.find(c => c.id === location.state.selectedUserId);
         if (contact) {
           setSelectedContact(contact);
+          
           if (location.state.checkoutCart && location.state.checkoutCart.length > 0) {
             const cartItems = location.state.checkoutCart;
             const chatId = [user!.uid, contact.id].sort().join('_');
@@ -274,12 +303,17 @@ export default function ChatsPage() {
               return `${item.name} (${item.quantity} шт)`;
             }).join('\n');
 
+            const orderData = { items: itemsList, total: totalPrice, status: 'new' };
+
             try {
               await addDoc(collection(db, 'messages'), {
-                chatId, text: '🛒 Оформлен новый заказ!', type: 'order_receipt',
-                orderData: { items: itemsList, total: totalPrice, status: 'new' },
-                senderId: user!.uid, receiverId: contact.id, 
-                createdAt: new Date(), // 🔥 МОМЕНТАЛЬНОЕ ОТОБРАЖЕНИЕ
+                chatId,
+                text: '🛒 Оформлен новый заказ!',
+                type: 'order_receipt',
+                orderData,
+                senderId: user!.uid,
+                receiverId: contact.id,
+                createdAt: Timestamp.now(), // 🔥 МОМЕНТАЛЬНО!
                 isRead: false
               });
               clearCart(contact.id);
@@ -292,22 +326,22 @@ export default function ChatsPage() {
     processCheckout();
   }, [globalUsers, location.state, user, navigate, clearCart]);
 
-  // ЗАГРУЗКА СООБЩЕНИЙ С ИСПРАВЛЕНИЕМ МЕРЦАНИЯ И ИСЧЕЗНОВЕНИЙ
+  // ЗАГРУЗКА СООБЩЕНИЙ С ИСПРАВЛЕНИЕМ ИСЧЕЗНОВЕНИЙ
   useEffect(() => {
     if (!user || !selectedContact) {
       setMessages([]);
-      prevChatIdRef.current = null;
+      currentChatRef.current = null;
       return;
     }
 
     const chatId = [user.uid, selectedContact.id].sort().join('_');
-
-    // Очищаем чат ТОЛЬКО когда мы реально переключились на другого человека
-    if (prevChatIdRef.current !== chatId) {
+    
+    // Очищаем массив сообщений ТОЛЬКО если мы реально переключились на другого человека
+    if (currentChatRef.current !== chatId) {
       setMessages([]); 
       setMessageLimit(30);
       setReplyingTo(null); 
-      prevChatIdRef.current = chatId;
+      currentChatRef.current = chatId;
     }
 
     const q = query(
@@ -317,7 +351,8 @@ export default function ChatsPage() {
       limit(messageLimit)
     );
     
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    // includeMetadataChanges позволяет ловить наши локальные отправки моментально
+    const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
       const loadedMessages: Message[] = [];
       snapshot.forEach((docSnap) => {
         const msg = { id: docSnap.id, ...docSnap.data() } as Message;
@@ -339,46 +374,49 @@ export default function ChatsPage() {
   }, [user?.uid, selectedContact?.id, messageLimit]);
 
   const handleScroll = () => {
-    if (chatContainerRef.current) {
-      if (chatContainerRef.current.scrollTop === 0) {
-        setMessageLimit((prev) => prev + 30);
-      }
+    if (chatContainerRef.current && chatContainerRef.current.scrollTop === 0) {
+      setMessageLimit((prev) => prev + 30);
     }
   };
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!user || !selectedContact || (!newMessage.trim() && !attachedImage) || isSending) return;
+    if (!user || !selectedContact || (!newMessage.trim() && !attachedImage)) return;
 
-    setIsSending(true);
+    // Сохраняем данные для отправки локально
+    const currentText = newMessage.trim();
+    const currentImage = attachedImage;
+    const currentReply = replyingTo;
+
+    // ⚡ ОПТИМИСТИЧНЫЙ UI: Очищаем форму МОМЕНТАЛЬНО, не дожидаясь ответа сервера
+    setNewMessage('');
+    setAttachedImage('');
+    setReplyingTo(null);
+    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+
     const chatId = [user.uid, selectedContact.id].sort().join('_');
 
     const messageData: any = {
       chatId,
-      text: newMessage.trim(),
-      imageUrl: attachedImage,
+      text: currentText,
+      imageUrl: currentImage,
       senderId: user.uid,
       receiverId: selectedContact.id,
-      createdAt: new Date(), // 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Локальная дата, ничего не пропадает из orderBy!
+      // 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Точное время, из-за этого Firebase больше не выкинет сообщение в топ списка
+      createdAt: Timestamp.now(), 
       isRead: false
     };
 
-    if (replyingTo) {
-      messageData.replyToText = replyingTo.text || (replyingTo.imageUrl ? 'Фотография' : 'Вложение');
-      messageData.replyToSender = replyingTo.senderId === user.uid ? 'Вы' : selectedContact.name;
+    if (currentReply) {
+      messageData.replyToText = currentReply.text || (currentReply.imageUrl ? 'Фотография' : 'Вложение');
+      messageData.replyToSender = currentReply.senderId === user.uid ? 'Вы' : selectedContact.name;
     }
 
     try {
-      // Отправляем и сразу скроллим вниз!
+      // Отправляем. Кэш Firebase мгновенно обновит onSnapshot
       await addDoc(collection(db, 'messages'), messageData);
-      setNewMessage('');
-      setAttachedImage('');
-      setReplyingTo(null); 
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     } catch (error) {
       console.error('Ошибка отправки:', error);
-    } finally {
-      setIsSending(false);
     }
   };
 
@@ -387,17 +425,25 @@ export default function ChatsPage() {
     setNewMessage(currentUserProfile.aiSettings.contextPrompt);
   };
 
-  const insertFollowUp = () => setNewMessage("Здравствуйте! 👋 Вы ранее интересовались нашими товарами. Подскажите, актуален ли еще ваш запрос? Буду рад(а) помочь!");
+  const insertFollowUp = () => {
+    setNewMessage("Здравствуйте! 👋 Вы ранее интересовались нашими товарами. Подскажите, актуален ли еще ваш запрос? Буду рад(а) помочь!");
+  };
 
   const handleOrderStatusUpdate = async (msgId: string, newStatus: string, statusText: string) => {
     if (!user || !selectedContact) return;
     const chatId = [user.uid, selectedContact.id].sort().join('_');
+    
+    // ⚡ Оптимистичное обновление: сразу меняем статус в интерфейсе, чтобы не ждать ответа
+    setMessages(prev => prev.map(msg => 
+      msg.id === msgId ? { ...msg, orderData: { ...msg.orderData, status: newStatus } } : msg
+    ));
+
     try {
       await updateDoc(doc(db, 'messages', msgId), { 'orderData.status': newStatus });
       await addDoc(collection(db, 'messages'), {
         chatId, type: 'system_status', statusText,
         senderId: user.uid, receiverId: selectedContact.id,
-        createdAt: new Date(), // 🔥 МОМЕНТАЛЬНОЕ ПОЯВЛЕНИЕ
+        createdAt: Timestamp.now(), // 🔥 МОМЕНТАЛЬНОЕ ПОЯВЛЕНИЕ
         isRead: false 
       });
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
@@ -412,8 +458,12 @@ export default function ChatsPage() {
       const compressedFile = await compressImage(file, 800);
       const url = await uploadToImgBB(compressedFile);
       setAttachedImage(url);
-    } catch (error) { alert('Не удалось загрузить изображение.'); } 
-    finally { setIsUploadingImage(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
+    } catch (error) {
+      alert('Не удалось загрузить изображение.');
+    } finally {
+      setIsUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const markChatAsRead = async (contactId: string) => {
@@ -432,11 +482,12 @@ export default function ChatsPage() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // ОНЛАЙН СТАТУС
+  // ОНЛАЙН СТАТУС: Безотказная математическая логика
   const getOnlineStatus = (lastSeen: any) => {
     if (!lastSeen) return 'был(а) давно';
     const last = lastSeen.toDate ? lastSeen.toDate() : new Date(lastSeen);
     const now = new Date();
+    
     const diffMs = now.getTime() - last.getTime();
     const diffMins = Math.floor(diffMs / (1000 * 60));
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
@@ -486,6 +537,7 @@ export default function ChatsPage() {
     if (activeTab === 'personal') return c.type !== 'business' || c.isSaved;
     if (activeTab === 'business') return c.type === 'business';
     if (activeTab === 'clients') return c.type !== 'business' && !c.isSaved;
+    
     return true; 
   });
 
@@ -500,7 +552,9 @@ export default function ChatsPage() {
         
         {isArchiveMode ? (
           <div className="pt-4 pb-3 border-b border-gray-100 dark:border-gray-800 shrink-0 bg-blue-50/50 dark:bg-gray-800/50">
-            <button onClick={() => setIsArchiveMode(false)} className="flex items-center gap-2 px-4 text-blue-600 dark:text-blue-400 font-bold transition-colors hover:opacity-80"><ArrowLeft size={20} /> Вернуться к чатам</button>
+            <button onClick={() => setIsArchiveMode(false)} className="flex items-center gap-2 px-4 text-blue-600 dark:text-blue-400 font-bold transition-colors hover:opacity-80">
+              <ArrowLeft size={20} /> Вернуться к чатам
+            </button>
           </div>
         ) : (
           <div className="pt-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
@@ -515,7 +569,9 @@ export default function ChatsPage() {
               <button onClick={() => setActiveTab('all')} className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>Все</button>
               <button onClick={() => setActiveTab('personal')} className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'personal' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>Личные</button>
               <button onClick={() => setActiveTab('business')} className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'business' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>Магазины</button>
-              {currentUserProfile?.type === 'business' && <button onClick={() => setActiveTab('clients')} className={`px-4 py-1.5 rounded-full text-[13px] font-medium flex items-center gap-1.5 transition-colors shrink-0 ${activeTab === 'clients' ? 'bg-indigo-500 text-white' : 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20'}`}><Users size={14} /> Заказы</button>}
+              {currentUserProfile?.type === 'business' && (
+                <button onClick={() => setActiveTab('clients')} className={`px-4 py-1.5 rounded-full text-[13px] font-medium flex items-center gap-1.5 transition-colors shrink-0 ${activeTab === 'clients' ? 'bg-indigo-500 text-white' : 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20'}`}><Users size={14} /> Заказы</button>
+              )}
             </div>
           </div>
         )}
@@ -713,7 +769,7 @@ export default function ChatsPage() {
                 <input type="file" ref={fileInputRef} onChange={handleImageAttach} accept="image/*" className="hidden" />
                 <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploadingImage} className="p-2 text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors shrink-0 mb-1">{isUploadingImage ? <Loader2 size={24} className="animate-spin" /> : <Paperclip size={24} />}</button>
                 <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }} placeholder="Сообщение..." className="flex-1 bg-transparent text-[16px] max-h-32 min-h-[40px] py-2 outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none custom-scrollbar" rows={1} />
-                <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isSending || isUploadingImage} className={`p-2 shrink-0 mb-1 rounded-full transition-colors ${(newMessage.trim() || attachedImage) ? 'text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10' : 'text-gray-300 dark:text-gray-600'}`}>{isSending ? <Loader2 size={24} className="animate-spin" /> : <Send size={24} />}</button>
+                <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isUploadingImage} className={`p-2 shrink-0 mb-1 rounded-full transition-colors ${(newMessage.trim() || attachedImage) ? 'text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10' : 'text-gray-300 dark:text-gray-600'}`}><Send size={24} /></button>
               </form>
             </div>
           </>

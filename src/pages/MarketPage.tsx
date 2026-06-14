@@ -39,6 +39,9 @@ export default function MarketPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('Все');
 
+  // Лимит отображаемых товаров (Пагинация)
+  const [displayLimit, setDisplayLimit] = useState(20);
+
   useEffect(() => {
     const fetchMarketData = async () => {
       setIsLoading(true);
@@ -102,6 +105,24 @@ export default function MarketPage() {
     });
   }, [allProducts, activeCategory, searchQuery]);
 
+  // Сбрасываем лимит пагинации при смене категории или поиске
+  useEffect(() => {
+    setDisplayLimit(20);
+  }, [searchQuery, activeCategory]);
+
+  // Отображаемые товары (срез массива)
+  const displayedProducts = filteredProducts.slice(0, displayLimit);
+
+  // Обработчик скролла (Infinite Scroll)
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, clientHeight, scrollHeight } = e.currentTarget;
+    // Если доскроллили до низа (с запасом 100px)
+    if (scrollHeight - scrollTop <= clientHeight + 100) {
+      if (displayLimit < filteredProducts.length) {
+        setDisplayLimit(prev => prev + 20); // Подгружаем еще 20
+      }
+    }
+  };
 
   if (isLoading) {
     return (
@@ -162,58 +183,72 @@ export default function MarketPage() {
         </div>
       </div>
 
-      {/* СЕТКА ТОВАРОВ */}
-      <div className="flex-1 overflow-y-auto pb-24 custom-scrollbar">
+      {/* СЕТКА ТОВАРОВ (с обработчиком скролла) */}
+      <div 
+        className="flex-1 overflow-y-auto pb-24 custom-scrollbar"
+        onScroll={handleScroll}
+      >
         <div className="max-w-4xl mx-auto p-4">
-          {filteredProducts.length > 0 ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-              {filteredProducts.map(product => (
-                <div key={product.id} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-200/50 flex flex-col active:scale-[0.98] transition-transform">
-                  
-                  {/* Изображение товара */}
-                  <div className="relative h-32 sm:h-40 bg-gray-100 shrink-0 overflow-hidden">
-                    {product.imageUrl ? (
-                      <img 
-                        src={product.imageUrl} 
-                        alt={product.name} 
-                        className="w-full h-full object-cover" 
-                      />
-                    ) : (
-                      <Package className="absolute inset-0 m-auto text-gray-300" size={32} />
-                    )}
-                  </div>
-                  
-                  {/* Информация */}
-                  <div className="p-3 flex flex-col flex-1">
-                    <h3 className="font-medium text-gray-900 text-[14px] leading-tight line-clamp-2 mb-1">
-                      {product.name}
-                    </h3>
-                    <p className="text-[14px] font-bold text-gray-900 mt-auto">
-                      {product.price}
-                    </p>
+          {displayedProducts.length > 0 ? (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+                {displayedProducts.map(product => (
+                  <div key={product.id} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-200/50 flex flex-col active:scale-[0.98] transition-transform">
                     
-                    {/* Магазин продавец */}
-                    <Link 
-                      to={`/shop/${product.shopId}`} 
-                      className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between group"
-                    >
-                      <div className="flex items-center gap-1.5 min-w-0">
+                    {/* Изображение товара */}
+                    <div className="relative h-32 sm:h-40 bg-gray-100 shrink-0 overflow-hidden">
+                      {product.imageUrl ? (
                         <img 
-                          src={product.shopAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(product.shopName)}&background=random`} 
-                          alt={product.shopName} 
-                          className="w-5 h-5 rounded-full object-cover border border-gray-200 shrink-0" 
+                          src={product.imageUrl} 
+                          alt={product.name} 
+                          loading="lazy" // ЛЕНИВАЯ ЗАГРУЗКА
+                          className="w-full h-full object-cover" 
                         />
-                        <span className="text-[11px] font-medium text-gray-500 truncate group-hover:text-blue-500 transition-colors">
-                          {product.shopName}
-                        </span>
-                      </div>
-                      <ChevronRight size={14} className="text-gray-300 shrink-0" />
-                    </Link>
-                  </div>
+                      ) : (
+                        <Package className="absolute inset-0 m-auto text-gray-300" size={32} />
+                      )}
+                    </div>
+                    
+                    {/* Информация */}
+                    <div className="p-3 flex flex-col flex-1">
+                      <h3 className="font-medium text-gray-900 text-[14px] leading-tight line-clamp-2 mb-1">
+                        {product.name}
+                      </h3>
+                      <p className="text-[14px] font-bold text-gray-900 mt-auto">
+                        {product.price}
+                      </p>
+                      
+                      {/* Магазин продавец */}
+                      <Link 
+                        to={`/shop/${product.shopId}`} 
+                        className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between group"
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <img 
+                            src={product.shopAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(product.shopName)}&background=random`} 
+                            alt={product.shopName} 
+                            loading="lazy" // ЛЕНИВАЯ ЗАГРУЗКА
+                            className="w-5 h-5 rounded-full object-cover border border-gray-200 shrink-0" 
+                          />
+                          <span className="text-[11px] font-medium text-gray-500 truncate group-hover:text-blue-500 transition-colors">
+                            {product.shopName}
+                          </span>
+                        </div>
+                        <ChevronRight size={14} className="text-gray-300 shrink-0" />
+                      </Link>
+                    </div>
 
+                  </div>
+                ))}
+              </div>
+              
+              {/* Лоадер при подгрузке следующих товаров */}
+              {displayLimit < filteredProducts.length && (
+                <div className="flex justify-center py-6">
+                  <Loader2 className="animate-spin text-gray-400" size={24} />
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           ) : (
             <div className="py-20 text-center flex flex-col items-center justify-center">
               <Package size={48} className="text-gray-300 mb-3" />

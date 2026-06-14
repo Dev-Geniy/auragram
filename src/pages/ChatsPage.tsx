@@ -9,7 +9,7 @@ import {
   Loader2, Paperclip, Check, CheckCheck, 
   Bookmark, ArrowLeft, Image as ExternalLink,
   Trash2, ShoppingBag, Truck, CheckCircle2, Package, 
-  Bot, Sparkles, Users // Добавили иконку Users для папки клиентов
+  Users, Zap, Clock // Изменили иконки для быстрых ответов
 } from 'lucide-react';
 
 interface UserProfile {
@@ -181,7 +181,6 @@ export default function ChatsPage() {
   
   const [searchQuery, setSearchQuery] = useState('');
   
-  // ДОБАВЛЕНА НОВАЯ ВКЛАДКА 'clients'
   const [activeTab, setActiveTab] = useState<'all' | 'personal' | 'business' | 'clients'>('all');
   
   const [hiddenContacts, setHiddenContacts] = useState<string[]>([]);
@@ -191,7 +190,6 @@ export default function ChatsPage() {
   
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [isGeneratingAi, setIsGeneratingAi] = useState(false); 
 
   const [messageLimit, setMessageLimit] = useState(30);
   
@@ -218,10 +216,6 @@ export default function ChatsPage() {
     });
     return () => unsubscribe();
   }, [user]);
-
-  useEffect(() => {
-    setMessageLimit(30);
-  }, [selectedContact]);
 
   // ОБРАБОТКА ПЕРЕХОДА ИЗ КОРЗИНЫ
   useEffect(() => {
@@ -274,7 +268,16 @@ export default function ChatsPage() {
 
   // Загрузка сообщений
   useEffect(() => {
-    if (!user || !selectedContact) return;
+    if (!user || !selectedContact) {
+      setMessages([]); // Очищаем чат, если ничего не выбрано
+      return;
+    }
+
+    // 🔥 ИСПРАВЛЕНИЕ ГАЛЛЮЦИНАЦИЙ: 
+    // Мгновенно очищаем массив сообщений, чтобы при переключении 
+    // не моргали сообщения предыдущего человека.
+    setMessages([]);
+    setMessageLimit(30);
 
     const chatId = [user.uid, selectedContact.id].sort().join('_');
     const q = query(
@@ -341,58 +344,23 @@ export default function ChatsPage() {
     }
   };
 
-// ФУНКЦИИ ИИ
-  const generateSmartReply = async () => {
+  // -----------------------------------------------------
+  // ФУНКЦИИ ШАБЛОНОВ БЕЗ ИИ
+  // -----------------------------------------------------
+  const insertQuickReply = () => {
+    // Вставляем текст из настроек, который продавец сохранил заранее
     if (!currentUserProfile?.aiSettings?.contextPrompt) {
-      alert("Сначала добавьте инструкции для ИИ в настройках профиля!");
+      alert("Сначала добавьте текст быстрого ответа в настройках профиля (поле Промпт)!");
       return;
     }
-    setIsGeneratingAi(true);
-    try {
-      const recentMessages = messages.slice(-5).map(m => 
-        `${m.senderId === user?.uid ? 'Мы' : 'Клиент'}: ${m.text || (m.imageUrl ? '[Изображение]' : '[Данные заказа]')}`
-      ).join('\n');
-      
-      const prompt = `Ты менеджер нашего магазина. Напиши короткий, вежливый ответ клиенту на русском языке. Без лишних слов, только текст ответа.
-Контекст последних сообщений:
-${recentMessages}
-
-Инструкции от владельца: ${currentUserProfile.aiSettings.contextPrompt}`;
-
-      // ИЗМЕНЕНО НА GET-ЗАПРОС
-      const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}`);
-      
-      if (!response.ok) throw new Error('API Error');
-      const text = await response.text();
-      setNewMessage(text.trim());
-    } catch (error) {
-      console.error('Ошибка ИИ:', error);
-      alert('Ошибка при генерации ответа');
-    } finally {
-      setIsGeneratingAi(false);
-    }
+    setNewMessage(currentUserProfile.aiSettings.contextPrompt);
   };
 
-  const generateFollowUp = async () => {
-    if (!currentUserProfile?.aiSettings?.contextPrompt) return;
-    setIsGeneratingAi(true);
-    try {
-      const prompt = `Ты менеджер магазина. Клиент давно не отвечал нам. Напиши очень короткое, дружелюбное сообщение-напоминание (follow-up) на русском языке, чтобы мягко вернуть его к диалогу. Без воды.
-Наши инструкции: ${currentUserProfile.aiSettings.contextPrompt}`;
-
-      // ИЗМЕНЕНО НА GET-ЗАПРОС
-      const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}`);
-      
-      if (!response.ok) throw new Error('API Error');
-      const text = await response.text();
-      setNewMessage(text.trim());
-    } catch (error) {
-      console.error('Ошибка ИИ:', error);
-      alert('Ошибка при генерации ответа');
-    } finally {
-      setIsGeneratingAi(false);
-    }
+  const insertFollowUp = () => {
+    // Стандартное дружелюбное напоминание (можно позже вынести в настройки)
+    setNewMessage("Здравствуйте! 👋 Вы ранее интересовались нашими товарами. Подскажите, актуален ли еще ваш запрос? Буду рад(а) помочь!");
   };
+  // -----------------------------------------------------
 
   const handleOrderStatusUpdate = async (msgId: string, newStatus: string, statusText: string) => {
     if (!user || !selectedContact) return;
@@ -456,7 +424,7 @@ ${recentMessages}
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // ЛОГИКА ФИЛЬТРАЦИИ ДЛЯ НОВОЙ ВКЛАДКИ
+  // ЛОГИКА ФИЛЬТРАЦИИ ДЛЯ ВКЛАДОК
   const filteredContacts = globalUsers.filter(c => {
     if (hiddenContacts.includes(c.id)) return false;
     const matchSearch = c.name?.toLowerCase().includes(searchQuery.toLowerCase().trim());
@@ -465,14 +433,13 @@ ${recentMessages}
     if (activeTab === 'personal') return c.type !== 'business' || c.isSaved;
     if (activeTab === 'business') return c.type === 'business';
     
-    // В папку "Клиенты" попадают только обычные юзеры (не магазины) и исключается чат с самим собой
     if (activeTab === 'clients') return c.type !== 'business' && !c.isSaved;
     
     return true; 
   });
 
-  // ИИ доступен ТОЛЬКО если: мы бизнес + ИИ включен + МЫ НАХОДИМСЯ ВО ВКЛАДКЕ "КЛИЕНТЫ" + это не сохраненки
-  const isAiAllowed = 
+  // КНОПКИ ШАБЛОНОВ ДОСТУПНЫ ТОЛЬКО: бизнес аккаунту + включен "умный" тумблер + вкладка КЛИЕНТЫ
+  const isTemplatesAllowed = 
     currentUserProfile?.type === 'business' && 
     currentUserProfile?.aiSettings?.isEnabled && 
     activeTab === 'clients' && 
@@ -720,28 +687,26 @@ ${recentMessages}
 
             <div className="bg-white dark:bg-gray-900 px-3 py-2 pb-safe md:pb-3 border-t border-gray-200 dark:border-gray-800 shrink-0 transition-colors flex flex-col">
               
-              {/* ПАНЕЛЬ УПРАВЛЕНИЯ ИИ - ДОСТУПНА СТРОГО ВО ВКЛАДКЕ "КЛИЕНТЫ/ЗАКАЗЫ" */}
-              {isAiAllowed && (
+              {/* ПАНЕЛЬ УПРАВЛЕНИЯ ШАБЛОНАМИ */}
+              {isTemplatesAllowed && (
                 <div className="flex gap-2 mb-2 w-full max-w-4xl mx-auto overflow-x-auto scrollbar-none">
                   <button
                     type="button"
-                    onClick={generateSmartReply}
-                    disabled={isGeneratingAi}
-                    className="shrink-0 flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-colors disabled:opacity-50 border border-indigo-100 dark:border-indigo-500/20"
+                    onClick={insertQuickReply}
+                    className="shrink-0 flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-colors border border-indigo-100 dark:border-indigo-500/20"
                   >
-                    {isGeneratingAi ? <Loader2 size={14} className="animate-spin" /> : <Bot size={14} />}
-                    Умный ответ
+                    <Zap size={14} />
+                    Шаблон ответа
                   </button>
 
                   {currentUserProfile?.aiSettings?.followUps && (
                     <button
                       type="button"
-                      onClick={generateFollowUp}
-                      disabled={isGeneratingAi}
-                      className="shrink-0 flex items-center gap-1.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-500/10 dark:hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-colors disabled:opacity-50 border border-purple-100 dark:border-purple-500/20"
+                      onClick={insertFollowUp}
+                      className="shrink-0 flex items-center gap-1.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-500/10 dark:hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-colors border border-purple-100 dark:border-purple-500/20"
                     >
-                      {isGeneratingAi ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                      Follow-up
+                      <Clock size={14} />
+                      Напоминание
                     </button>
                   )}
                 </div>

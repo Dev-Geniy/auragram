@@ -226,7 +226,7 @@ export default function ProfilePage() {
     setEditingProduct(null);
   };
 
-  // -----------------------------------------------------
+// -----------------------------------------------------
   // ФУНКЦИЯ ГЕНЕРАЦИИ ОПИСАНИЯ ТОВАРА ЧЕРЕЗ POLLINATIONS.AI
   // -----------------------------------------------------
   const generateAIDescription = async (isEdit: boolean = false) => {
@@ -240,12 +240,10 @@ export default function ProfilePage() {
     try {
       const prompt = `Ты маркетолог. Напиши сочное, лаконичное и продающее описание для товара: "${product.name}", цена: ${product.price || 'не указана'}. Без воды. Максимум 3 предложения. На русском языке. В конце добавь призыв к покупке.`;
       
-      const response = await fetch('https://text.pollinations.ai/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: prompt
-      });
+      // ИЗМЕНЕНО НА GET-ЗАПРОС
+      const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}`);
       
+      if (!response.ok) throw new Error('API Error');
       const text = await response.text();
       
       if (isEdit && editingProduct) {

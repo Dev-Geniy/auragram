@@ -8,7 +8,7 @@ import {
   Send, Search, X, ShieldCheck, 
   Loader2, Paperclip, Check, CheckCheck, 
   Bookmark, ArrowLeft, Image as ExternalLink,
-  Trash2, ShoppingBag, Truck, CheckCircle2, Package, 
+  ShoppingBag, Truck, CheckCircle2, Package, 
   Users, Zap, Clock, Archive, ArchiveRestore, Reply // Добавлен Reply
 } from 'lucide-react';
 

@@ -36,7 +36,7 @@ export default function ShopPage() {
   const [isCopied, setIsCopied] = useState(false);
 
   // Извлекаем методы корзины
-  const { items, addItem, removeItem, getItemsByShop } = useCartStore();
+  const { addItem, removeItem, getItemsByShop } = useCartStore();
   
   // Товары в корзине ТОЛЬКО для этого магазина
   const shopCartItems = id ? getItemsByShop(id) : [];

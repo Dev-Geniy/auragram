@@ -125,6 +125,7 @@ export default function ShopPage() {
           <img 
             src={shop.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(shop.name)}&background=random`} 
             alt={shop.name} 
+            loading="lazy" // ЛЕНИВАЯ ЗАГРУЗКА
             className="w-24 h-24 rounded-full object-cover border border-gray-100 mb-4 shadow-sm" 
           />
           <h1 className="text-xl font-bold text-gray-900 leading-tight mb-1">
@@ -188,7 +189,12 @@ export default function ShopPage() {
 
                   <div className="h-32 sm:h-40 bg-gray-100 relative overflow-hidden shrink-0">
                     {product.imageUrl ? (
-                      <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                      <img 
+                        src={product.imageUrl} 
+                        alt={product.name} 
+                        loading="lazy" // ЛЕНИВАЯ ЗАГРУЗКА
+                        className="w-full h-full object-cover" 
+                      />
                     ) : (
                       <Package className="absolute inset-0 m-auto text-gray-300" size={32} />
                     )}

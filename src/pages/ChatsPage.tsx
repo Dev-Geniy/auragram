@@ -8,7 +8,7 @@ import {
   Send, Search, X, ShieldCheck, 
   Loader2, Paperclip, Check, CheckCheck, 
   Bookmark, ArrowLeft, Image as ExternalLink,
-  Trash2, ShoppingBag, Truck, CheckCircle2 // Иконки статусов
+  Trash2, ShoppingBag, Truck, CheckCircle2, Package 
 } from 'lucide-react';
 
 interface UserProfile {

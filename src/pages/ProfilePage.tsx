@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { 
   Camera, User, Briefcase, 
   Phone, Globe, Package, Plus, Trash2, Image as ImageIcon, 
-  Loader2, Edit2, Moon, Sun
+  Loader2, Edit2, Moon, Sun, Bot, Wand2, Sparkles
 } from 'lucide-react';
 
 interface Product {
@@ -18,7 +18,7 @@ interface Product {
 }
 
 // -----------------------------------------------------
-// 1. ФУНКЦИЯ СЖАТИЯ ИЗОБРАЖЕНИЙ ПЕРЕД ОТПРАВКОЙ
+// ФУНКЦИИ СЖАТИЯ И ЗАГРУЗКИ (Без изменений)
 // -----------------------------------------------------
 const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
   return new Promise((resolve, reject) => {
@@ -32,16 +32,13 @@ const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
         const scaleSize = maxWidth / img.width;
         const width = img.width > maxWidth ? maxWidth : img.width;
         const height = img.width > maxWidth ? img.height * scaleSize : img.height;
-        
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
-        
         canvas.toBlob((blob) => {
           if (blob) {
-            const newFile = new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() });
-            resolve(newFile);
+            resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
           } else {
             reject(new Error('Ошибка сжатия'));
           }
@@ -56,18 +53,10 @@ const uploadToImgBB = async (file: File): Promise<string> => {
   const formData = new FormData();
   formData.append('image', file);
   const API_KEY = '22de10db6eb1f3ec3fca012dcc566961';
-  
-  const res = await fetch(`https://api.imgbb.com/1/upload?key=${API_KEY}`, {
-    method: 'POST',
-    body: formData,
-  });
-  
+  const res = await fetch(`https://api.imgbb.com/1/upload?key=${API_KEY}`, { method: 'POST', body: formData });
   const data = await res.json();
-  if (data.success) {
-    return data.data.url;
-  } else {
-    throw new Error('Ошибка загрузки ImgBB');
-  }
+  if (data.success) return data.data.url;
+  throw new Error('Ошибка загрузки ImgBB');
 };
 
 export default function ProfilePage() {
@@ -76,13 +65,13 @@ export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  
-  // Состояние Темной Темы
   const [isDark, setIsDark] = useState(false);
 
-  // Состояния загрузки фото
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isUploadingProductImg, setIsUploadingProductImage] = useState(false);
+  
+  // Состояние генерации ИИ
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const productImgInputRef = useRef<HTMLInputElement>(null);
@@ -98,10 +87,15 @@ export default function ProfilePage() {
     role: '',
     avatar: '',
     contacts: { phone: '', email: '', website: '' },
-    products: [] as Product[]
+    products: [] as Product[],
+    // НОВЫЕ НАСТРОЙКИ ИИ
+    aiSettings: {
+      isEnabled: false,
+      contextPrompt: '', // Инструкции для ИИ (Доставка, тон общения)
+      followUps: true // Напоминать о забытых диалогах
+    }
   });
 
-  // Инициализация темы при монтировании
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
   }, []);
@@ -133,7 +127,8 @@ export default function ProfilePage() {
             ...data,
             avatar: data.avatar || user.photoURL || '',
             contacts: data.contacts || { phone: '', email: '', website: '' },
-            products: data.products || []
+            products: data.products || [],
+            aiSettings: data.aiSettings || { isEnabled: false, contextPrompt: '', followUps: true }
           });
         } else {
           setProfile(prev => ({
@@ -179,7 +174,7 @@ export default function ProfilePage() {
         setNewProduct(prev => ({ ...prev, imageUrl: url }));
       }
     } catch (error) {
-      alert('Не удалось загрузить изображение товара.');
+      alert('Не удалось загрузить изображение.');
     } finally {
       setIsUploadingProductImage(false);
     }
@@ -195,17 +190,14 @@ export default function ProfilePage() {
       }, { merge: true });
 
       if (auth.currentUser) {
-        await updateProfile(auth.currentUser, {
-          displayName: profile.name,
-          photoURL: profile.avatar
-        });
+        await updateProfile(auth.currentUser, { displayName: profile.name, photoURL: profile.avatar });
         setUser({ ...auth.currentUser });
       }
 
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (error) {
-      console.error('Ошибка при сохранении профиля:', error);
+      console.error('Ошибка при сохранении:', error);
     } finally {
       setIsSaving(false);
     }
@@ -234,7 +226,41 @@ export default function ProfilePage() {
     setEditingProduct(null);
   };
 
-  // UI Классы с поддержкой Dark Mode
+  // -----------------------------------------------------
+  // ФУНКЦИЯ ГЕНЕРАЦИИ ОПИСАНИЯ ТОВАРА ЧЕРЕЗ POLLINATIONS.AI
+  // -----------------------------------------------------
+  const generateAIDescription = async (isEdit: boolean = false) => {
+    const product = isEdit ? editingProduct : newProduct;
+    if (!product || !product.name) {
+      alert('Сначала введите название товара!');
+      return;
+    }
+
+    setIsGeneratingAi(true);
+    try {
+      const prompt = `Ты маркетолог. Напиши сочное, лаконичное и продающее описание для товара: "${product.name}", цена: ${product.price || 'не указана'}. Без воды. Максимум 3 предложения. На русском языке. В конце добавь призыв к покупке.`;
+      
+      const response = await fetch('https://text.pollinations.ai/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: prompt
+      });
+      
+      const text = await response.text();
+      
+      if (isEdit && editingProduct) {
+        setEditingProduct({ ...editingProduct, description: text });
+      } else {
+        setNewProduct({ ...newProduct, description: text });
+      }
+    } catch (error) {
+      console.error('Ошибка ИИ:', error);
+      alert('Ошибка при генерации описания');
+    } finally {
+      setIsGeneratingAi(false);
+    }
+  };
+
   const blockClass = "bg-white dark:bg-gray-900 rounded-2xl overflow-hidden border border-gray-200/50 dark:border-gray-800 mb-6 transition-colors";
   const inputRowClass = "flex items-center px-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0";
   const inputClass = "flex-1 bg-transparent text-[15px] font-medium text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none ml-3 w-full";
@@ -247,45 +273,27 @@ export default function ProfilePage() {
   return (
     <div className="flex-1 overflow-y-auto bg-[#F2F2F7] dark:bg-gray-950 select-none pb-24 custom-scrollbar transition-colors">
       
-      {/* Шапка */}
       <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-md sticky top-0 z-10 border-b border-gray-200/60 dark:border-gray-800 px-4 py-3 flex items-center justify-between transition-colors">
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Настройки</h1>
-        <button 
-          onClick={handleSaveProfile} 
-          disabled={isSaving} 
-          className="text-[15px] font-bold text-blue-500 hover:text-blue-600 disabled:opacity-50 transition-colors"
-        >
+        <button onClick={handleSaveProfile} disabled={isSaving} className="text-[15px] font-bold text-blue-500 hover:text-blue-600 disabled:opacity-50 transition-colors">
           {isSaving ? <Loader2 size={18} className="animate-spin" /> : showSuccess ? 'Сохранено' : 'Сохранить'}
         </button>
       </div>
 
       <div className="max-w-2xl mx-auto p-4 md:p-6">
         
-        {/* Аватарка (по центру) */}
         <div className="flex flex-col items-center justify-center mb-8 mt-4">
           <div className="relative group cursor-pointer" onClick={() => avatarInputRef.current?.click()}>
-            <img 
-              src={profile.avatar} 
-              alt="Avatar" 
-              loading="lazy"
-              className="w-24 h-24 rounded-full object-cover shadow-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 transition-colors" 
-            />
+            <img src={profile.avatar} alt="Avatar" loading="lazy" className="w-24 h-24 rounded-full object-cover shadow-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 transition-colors" />
             <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <Camera size={24} className="text-white" />
             </div>
-            {isUploadingAvatar && (
-              <div className="absolute inset-0 bg-white/60 dark:bg-black/60 rounded-full flex items-center justify-center">
-                <Loader2 size={24} className="animate-spin text-gray-900 dark:text-white" />
-              </div>
-            )}
+            {isUploadingAvatar && <div className="absolute inset-0 bg-white/60 dark:bg-black/60 rounded-full flex items-center justify-center"><Loader2 size={24} className="animate-spin text-gray-900 dark:text-white" /></div>}
             <input type="file" ref={avatarInputRef} onChange={handleAvatarChange} accept="image/*" className="hidden" />
           </div>
-          <button onClick={() => avatarInputRef.current?.click()} className="text-[13px] font-medium text-blue-500 mt-3">
-            Изменить фото
-          </button>
+          <button onClick={() => avatarInputRef.current?.click()} className="text-[13px] font-medium text-blue-500 mt-3">Изменить фото</button>
         </div>
 
-        {/* НАСТРОЙКИ ПРИЛОЖЕНИЯ */}
         <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2">Приложение</h2>
         <div className={blockClass}>
           <div className="flex items-center justify-between px-4 py-3 cursor-pointer" onClick={toggleTheme}>
@@ -299,7 +307,6 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Основные данные */}
         <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2">Профиль</h2>
         <div className={blockClass}>
           <div className={inputRowClass}>
@@ -308,38 +315,60 @@ export default function ProfilePage() {
           </div>
           <div className="flex flex-col px-4 py-3">
             <span className="text-[15px] font-medium text-gray-900 dark:text-gray-100 mb-1">О себе</span>
-            <textarea 
-              value={profile.role} 
-              onChange={(e) => setProfile({...profile, role: e.target.value})} 
-              className="w-full bg-transparent text-[15px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none h-20 custom-scrollbar" 
-              placeholder="Расскажите о себе..." 
-            />
+            <textarea value={profile.role} onChange={(e) => setProfile({...profile, role: e.target.value})} className="w-full bg-transparent text-[15px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none h-20 custom-scrollbar" placeholder="Расскажите о себе..." />
           </div>
         </div>
 
-        {/* Тип аккаунта */}
         <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2">Тип аккаунта</h2>
         <div className={blockClass}>
           <div className="flex bg-gray-100 dark:bg-gray-800 p-1 m-2 rounded-xl transition-colors">
-            <button 
-              onClick={() => setProfile({...profile, type: 'personal'})} 
-              className={`flex-1 flex justify-center items-center gap-2 py-2 rounded-lg text-[14px] font-semibold transition-all ${profile.type === 'personal' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
-            >
-              <User size={16} /> Личный
-            </button>
-            <button 
-              onClick={() => setProfile({...profile, type: 'business'})} 
-              className={`flex-1 flex justify-center items-center gap-2 py-2 rounded-lg text-[14px] font-semibold transition-all ${profile.type === 'business' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
-            >
-              <Briefcase size={16} /> Бизнес
-            </button>
+            <button onClick={() => setProfile({...profile, type: 'personal'})} className={`flex-1 flex justify-center items-center gap-2 py-2 rounded-lg text-[14px] font-semibold transition-all ${profile.type === 'personal' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}><User size={16} /> Личный</button>
+            <button onClick={() => setProfile({...profile, type: 'business'})} className={`flex-1 flex justify-center items-center gap-2 py-2 rounded-lg text-[14px] font-semibold transition-all ${profile.type === 'business' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}><Briefcase size={16} /> Бизнес</button>
           </div>
         </div>
 
-        {/* Блок Бизнеса */}
         {profile.type === 'business' && (
           <div className="animate-fade-in">
-            <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2">Контакты</h2>
+            
+            {/* НОВЫЙ БЛОК: ИИ-АССИСТЕНТ */}
+            <h2 className="text-[13px] font-semibold text-indigo-500 dark:text-indigo-400 uppercase tracking-wide px-4 mb-2 flex items-center gap-1.5"><Bot size={16}/> ИИ-Ассистент</h2>
+            <div className={`${blockClass} border-indigo-100 dark:border-indigo-900/50`}>
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 cursor-pointer" onClick={() => setProfile({...profile, aiSettings: {...profile.aiSettings, isEnabled: !profile.aiSettings.isEnabled}})}>
+                <div>
+                  <span className="text-[15px] font-bold text-gray-900 dark:text-white block">Умные ответы в чате</span>
+                  <span className="text-[12px] text-gray-500 dark:text-gray-400 block mt-0.5">Генерация ответов одной кнопкой</span>
+                </div>
+                <div className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${profile.aiSettings.isEnabled ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                  <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${profile.aiSettings.isEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                </div>
+              </div>
+              
+              {profile.aiSettings.isEnabled && (
+                <>
+                  <div className="flex flex-col px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                    <span className="text-[14px] font-semibold text-gray-900 dark:text-gray-100 mb-1">Инструкции для ИИ (Промпт)</span>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 mb-2">Напишите здесь условия доставки, оплаты и стиль общения, чтобы ИИ отвечал правильно.</span>
+                    <textarea 
+                      value={profile.aiSettings.contextPrompt} 
+                      onChange={(e) => setProfile({...profile, aiSettings: {...profile.aiSettings, contextPrompt: e.target.value}})} 
+                      className="w-full bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/50 rounded-xl p-3 text-[14px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none h-24 custom-scrollbar" 
+                      placeholder="Пример: Мы отправляем Новой Почтой в день заказа. Оплата на карту или наложка. Общайся вежливо, предлагай скидку 5% на второй товар." 
+                    />
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-3 cursor-pointer" onClick={() => setProfile({...profile, aiSettings: {...profile.aiSettings, followUps: !profile.aiSettings.followUps}})}>
+                    <div>
+                      <span className="text-[14px] font-semibold text-gray-900 dark:text-white block">Напоминать о забытых клиентах</span>
+                      <span className="text-[11px] text-gray-500 dark:text-gray-400 block mt-0.5">Кнопка Follow-up в чате при долгом молчании</span>
+                    </div>
+                    <div className={`w-10 h-5 rounded-full flex items-center p-1 transition-colors ${profile.aiSettings.followUps ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                      <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${profile.aiSettings.followUps ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2 mt-6">Контакты</h2>
             <div className={blockClass}>
               <div className={inputRowClass}>
                 <Phone size={18} className="text-gray-400 dark:text-gray-500" />
@@ -358,46 +387,51 @@ export default function ProfilePage() {
               </button>
             </div>
 
-            {/* Форма товара */}
             {(isAddingProduct || editingProduct) && (
               <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 border border-blue-200 dark:border-blue-900 shadow-sm mb-4 transition-colors">
                 <div className="flex items-center gap-4 mb-4">
-                  <div 
-                    onClick={() => (editingProduct ? editProductImgInputRef : productImgInputRef).current?.click()} 
-                    className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center cursor-pointer border border-gray-200 dark:border-gray-700 shrink-0 overflow-hidden relative"
-                  >
-                    {(editingProduct ? editingProduct.imageUrl : newProduct.imageUrl) ? (
-                      <img src={editingProduct ? editingProduct.imageUrl : newProduct.imageUrl} loading="lazy" alt="preview" className="w-full h-full object-cover" />
-                    ) : (
-                      <ImageIcon size={20} className="text-gray-400 dark:text-gray-500" />
-                    )}
+                  <div onClick={() => (editingProduct ? editProductImgInputRef : productImgInputRef).current?.click()} className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center cursor-pointer border border-gray-200 dark:border-gray-700 shrink-0 overflow-hidden relative">
+                    {(editingProduct ? editingProduct.imageUrl : newProduct.imageUrl) ? <img src={editingProduct ? editingProduct.imageUrl : newProduct.imageUrl} loading="lazy" className="w-full h-full object-cover" /> : <ImageIcon size={20} className="text-gray-400 dark:text-gray-500" />}
                     {isUploadingProductImg && <div className="absolute inset-0 bg-white/70 dark:bg-black/60 flex items-center justify-center"><Loader2 size={16} className="animate-spin text-gray-900 dark:text-white" /></div>}
                   </div>
                   <div className="flex-1 space-y-2">
-                    <input type="text" placeholder="Название товара" value={editingProduct ? editingProduct.name : newProduct.name} onChange={e => editingProduct ? setEditingProduct({...editingProduct, name: e.target.value}) : setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-lg text-sm outline-none transition-colors" />
+                    <input type="text" placeholder="Название товара (обязательно)" value={editingProduct ? editingProduct.name : newProduct.name} onChange={e => editingProduct ? setEditingProduct({...editingProduct, name: e.target.value}) : setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-lg text-[15px] outline-none font-semibold transition-colors" />
                     <input type="text" placeholder="Цена" value={editingProduct ? editingProduct.price : newProduct.price} onChange={e => editingProduct ? setEditingProduct({...editingProduct, price: e.target.value}) : setNewProduct({...newProduct, price: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-lg text-sm outline-none transition-colors" />
                   </div>
                 </div>
+                
+                {/* МАГИЯ ИИ: Кнопка генерации описания */}
+                <div className="relative mb-3">
+                  <textarea 
+                    placeholder="Описание товара..." 
+                    value={editingProduct ? editingProduct.description : newProduct.description} 
+                    onChange={e => editingProduct ? setEditingProduct({...editingProduct, description: e.target.value}) : setNewProduct({...newProduct, description: e.target.value})} 
+                    className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 pt-3 rounded-lg text-sm outline-none resize-none h-24 custom-scrollbar transition-colors" 
+                  />
+                  <button 
+                    onClick={(e) => { e.preventDefault(); generateAIDescription(!!editingProduct); }}
+                    disabled={isGeneratingAi || !(editingProduct ? editingProduct.name : newProduct.name)}
+                    title="Сгенерировать продающее описание через ИИ"
+                    className="absolute right-2 bottom-2 bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-900/40 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 p-1.5 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center"
+                  >
+                    {isGeneratingAi ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                  </button>
+                </div>
+
                 <input type="file" ref={productImgInputRef} onChange={(e) => handleProductImageChange(e, false)} accept="image/*" className="hidden" />
                 <input type="file" ref={editProductImgInputRef} onChange={(e) => handleProductImageChange(e, true)} accept="image/*" className="hidden" />
-                <textarea placeholder="Описание товара..." value={editingProduct ? editingProduct.description : newProduct.description} onChange={e => editingProduct ? setEditingProduct({...editingProduct, description: e.target.value}) : setNewProduct({...newProduct, description: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-lg text-sm outline-none resize-none h-16 mb-3 custom-scrollbar transition-colors" />
-                <button 
-                  onClick={editingProduct ? handleSaveEditProduct : handleAddProduct} 
-                  disabled={!(editingProduct ? editingProduct.name : newProduct.name) || !(editingProduct ? editingProduct.price : newProduct.price)} 
-                  className="w-full bg-blue-500 text-white py-2.5 rounded-xl font-semibold text-sm disabled:opacity-50"
-                >
+                <button onClick={editingProduct ? handleSaveEditProduct : handleAddProduct} disabled={!(editingProduct ? editingProduct.name : newProduct.name) || !(editingProduct ? editingProduct.price : newProduct.price)} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm disabled:opacity-50 transition-colors">
                   {editingProduct ? 'Сохранить изменения' : 'Добавить товар'}
                 </button>
               </div>
             )}
 
-            {/* Список товаров */}
             {profile.products.length > 0 ? (
               <div className="grid grid-cols-2 gap-3">
                 {profile.products.map(product => (
                   <div key={product.id} className="bg-white dark:bg-gray-900 border border-gray-200/50 dark:border-gray-800 rounded-xl overflow-hidden shadow-sm flex flex-col relative group transition-colors">
                     <div className="h-32 bg-gray-100 dark:bg-gray-800 relative">
-                      {product.imageUrl ? <img src={product.imageUrl} loading="lazy" alt={product.name} className="w-full h-full object-cover" /> : <Package className="absolute inset-0 m-auto text-gray-300 dark:text-gray-600" size={32} />}
+                      {product.imageUrl ? <img src={product.imageUrl} loading="lazy" className="w-full h-full object-cover" /> : <Package className="absolute inset-0 m-auto text-gray-300 dark:text-gray-600" size={32} />}
                       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={() => { setEditingProduct(product); setIsAddingProduct(false); }} className="w-7 h-7 bg-white/90 dark:bg-gray-800/90 backdrop-blur rounded-md flex items-center justify-center text-gray-600 dark:text-gray-300 shadow-sm"><Edit2 size={14} /></button>
                         <button onClick={() => handleRemoveProduct(product.id)} className="w-7 h-7 bg-white/90 dark:bg-gray-800/90 backdrop-blur rounded-md flex items-center justify-center text-red-500 shadow-sm"><Trash2 size={14} /></button>
@@ -411,9 +445,7 @@ export default function ProfilePage() {
                 ))}
               </div>
             ) : (
-               <div className="text-center py-6 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200/50 dark:border-gray-800 text-gray-400 dark:text-gray-500 text-sm transition-colors">
-                 Товаров пока нет
-               </div>
+               <div className="text-center py-6 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200/50 dark:border-gray-800 text-gray-400 dark:text-gray-500 text-sm transition-colors">Товаров пока нет</div>
             )}
           </div>
         )}

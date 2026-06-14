@@ -3,12 +3,13 @@ import { collection, query, where, onSnapshot, addDoc, serverTimestamp, updateDo
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useCartStore } from '../store/useCartStore'; // Подключаем корзину
+import { useCartStore } from '../store/useCartStore';
 import { 
   Send, Search, X, ShieldCheck, 
   Loader2, Paperclip, Check, CheckCheck, 
   Bookmark, ArrowLeft, Image as ExternalLink,
-  Trash2, ShoppingBag, Truck, CheckCircle2, Package 
+  Trash2, ShoppingBag, Truck, CheckCircle2, Package, 
+  Bot, Sparkles, Users // Добавили иконку Users для папки клиентов
 } from 'lucide-react';
 
 interface UserProfile {
@@ -29,12 +30,12 @@ interface Message {
   isRead?: boolean;
   type?: 'share_card' | 'order_receipt' | 'system_status' | string;
   cardData?: any;
-  orderData?: any; // Данные для чека заказа
-  statusText?: string; // Текст системного статуса
+  orderData?: any;
+  statusText?: string;
 }
 
 // -----------------------------------------------------
-// ФУНКЦИИ СЖАТИЯ И ЗАГРУЗКИ (Оставлены без изменений)
+// ФУНКЦИИ СЖАТИЯ И ЗАГРУЗКИ
 // -----------------------------------------------------
 const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
   return new Promise((resolve, reject) => {
@@ -83,7 +84,7 @@ const uploadToImgBB = async (file: File): Promise<string> => {
 };
 
 // -----------------------------------------------------
-// КОМПОНЕНТ ДЛЯ СВАЙПОВ (Нативный свайп влево/вправо)
+// КОМПОНЕНТ ДЛЯ СВАЙПОВ
 // -----------------------------------------------------
 const SwipeableContact = ({ 
   contact, isSelected, onClick, onHide, onMarkRead 
@@ -122,11 +123,11 @@ const SwipeableContact = ({
   return (
     <div className="relative w-full overflow-hidden bg-[#F2F2F7] dark:bg-gray-950">
       <div className="absolute inset-0 flex justify-between">
-        <div className={`w-1/2 bg-blue-500 flex items-center pl-4 text-white transition-opacity ${offsetX > 0 ? 'opacity-100' : 'opacity-0'}`}>
-          <CheckCheck size={24} />
+        <div className={`w-1/2 bg-blue-50 flex items-center pl-4 text-white transition-opacity ${offsetX > 0 ? 'opacity-100' : 'opacity-0'}`}>
+          <CheckCheck size={24} className="text-blue-500" />
         </div>
-        <div className={`w-1/2 bg-red-500 flex items-center justify-end pr-4 text-white transition-opacity ${offsetX < 0 ? 'opacity-100' : 'opacity-0'}`}>
-          <Trash2 size={24} />
+        <div className={`w-1/2 bg-red-50 flex items-center justify-end pr-4 text-white transition-opacity ${offsetX < 0 ? 'opacity-100' : 'opacity-0'}`}>
+          <Trash2 size={24} className="text-red-500" />
         </div>
       </div>
 
@@ -160,7 +161,7 @@ const SwipeableContact = ({
             {contact.name}
           </h4>
           <p className={`text-[13px] truncate ${isSelected ? 'text-white/80' : 'text-gray-500 dark:text-gray-400'}`}>
-            {contact.isSaved ? 'Сохраненные сообщения' : contact.type === 'business' ? 'Бизнес-аккаунт' : 'Пользователь'}
+            {contact.isSaved ? 'Сохраненные сообщения' : contact.type === 'business' ? 'Бизнес-аккаунт' : 'Клиент'}
           </p>
         </div>
       </div>
@@ -172,22 +173,25 @@ export default function ChatsPage() {
   const { user } = useAuthStore();
   const location = useLocation(); 
   const navigate = useNavigate();
-  const { clearCart } = useCartStore(); // Импортируем очистку корзины
+  const { clearCart } = useCartStore(); 
   
   const [globalUsers, setGlobalUsers] = useState<UserProfile[]>([]);
   const [selectedContact, setSelectedContact] = useState<UserProfile | null>(null);
+  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'personal' | 'business'>('all');
+  
+  // ДОБАВЛЕНА НОВАЯ ВКЛАДКА 'clients'
+  const [activeTab, setActiveTab] = useState<'all' | 'personal' | 'business' | 'clients'>('all');
   
   const [hiddenContacts, setHiddenContacts] = useState<string[]>([]);
-  
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [attachedImage, setAttachedImage] = useState<string>('');
   
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false); 
 
   const [messageLimit, setMessageLimit] = useState(30);
   
@@ -195,13 +199,14 @@ export default function ChatsPage() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Загрузка контактов
+  // Загрузка контактов и данных текущего профиля
   useEffect(() => {
     if (!user) return;
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
       const loadedUsers: UserProfile[] = [];
       snapshot.forEach((doc) => {
         if (doc.id === user.uid) {
+          setCurrentUserProfile(doc.data());
           loadedUsers.unshift({ 
             id: doc.id, name: 'Избранное', avatar: '', type: 'personal', isSaved: true
           });
@@ -226,12 +231,10 @@ export default function ChatsPage() {
         if (contact) {
           setSelectedContact(contact);
           
-          // Если пришла корзина (checkoutCart)
           if (location.state.checkoutCart && location.state.checkoutCart.length > 0) {
             const cartItems = location.state.checkoutCart;
             const chatId = [user!.uid, contact.id].sort().join('_');
             
-            // Считаем сумму (предполагаем, что price это число или строка с числом в начале)
             let totalPrice = 0;
             const itemsList = cartItems.map((item: any) => {
               const numPrice = parseFloat(item.price.replace(/[^\d.-]/g, '')) || 0;
@@ -242,10 +245,9 @@ export default function ChatsPage() {
             const orderData = {
               items: itemsList,
               total: totalPrice,
-              status: 'new' // 'new', 'processing', 'shipped', 'completed'
+              status: 'new'
             };
 
-            // Создаем системное сообщение с заказом
             try {
               await addDoc(collection(db, 'messages'), {
                 chatId,
@@ -258,9 +260,7 @@ export default function ChatsPage() {
                 isRead: false
               });
               
-              clearCart(contact.id); // Очищаем корзину только этого магазина
-              
-              // Очищаем state роутера, чтобы при рефреше заказ не дублировался
+              clearCart(contact.id);
               navigate('.', { replace: true, state: {} }); 
             } catch (err) {
               console.error('Ошибка создания заказа:', err);
@@ -313,8 +313,8 @@ export default function ChatsPage() {
     }
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!user || !selectedContact || (!newMessage.trim() && !attachedImage) || isSending) return;
 
     setIsSending(true);
@@ -341,23 +341,71 @@ export default function ChatsPage() {
     }
   };
 
-  // ИЗМЕНЕНИЕ СТАТУСА ЗАКАЗА ПРОДАВЦОМ
+  // ФУНКЦИИ ИИ
+  const generateSmartReply = async () => {
+    if (!currentUserProfile?.aiSettings?.contextPrompt) {
+      alert("Сначала добавьте инструкции для ИИ в настройках профиля!");
+      return;
+    }
+    setIsGeneratingAi(true);
+    try {
+      const recentMessages = messages.slice(-5).map(m => 
+        `${m.senderId === user?.uid ? 'Мы' : 'Клиент'}: ${m.text || (m.imageUrl ? '[Изображение]' : '[Данные заказа]')}`
+      ).join('\n');
+      
+      const prompt = `Ты менеджер нашего магазина. Напиши короткий, вежливый ответ клиенту на русском языке. Без лишних слов, только текст ответа.
+Контекст последних сообщений:
+${recentMessages}
+
+Инструкции от владельца: ${currentUserProfile.aiSettings.contextPrompt}`;
+
+      const response = await fetch('https://text.pollinations.ai/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: prompt
+      });
+      const text = await response.text();
+      setNewMessage(text.trim());
+    } catch (error) {
+      console.error('Ошибка ИИ:', error);
+      alert('Ошибка при генерации ответа');
+    } finally {
+      setIsGeneratingAi(false);
+    }
+  };
+
+  const generateFollowUp = async () => {
+    if (!currentUserProfile?.aiSettings?.contextPrompt) return;
+    setIsGeneratingAi(true);
+    try {
+      const prompt = `Ты менеджер магазина. Клиент давно не отвечал нам. Напиши очень короткое, дружелюбное сообщение-напоминание (follow-up) на русском языке, чтобы мягко вернуть его к диалогу. Без воды.
+Наши инструкции: ${currentUserProfile.aiSettings.contextPrompt}`;
+
+      const response = await fetch('https://text.pollinations.ai/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: prompt
+      });
+      const text = await response.text();
+      setNewMessage(text.trim());
+    } catch (error) {
+      console.error('Ошибка ИИ:', error);
+    } finally {
+      setIsGeneratingAi(false);
+    }
+  };
+
   const handleOrderStatusUpdate = async (msgId: string, newStatus: string, statusText: string) => {
     if (!user || !selectedContact) return;
     const chatId = [user.uid, selectedContact.id].sort().join('_');
 
     try {
-      // 1. Обновляем статус в самом чеке
-      await updateDoc(doc(db, 'messages', msgId), {
-        'orderData.status': newStatus
-      });
-
-      // 2. Отправляем системное уведомление в чат
+      await updateDoc(doc(db, 'messages', msgId), { 'orderData.status': newStatus });
       await addDoc(collection(db, 'messages'), {
         chatId,
         type: 'system_status',
         statusText,
-        senderId: user.uid, // Продавец отправляет
+        senderId: user.uid, 
         receiverId: selectedContact.id,
         createdAt: serverTimestamp(),
         isRead: false
@@ -409,14 +457,27 @@ export default function ChatsPage() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  // ЛОГИКА ФИЛЬТРАЦИИ ДЛЯ НОВОЙ ВКЛАДКИ
   const filteredContacts = globalUsers.filter(c => {
     if (hiddenContacts.includes(c.id)) return false;
     const matchSearch = c.name?.toLowerCase().includes(searchQuery.toLowerCase().trim());
     if (!matchSearch) return false;
+    
     if (activeTab === 'personal') return c.type !== 'business' || c.isSaved;
     if (activeTab === 'business') return c.type === 'business';
+    
+    // В папку "Клиенты" попадают только обычные юзеры (не магазины) и исключается чат с самим собой
+    if (activeTab === 'clients') return c.type !== 'business' && !c.isSaved;
+    
     return true; 
   });
+
+  // ИИ доступен ТОЛЬКО если: мы бизнес + ИИ включен + МЫ НАХОДИМСЯ ВО ВКЛАДКЕ "КЛИЕНТЫ" + это не сохраненки
+  const isAiAllowed = 
+    currentUserProfile?.type === 'business' && 
+    currentUserProfile?.aiSettings?.isEnabled && 
+    activeTab === 'clients' && 
+    selectedContact && !selectedContact.isSaved;
 
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-white dark:bg-gray-950 transition-colors">
@@ -446,22 +507,32 @@ export default function ChatsPage() {
           <div className="flex px-3 pb-2 gap-2 overflow-x-auto scrollbar-none">
             <button 
               onClick={() => setActiveTab('all')} 
-              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors ${activeTab === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
             >
               Все
             </button>
             <button 
               onClick={() => setActiveTab('personal')} 
-              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors ${activeTab === 'personal' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'personal' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
             >
               Личные
             </button>
             <button 
               onClick={() => setActiveTab('business')} 
-              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors ${activeTab === 'business' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'business' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
             >
               Магазины
             </button>
+
+            {/* ВКЛАДКА КЛИЕНТЫ/ЗАКАЗЫ - ДОСТУПНА ТОЛЬКО БИЗНЕСУ */}
+            {currentUserProfile?.type === 'business' && (
+              <button 
+                onClick={() => setActiveTab('clients')} 
+                className={`px-4 py-1.5 rounded-full text-[13px] font-medium flex items-center gap-1.5 transition-colors shrink-0 ${activeTab === 'clients' ? 'bg-indigo-500 text-white' : 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20'}`}
+              >
+                <Users size={14} /> Заказы
+              </button>
+            )}
           </div>
         </div>
         
@@ -549,7 +620,6 @@ export default function ChatsPage() {
                 const isReceipt = msg.type === 'order_receipt' && msg.orderData;
                 const isSystem = msg.type === 'system_status';
 
-                // СИСТЕМНОЕ СООБЩЕНИЕ СТАТУСА (Например: "Заказ отправлен")
                 if (isSystem) {
                   return (
                     <div key={msg.id} className="flex justify-center my-3">
@@ -560,7 +630,6 @@ export default function ChatsPage() {
                   );
                 }
 
-                // ОБЫЧНОЕ СООБЩЕНИЕ ИЛИ КАРТОЧКА
                 return (
                   <div key={msg.id} className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'} ${isSequential ? 'mt-1' : 'mt-3'}`}>
                     <div className={`relative max-w-[85%] sm:max-w-[70%] flex flex-col ${
@@ -569,7 +638,7 @@ export default function ChatsPage() {
                         : 'bg-white dark:bg-[#202020] text-gray-900 dark:text-white rounded-2xl rounded-tl-sm border border-gray-100 dark:border-gray-800 shadow-sm'
                     } ${(isCard || isReceipt) ? 'p-1.5' : 'px-3 pt-2 pb-1.5 text-[15px] leading-relaxed'}`}>
                       
-                      {/* ЧЕК ЗАКАЗА (Order Receipt) */}
+                      {/* ЧЕК ЗАКАЗА */}
                       {isReceipt ? (
                         <div className="flex flex-col min-w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-blue-200 dark:border-blue-900 shadow-sm">
                           <div className="bg-blue-50 dark:bg-blue-900/30 p-3 border-b border-blue-100 dark:border-blue-800/50 flex items-center justify-between">
@@ -588,7 +657,6 @@ export default function ChatsPage() {
                             </div>
                           </div>
 
-                          {/* Кнопки управления статусом ТОЛЬКО для продавца (того, кто получил заказ) */}
                           {!isMine && (
                             <div className="p-2 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 flex gap-2">
                               {msg.orderData.status === 'new' && (
@@ -643,7 +711,7 @@ export default function ChatsPage() {
             </div>
             
             {attachedImage && (
-              <div className="absolute bottom-[70px] left-4 z-20">
+              <div className="absolute bottom-[90px] left-4 z-20">
                 <div className="relative w-16 h-16 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-1">
                   <img src={attachedImage} alt="preview" className="w-full h-full object-cover rounded-lg" />
                   <button onClick={() => setAttachedImage('')} className="absolute -top-2 -right-2 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 w-5 h-5 rounded-full flex items-center justify-center"><X size={12} /></button>
@@ -651,8 +719,36 @@ export default function ChatsPage() {
               </div>
             )}
 
-            <div className="bg-white dark:bg-gray-900 px-3 py-2 pb-safe md:pb-3 border-t border-gray-200 dark:border-gray-800 shrink-0 transition-colors">
-              <form onSubmit={handleSendMessage} className="flex items-end gap-2 max-w-4xl mx-auto relative">
+            <div className="bg-white dark:bg-gray-900 px-3 py-2 pb-safe md:pb-3 border-t border-gray-200 dark:border-gray-800 shrink-0 transition-colors flex flex-col">
+              
+              {/* ПАНЕЛЬ УПРАВЛЕНИЯ ИИ - ДОСТУПНА СТРОГО ВО ВКЛАДКЕ "КЛИЕНТЫ/ЗАКАЗЫ" */}
+              {isAiAllowed && (
+                <div className="flex gap-2 mb-2 w-full max-w-4xl mx-auto overflow-x-auto scrollbar-none">
+                  <button
+                    type="button"
+                    onClick={generateSmartReply}
+                    disabled={isGeneratingAi}
+                    className="shrink-0 flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-colors disabled:opacity-50 border border-indigo-100 dark:border-indigo-500/20"
+                  >
+                    {isGeneratingAi ? <Loader2 size={14} className="animate-spin" /> : <Bot size={14} />}
+                    Умный ответ
+                  </button>
+
+                  {currentUserProfile?.aiSettings?.followUps && (
+                    <button
+                      type="button"
+                      onClick={generateFollowUp}
+                      disabled={isGeneratingAi}
+                      className="shrink-0 flex items-center gap-1.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-500/10 dark:hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-colors disabled:opacity-50 border border-purple-100 dark:border-purple-500/20"
+                    >
+                      {isGeneratingAi ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                      Follow-up
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <form onSubmit={handleSendMessage} className="flex items-end gap-2 max-w-4xl mx-auto relative w-full">
                 <input type="file" ref={fileInputRef} onChange={handleImageAttach} accept="image/*" className="hidden" />
                 
                 <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploadingImage} className="p-2 text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors shrink-0 mb-1">
@@ -662,7 +758,7 @@ export default function ChatsPage() {
                 <textarea 
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); } }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
                   placeholder="Сообщение..." 
                   className="flex-1 bg-transparent text-[16px] max-h-32 min-h-[40px] py-2 outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none custom-scrollbar"
                   rows={1}

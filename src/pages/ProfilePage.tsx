@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { 
   Camera, User, Briefcase, 
   Phone, Globe, Package, Plus, Trash2, Image as ImageIcon, 
-  Loader2, Edit2
+  Loader2, Edit2, Moon, Sun
 } from 'lucide-react';
 
 interface Product {
@@ -45,14 +45,13 @@ const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
           } else {
             reject(new Error('Ошибка сжатия'));
           }
-        }, 'image/jpeg', 0.8); // 80% качество
+        }, 'image/jpeg', 0.8);
       };
     };
     reader.onerror = error => reject(error);
   });
 };
 
-// Утилита для загрузки изображений на ImgBB
 const uploadToImgBB = async (file: File): Promise<string> => {
   const formData = new FormData();
   formData.append('image', file);
@@ -78,6 +77,9 @@ export default function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   
+  // Состояние Темной Темы
+  const [isDark, setIsDark] = useState(false);
+
   // Состояния загрузки фото
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isUploadingProductImg, setIsUploadingProductImage] = useState(false);
@@ -98,6 +100,24 @@ export default function ProfilePage() {
     contacts: { phone: '', email: '', website: '' },
     products: [] as Product[]
   });
+
+  // Инициализация темы при монтировании
+  useEffect(() => {
+    setIsDark(document.documentElement.classList.contains('dark'));
+  }, []);
+
+  const toggleTheme = () => {
+    const html = document.documentElement;
+    if (html.classList.contains('dark')) {
+      html.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+      setIsDark(false);
+    } else {
+      html.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+      setIsDark(true);
+    }
+  };
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -136,7 +156,7 @@ export default function ProfilePage() {
     if (!file) return;
     setIsUploadingAvatar(true);
     try {
-      const compressedFile = await compressImage(file, 800); // Сжимаем аватарку
+      const compressedFile = await compressImage(file, 800);
       const url = await uploadToImgBB(compressedFile);
       setProfile(prev => ({ ...prev, avatar: url }));
     } catch (error) {
@@ -151,7 +171,7 @@ export default function ProfilePage() {
     if (!file) return;
     setIsUploadingProductImage(true);
     try {
-      const compressedFile = await compressImage(file, 800); // Сжимаем товар
+      const compressedFile = await compressImage(file, 800);
       const url = await uploadToImgBB(compressedFile);
       if (isEdit) {
         setEditingProduct(prev => prev ? { ...prev, imageUrl: url } : null);
@@ -214,22 +234,22 @@ export default function ProfilePage() {
     setEditingProduct(null);
   };
 
-  // UI Классы в стиле iOS/Telegram
-  const blockClass = "bg-white rounded-2xl overflow-hidden border border-gray-200/50 mb-6";
-  const inputRowClass = "flex items-center px-4 py-3 border-b border-gray-100 last:border-0";
-  const inputClass = "flex-1 bg-transparent text-[15px] font-medium text-gray-900 placeholder-gray-400 outline-none ml-3 w-full";
-  const labelClass = "text-[15px] font-medium text-gray-900 w-28 shrink-0";
+  // UI Классы с поддержкой Dark Mode
+  const blockClass = "bg-white dark:bg-gray-900 rounded-2xl overflow-hidden border border-gray-200/50 dark:border-gray-800 mb-6 transition-colors";
+  const inputRowClass = "flex items-center px-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0";
+  const inputClass = "flex-1 bg-transparent text-[15px] font-medium text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none ml-3 w-full";
+  const labelClass = "text-[15px] font-medium text-gray-900 dark:text-gray-100 w-28 shrink-0";
 
   if (isLoading) {
-    return <div className="flex-1 bg-[#F2F2F7] flex justify-center items-center"><Loader2 className="animate-spin text-gray-400" size={32} /></div>;
+    return <div className="flex-1 bg-[#F2F2F7] dark:bg-gray-950 flex justify-center items-center transition-colors"><Loader2 className="animate-spin text-gray-400" size={32} /></div>;
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#F2F2F7] select-none pb-24 custom-scrollbar">
+    <div className="flex-1 overflow-y-auto bg-[#F2F2F7] dark:bg-gray-950 select-none pb-24 custom-scrollbar transition-colors">
       
       {/* Шапка */}
-      <div className="bg-white/80 backdrop-blur-md sticky top-0 z-10 border-b border-gray-200/60 px-4 py-3 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Настройки</h1>
+      <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-md sticky top-0 z-10 border-b border-gray-200/60 dark:border-gray-800 px-4 py-3 flex items-center justify-between transition-colors">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Настройки</h1>
         <button 
           onClick={handleSaveProfile} 
           disabled={isSaving} 
@@ -247,15 +267,15 @@ export default function ProfilePage() {
             <img 
               src={profile.avatar} 
               alt="Avatar" 
-              loading="lazy" // ЛЕНИВАЯ ЗАГРУЗКА
-              className="w-24 h-24 rounded-full object-cover shadow-sm bg-white border border-gray-200" 
+              loading="lazy"
+              className="w-24 h-24 rounded-full object-cover shadow-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 transition-colors" 
             />
             <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <Camera size={24} className="text-white" />
             </div>
             {isUploadingAvatar && (
-              <div className="absolute inset-0 bg-white/60 rounded-full flex items-center justify-center">
-                <Loader2 size={24} className="animate-spin text-gray-900" />
+              <div className="absolute inset-0 bg-white/60 dark:bg-black/60 rounded-full flex items-center justify-center">
+                <Loader2 size={24} className="animate-spin text-gray-900 dark:text-white" />
               </div>
             )}
             <input type="file" ref={avatarInputRef} onChange={handleAvatarChange} accept="image/*" className="hidden" />
@@ -265,37 +285,51 @@ export default function ProfilePage() {
           </button>
         </div>
 
+        {/* НАСТРОЙКИ ПРИЛОЖЕНИЯ */}
+        <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2">Приложение</h2>
+        <div className={blockClass}>
+          <div className="flex items-center justify-between px-4 py-3 cursor-pointer" onClick={toggleTheme}>
+            <div className="flex items-center gap-3">
+              {isDark ? <Moon size={20} className="text-blue-500" /> : <Sun size={20} className="text-amber-500" />}
+              <span className="text-[15px] font-medium text-gray-900 dark:text-white">Темная тема</span>
+            </div>
+            <div className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${isDark ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+              <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${isDark ? 'translate-x-6' : 'translate-x-0'}`} />
+            </div>
+          </div>
+        </div>
+
         {/* Основные данные */}
-        <h2 className="text-[13px] font-semibold text-gray-500 uppercase tracking-wide px-4 mb-2">Профиль</h2>
+        <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2">Профиль</h2>
         <div className={blockClass}>
           <div className={inputRowClass}>
             <span className={labelClass}>Имя</span>
             <input type="text" value={profile.name} onChange={(e) => setProfile({...profile, name: e.target.value})} className={inputClass} placeholder="Ваше имя" />
           </div>
           <div className="flex flex-col px-4 py-3">
-            <span className="text-[15px] font-medium text-gray-900 mb-1">О себе</span>
+            <span className="text-[15px] font-medium text-gray-900 dark:text-gray-100 mb-1">О себе</span>
             <textarea 
               value={profile.role} 
               onChange={(e) => setProfile({...profile, role: e.target.value})} 
-              className="w-full bg-transparent text-[15px] text-gray-900 placeholder-gray-400 outline-none resize-none h-20" 
+              className="w-full bg-transparent text-[15px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none h-20 custom-scrollbar" 
               placeholder="Расскажите о себе..." 
             />
           </div>
         </div>
 
         {/* Тип аккаунта */}
-        <h2 className="text-[13px] font-semibold text-gray-500 uppercase tracking-wide px-4 mb-2">Тип аккаунта</h2>
+        <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2">Тип аккаунта</h2>
         <div className={blockClass}>
-          <div className="flex bg-gray-100 p-1 m-2 rounded-xl">
+          <div className="flex bg-gray-100 dark:bg-gray-800 p-1 m-2 rounded-xl transition-colors">
             <button 
               onClick={() => setProfile({...profile, type: 'personal'})} 
-              className={`flex-1 flex justify-center items-center gap-2 py-2 rounded-lg text-[14px] font-semibold transition-all ${profile.type === 'personal' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+              className={`flex-1 flex justify-center items-center gap-2 py-2 rounded-lg text-[14px] font-semibold transition-all ${profile.type === 'personal' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
             >
               <User size={16} /> Личный
             </button>
             <button 
               onClick={() => setProfile({...profile, type: 'business'})} 
-              className={`flex-1 flex justify-center items-center gap-2 py-2 rounded-lg text-[14px] font-semibold transition-all ${profile.type === 'business' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+              className={`flex-1 flex justify-center items-center gap-2 py-2 rounded-lg text-[14px] font-semibold transition-all ${profile.type === 'business' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
             >
               <Briefcase size={16} /> Бизнес
             </button>
@@ -305,48 +339,48 @@ export default function ProfilePage() {
         {/* Блок Бизнеса */}
         {profile.type === 'business' && (
           <div className="animate-fade-in">
-            <h2 className="text-[13px] font-semibold text-gray-500 uppercase tracking-wide px-4 mb-2">Контакты</h2>
+            <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2">Контакты</h2>
             <div className={blockClass}>
               <div className={inputRowClass}>
-                <Phone size={18} className="text-gray-400" />
+                <Phone size={18} className="text-gray-400 dark:text-gray-500" />
                 <input type="text" placeholder="Телефон" value={profile.contacts.phone} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, phone: e.target.value}})} className={inputClass} />
               </div>
               <div className={inputRowClass}>
-                <Globe size={18} className="text-gray-400" />
+                <Globe size={18} className="text-gray-400 dark:text-gray-500" />
                 <input type="text" placeholder="Сайт или соцсеть" value={profile.contacts.website} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, website: e.target.value}})} className={inputClass} />
               </div>
             </div>
 
             <div className="flex items-center justify-between px-4 mb-2 mt-6">
-              <h2 className="text-[13px] font-semibold text-gray-500 uppercase tracking-wide">Товары ({profile.products.length})</h2>
+              <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Товары ({profile.products.length})</h2>
               <button onClick={() => { setIsAddingProduct(!isAddingProduct); setEditingProduct(null); }} className="text-[13px] font-semibold text-blue-500 flex items-center gap-1">
                 {isAddingProduct ? 'Отмена' : <><Plus size={14} /> Добавить</>}
               </button>
             </div>
 
-            {/* Форма товара (общая для добавления и редактирования) */}
+            {/* Форма товара */}
             {(isAddingProduct || editingProduct) && (
-              <div className="bg-white rounded-2xl p-4 border border-blue-200 shadow-sm mb-4">
+              <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 border border-blue-200 dark:border-blue-900 shadow-sm mb-4 transition-colors">
                 <div className="flex items-center gap-4 mb-4">
                   <div 
                     onClick={() => (editingProduct ? editProductImgInputRef : productImgInputRef).current?.click()} 
-                    className="w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center cursor-pointer border border-gray-200 shrink-0 overflow-hidden relative"
+                    className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center cursor-pointer border border-gray-200 dark:border-gray-700 shrink-0 overflow-hidden relative"
                   >
                     {(editingProduct ? editingProduct.imageUrl : newProduct.imageUrl) ? (
                       <img src={editingProduct ? editingProduct.imageUrl : newProduct.imageUrl} loading="lazy" alt="preview" className="w-full h-full object-cover" />
                     ) : (
-                      <ImageIcon size={20} className="text-gray-400" />
+                      <ImageIcon size={20} className="text-gray-400 dark:text-gray-500" />
                     )}
-                    {isUploadingProductImg && <div className="absolute inset-0 bg-white/70 flex items-center justify-center"><Loader2 size={16} className="animate-spin text-gray-900" /></div>}
+                    {isUploadingProductImg && <div className="absolute inset-0 bg-white/70 dark:bg-black/60 flex items-center justify-center"><Loader2 size={16} className="animate-spin text-gray-900 dark:text-white" /></div>}
                   </div>
                   <div className="flex-1 space-y-2">
-                    <input type="text" placeholder="Название товара" value={editingProduct ? editingProduct.name : newProduct.name} onChange={e => editingProduct ? setEditingProduct({...editingProduct, name: e.target.value}) : setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-gray-50 px-3 py-2 rounded-lg text-sm outline-none" />
-                    <input type="text" placeholder="Цена" value={editingProduct ? editingProduct.price : newProduct.price} onChange={e => editingProduct ? setEditingProduct({...editingProduct, price: e.target.value}) : setNewProduct({...newProduct, price: e.target.value})} className="w-full bg-gray-50 px-3 py-2 rounded-lg text-sm outline-none" />
+                    <input type="text" placeholder="Название товара" value={editingProduct ? editingProduct.name : newProduct.name} onChange={e => editingProduct ? setEditingProduct({...editingProduct, name: e.target.value}) : setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-lg text-sm outline-none transition-colors" />
+                    <input type="text" placeholder="Цена" value={editingProduct ? editingProduct.price : newProduct.price} onChange={e => editingProduct ? setEditingProduct({...editingProduct, price: e.target.value}) : setNewProduct({...newProduct, price: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-lg text-sm outline-none transition-colors" />
                   </div>
                 </div>
                 <input type="file" ref={productImgInputRef} onChange={(e) => handleProductImageChange(e, false)} accept="image/*" className="hidden" />
                 <input type="file" ref={editProductImgInputRef} onChange={(e) => handleProductImageChange(e, true)} accept="image/*" className="hidden" />
-                <textarea placeholder="Описание товара..." value={editingProduct ? editingProduct.description : newProduct.description} onChange={e => editingProduct ? setEditingProduct({...editingProduct, description: e.target.value}) : setNewProduct({...newProduct, description: e.target.value})} className="w-full bg-gray-50 px-3 py-2 rounded-lg text-sm outline-none resize-none h-16 mb-3" />
+                <textarea placeholder="Описание товара..." value={editingProduct ? editingProduct.description : newProduct.description} onChange={e => editingProduct ? setEditingProduct({...editingProduct, description: e.target.value}) : setNewProduct({...newProduct, description: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-lg text-sm outline-none resize-none h-16 mb-3 custom-scrollbar transition-colors" />
                 <button 
                   onClick={editingProduct ? handleSaveEditProduct : handleAddProduct} 
                   disabled={!(editingProduct ? editingProduct.name : newProduct.name) || !(editingProduct ? editingProduct.price : newProduct.price)} 
@@ -361,23 +395,23 @@ export default function ProfilePage() {
             {profile.products.length > 0 ? (
               <div className="grid grid-cols-2 gap-3">
                 {profile.products.map(product => (
-                  <div key={product.id} className="bg-white border border-gray-200/50 rounded-xl overflow-hidden shadow-sm flex flex-col relative group">
-                    <div className="h-32 bg-gray-100 relative">
-                      {product.imageUrl ? <img src={product.imageUrl} loading="lazy" alt={product.name} className="w-full h-full object-cover" /> : <Package className="absolute inset-0 m-auto text-gray-300" size={32} />}
+                  <div key={product.id} className="bg-white dark:bg-gray-900 border border-gray-200/50 dark:border-gray-800 rounded-xl overflow-hidden shadow-sm flex flex-col relative group transition-colors">
+                    <div className="h-32 bg-gray-100 dark:bg-gray-800 relative">
+                      {product.imageUrl ? <img src={product.imageUrl} loading="lazy" alt={product.name} className="w-full h-full object-cover" /> : <Package className="absolute inset-0 m-auto text-gray-300 dark:text-gray-600" size={32} />}
                       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => { setEditingProduct(product); setIsAddingProduct(false); }} className="w-7 h-7 bg-white/90 backdrop-blur rounded-md flex items-center justify-center text-gray-600 shadow-sm"><Edit2 size={14} /></button>
-                        <button onClick={() => handleRemoveProduct(product.id)} className="w-7 h-7 bg-white/90 backdrop-blur rounded-md flex items-center justify-center text-red-500 shadow-sm"><Trash2 size={14} /></button>
+                        <button onClick={() => { setEditingProduct(product); setIsAddingProduct(false); }} className="w-7 h-7 bg-white/90 dark:bg-gray-800/90 backdrop-blur rounded-md flex items-center justify-center text-gray-600 dark:text-gray-300 shadow-sm"><Edit2 size={14} /></button>
+                        <button onClick={() => handleRemoveProduct(product.id)} className="w-7 h-7 bg-white/90 dark:bg-gray-800/90 backdrop-blur rounded-md flex items-center justify-center text-red-500 shadow-sm"><Trash2 size={14} /></button>
                       </div>
                     </div>
                     <div className="p-3">
-                      <p className="font-semibold text-gray-900 text-[13px] truncate">{product.name}</p>
+                      <p className="font-semibold text-gray-900 dark:text-white text-[13px] truncate">{product.name}</p>
                       <p className="text-[12px] font-bold text-blue-500 mt-0.5">{product.price}</p>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-               <div className="text-center py-6 bg-white rounded-2xl border border-gray-200/50 text-gray-400 text-sm">
+               <div className="text-center py-6 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200/50 dark:border-gray-800 text-gray-400 dark:text-gray-500 text-sm transition-colors">
                  Товаров пока нет
                </div>
             )}

@@ -8,8 +8,8 @@ import {
   Send, Search, X, ShieldCheck, 
   Loader2, Paperclip, Check, CheckCheck, 
   Bookmark, ArrowLeft, Image as ExternalLink,
-  ShoppingBag, Truck, CheckCircle2, Package, 
-  Users, Zap, Clock, Archive, ArchiveRestore, Reply // Добавлен Reply
+  Trash2, ShoppingBag, Truck, CheckCircle2, Package, 
+  Users, Zap, Clock, Archive, ArchiveRestore, Reply
 } from 'lucide-react';
 
 interface UserProfile {
@@ -18,7 +18,7 @@ interface UserProfile {
   avatar: string;
   type: string;
   isSaved?: boolean;
-  lastSeen?: any; // Для статуса в сети
+  lastSeen?: any; 
 }
 
 interface Message {
@@ -33,7 +33,6 @@ interface Message {
   cardData?: any;
   orderData?: any;
   statusText?: string;
-  // Данные для ответа на сообщение
   replyToText?: string;
   replyToSender?: string;
 }
@@ -88,7 +87,7 @@ const uploadToImgBB = async (file: File): Promise<string> => {
 };
 
 // -----------------------------------------------------
-// 3. КОМПОНЕНТ ДЛЯ СВАЙПА СООБЩЕНИЯ (REPLY)
+// КОМПОНЕНТ ДЛЯ СВАЙПА СООБЩЕНИЯ (REPLY)
 // -----------------------------------------------------
 const SwipeableMessage = ({ children, onReply, isMine }: { children: React.ReactNode, onReply: () => void, isMine: boolean }) => {
   const [offsetX, setOffsetX] = useState(0);
@@ -103,18 +102,17 @@ const SwipeableMessage = ({ children, onReply, isMine }: { children: React.React
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isDragging.current) return;
     const diff = e.touches[0].clientX - startX.current;
-    if (diff > 0 && diff <= 60) setOffsetX(diff); // Разрешаем свайп только вправо
+    if (diff > 0 && diff <= 60) setOffsetX(diff); 
   };
 
   const handleTouchEnd = () => {
     isDragging.current = false;
-    if (offsetX > 40) onReply(); // Если свайпнули достаточно далеко — вызываем ответ
-    setOffsetX(0); // Возвращаем на место
+    if (offsetX > 40) onReply(); 
+    setOffsetX(0); 
   };
 
   return (
     <div className="relative w-full flex items-center py-1">
-      {/* Иконка ответа, которая появляется слева при свайпе */}
       <div className="absolute left-4 transition-opacity flex items-center justify-center" style={{ opacity: offsetX / 60 }}>
         <div className="w-8 h-8 bg-gray-200/50 dark:bg-gray-800/50 rounded-full flex items-center justify-center">
           <Reply size={16} className="text-gray-500 dark:text-gray-400" />
@@ -242,7 +240,6 @@ export default function ChatsPage() {
   const [newMessage, setNewMessage] = useState('');
   const [attachedImage, setAttachedImage] = useState<string>('');
   
-  // Состояние для хранения сообщения, на которое мы сейчас отвечаем
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -253,18 +250,18 @@ export default function ChatsPage() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 1. ОНЛАЙН СТАТУС: Обновление активности текущего пользователя
+  // ОНЛАЙН СТАТУС: Обновление активности
   useEffect(() => {
     if (!user) return;
     const updatePresence = async () => {
       try { await updateDoc(doc(db, 'users', user.uid), { lastSeen: serverTimestamp() }); } catch (error) {}
     };
     updatePresence();
-    const interval = setInterval(updatePresence, 60000); // Каждую минуту обновляем 'lastSeen'
+    const interval = setInterval(updatePresence, 60000); 
     return () => clearInterval(interval);
   }, [user?.uid]);
 
-  // Загрузка контактов и данных
+  // Загрузка контактов и Архива
   useEffect(() => {
     if (!user) return;
     
@@ -317,7 +314,7 @@ export default function ChatsPage() {
                 orderData,
                 senderId: user!.uid,
                 receiverId: contact.id,
-                createdAt: serverTimestamp(),
+                createdAt: new Date(), // ИСПОЛЬЗУЕМ LOKAL DATE ЧТОБЫ ИЗБЕЖАТЬ ЗАДЕРЖКИ
                 isRead: false
               });
               clearCart(contact.id);
@@ -339,9 +336,9 @@ export default function ChatsPage() {
       return;
     }
 
-    setMessages([]); // Очистка старых сообщений при смене чата
+    setMessages([]); 
     setMessageLimit(30);
-    setReplyingTo(null); // Сбрасываем ответ при смене чата
+    setReplyingTo(null); 
 
     const chatId = [user.uid, selectedContact.id].sort().join('_');
     const q = query(
@@ -351,10 +348,10 @@ export default function ChatsPage() {
       limit(messageLimit)
     );
     
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    // ДОБАВЛЕН includeMetadataChanges, чтобы мгновенно ловить локальные события
+    const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
       const loadedMessages: Message[] = [];
       snapshot.forEach((docSnap) => {
-        // serverTimestamps: 'estimate' заставляет локальные сообщения появляться моментально!
         const data = docSnap.data({ serverTimestamps: 'estimate' }); 
         const msg = { id: docSnap.id, ...data } as Message;
         loadedMessages.push(msg);
@@ -367,12 +364,11 @@ export default function ChatsPage() {
       setMessages(loadedMessages);
 
       if (messageLimit === 30) {
-        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }), 100);
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }), 50);
       }
     });
 
     return () => unsubscribe();
-  // 🔥 ИСПРАВЛЕНИЕ ЗАДЕРЖКИ: Зависимость строго по ID, чтобы чат не очищался при изменении статуса 'в сети'
   }, [user?.uid, selectedContact?.id, messageLimit]);
 
   const handleScroll = () => {
@@ -396,11 +392,10 @@ export default function ChatsPage() {
       imageUrl: attachedImage,
       senderId: user.uid,
       receiverId: selectedContact.id,
-      createdAt: serverTimestamp(),
+      createdAt: new Date(), // ИСПОЛЬЗУЕМ LOCAL DATE ДЛЯ МОМЕНТАЛЬНОГО ОТОБРАЖЕНИЯ БЕЗ ИСЧЕЗНОВЕНИЯ
       isRead: false
     };
 
-    // Прикрепляем данные о цитировании (Reply)
     if (replyingTo) {
       messageData.replyToText = replyingTo.text || (replyingTo.imageUrl ? 'Фотография' : 'Вложение');
       messageData.replyToSender = replyingTo.senderId === user.uid ? 'Вы' : selectedContact.name;
@@ -410,8 +405,8 @@ export default function ChatsPage() {
       await addDoc(collection(db, 'messages'), messageData);
       setNewMessage('');
       setAttachedImage('');
-      setReplyingTo(null); // Очищаем reply после отправки
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      setReplyingTo(null); 
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     } catch (error) {
       console.error('Ошибка отправки:', error);
     } finally {
@@ -421,7 +416,7 @@ export default function ChatsPage() {
 
   const insertQuickReply = () => {
     if (!currentUserProfile?.aiSettings?.contextPrompt) {
-      alert("Сначала добавьте текст быстрого ответа в настройках профиля (поле Промпт)!");
+      alert("Сначала добавьте текст быстрого ответа в настройках профиля!");
       return;
     }
     setNewMessage(currentUserProfile.aiSettings.contextPrompt);
@@ -434,13 +429,20 @@ export default function ChatsPage() {
   const handleOrderStatusUpdate = async (msgId: string, newStatus: string, statusText: string) => {
     if (!user || !selectedContact) return;
     const chatId = [user.uid, selectedContact.id].sort().join('_');
+    
+    // ⚡ Оптимистичное обновление: сразу меняем статус в интерфейсе, чтобы не ждать ответа сервера
+    setMessages(prev => prev.map(msg => 
+      msg.id === msgId ? { ...msg, orderData: { ...msg.orderData, status: newStatus } } : msg
+    ));
+
     try {
       await updateDoc(doc(db, 'messages', msgId), { 'orderData.status': newStatus });
       await addDoc(collection(db, 'messages'), {
         chatId, type: 'system_status', statusText,
         senderId: user.uid, receiverId: selectedContact.id,
-        createdAt: serverTimestamp(), isRead: false
+        createdAt: new Date(), isRead: false // Моментальное системное сообщение
       });
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     } catch (error) {}
   };
 
@@ -476,7 +478,7 @@ export default function ChatsPage() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // 1. ОНЛАЙН СТАТУС: Функция форматирования
+  // ОНЛАЙН СТАТУС: Безотказная математическая логика
   const getOnlineStatus = (lastSeen: any) => {
     if (!lastSeen) return 'был(а) давно';
     const last = lastSeen.toDate ? lastSeen.toDate() : new Date(lastSeen);
@@ -495,7 +497,7 @@ export default function ChatsPage() {
     return `был(а) ${last.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}`;
   };
 
-  // 2. РАЗДЕЛИТЕЛИ ДАТ: Функция форматирования
+  // РАЗДЕЛИТЕЛИ ДАТ: Логика отрисовки
   const formatDateDivider = (timestamp: any) => {
     if (!timestamp) return '';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -704,7 +706,7 @@ export default function ChatsPage() {
                 const isReceipt = msg.type === 'order_receipt' && msg.orderData;
                 const isSystem = msg.type === 'system_status';
 
-                // 2. РАЗДЕЛИТЕЛЬ ДАТ: Вычисление изменения дня
+                // Вычисляем, изменился ли день для отрисовки разделителя
                 const currentMsgDateStr = msg.createdAt ? (msg.createdAt.toDate ? msg.createdAt.toDate() : new Date(msg.createdAt)).toDateString() : new Date().toDateString();
                 const prevMsg = index > 0 ? messages[index - 1] : null;
                 const prevMsgDateStr = prevMsg?.createdAt ? (prevMsg.createdAt.toDate ? prevMsg.createdAt.toDate() : new Date(prevMsg.createdAt)).toDateString() : null;
@@ -714,7 +716,7 @@ export default function ChatsPage() {
                 return (
                   <div key={msg.id}>
                     
-                    {/* РЕНДЕР РАЗДЕЛИТЕЛЯ ДАТЫ */}
+                    {/* РАЗДЕЛИТЕЛЬ ДАТЫ */}
                     {showDateDivider && (
                       <div className="flex justify-center my-4">
                         <span className="bg-black/10 dark:bg-white/10 backdrop-blur-sm text-gray-600 dark:text-gray-300 text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
@@ -730,7 +732,7 @@ export default function ChatsPage() {
                         </div>
                       </div>
                     ) : (
-                      // 3. СВАЙП ДЛЯ ОТВЕТА
+                      // СВАЙП ДЛЯ ОТВЕТА (REPLY)
                       <SwipeableMessage onReply={() => setReplyingTo(msg)} isMine={isMine}>
                         <div className={`relative max-w-[85%] sm:max-w-[70%] flex flex-col ${
                           isMine 
@@ -738,7 +740,7 @@ export default function ChatsPage() {
                             : 'bg-white dark:bg-[#202020] text-gray-900 dark:text-white rounded-2xl rounded-tl-sm border border-gray-100 dark:border-gray-800 shadow-sm'
                         } ${(isCard || isReceipt) ? 'p-1.5' : 'px-3 pt-2 pb-1.5 text-[15px] leading-relaxed'} ${isSequential && !showDateDivider ? (isMine ? 'mt-0.5' : 'mt-0.5') : 'mt-2'}`}>
                           
-                          {/* РЕНДЕР БЛОКА ЦИТИРОВАНИЯ (REPLY) */}
+                          {/* БЛОК ЦИТИРОВАНИЯ */}
                           {msg.replyToText && (
                             <div className="mb-1.5 pl-2 border-l-[3px] border-blue-500 bg-black/5 dark:bg-black/20 rounded-r-md py-1 pr-2">
                               <span className="text-[11px] font-bold text-blue-600 dark:text-blue-300 block mb-0.5">{msg.replyToSender}</span>
@@ -746,7 +748,6 @@ export default function ChatsPage() {
                             </div>
                           )}
 
-                          {/* ЧЕК ЗАКАЗА */}
                           {isReceipt ? (
                             <div className="flex flex-col min-w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-blue-200 dark:border-blue-900 shadow-sm">
                               <div className="bg-blue-50 dark:bg-blue-900/30 p-3 border-b border-blue-100 dark:border-blue-800/50 flex items-center justify-between">
@@ -780,7 +781,6 @@ export default function ChatsPage() {
                               )}
                             </div>
                           ) 
-                          /* КАРТОЧКА ТОВАРА */
                           : isCard ? (
                             <div className="flex flex-col w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-200/50 dark:border-gray-700">
                               <img src={msg.cardData!.imageUrl} loading="lazy" className="w-full h-36 object-cover" alt="card" />
@@ -793,7 +793,6 @@ export default function ChatsPage() {
                               </div>
                             </div>
                           ) 
-                          /* ТЕКСТ ИЛИ КАРТИНКА */
                           : (
                             <>
                               {msg.imageUrl && <img src={msg.imageUrl} loading="lazy" alt="attachment" className="w-full max-w-[280px] h-auto rounded-xl mb-1 object-cover" />}
@@ -820,7 +819,7 @@ export default function ChatsPage() {
               <div ref={messagesEndRef} className="h-2" />
             </div>
             
-            {/* ОТОБРАЖЕНИЕ СООБЩЕНИЯ, НА КОТОРОЕ МЫ ОТВЕЧАЕМ */}
+            {/* ПАНЕЛЬ СООБЩЕНИЯ, НА КОТОРОЕ ОТВЕЧАЕМ */}
             {replyingTo && (
               <div className="mx-3 mt-1 bg-gray-100 dark:bg-gray-800 rounded-t-xl border-l-[3px] border-blue-500 flex items-center justify-between px-3 py-2 animate-fade-in shadow-sm">
                 <div className="flex flex-col min-w-0 pr-4">
@@ -840,7 +839,6 @@ export default function ChatsPage() {
               </div>
             )}
 
-            {/* Изменение радиуса бордера, если есть блок Reply */}
             <div className={`bg-white dark:bg-gray-900 px-3 py-2 pb-safe md:pb-3 border-t border-gray-200 dark:border-gray-800 shrink-0 transition-colors flex flex-col ${replyingTo ? 'rounded-b-none border-t-0 pt-1' : ''}`}>
               
               {isTemplatesAllowed && !replyingTo && (

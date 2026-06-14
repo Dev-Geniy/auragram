@@ -341,7 +341,7 @@ export default function ChatsPage() {
     }
   };
 
-  // ФУНКЦИИ ИИ
+// ФУНКЦИИ ИИ
   const generateSmartReply = async () => {
     if (!currentUserProfile?.aiSettings?.contextPrompt) {
       alert("Сначала добавьте инструкции для ИИ в настройках профиля!");
@@ -359,11 +359,10 @@ ${recentMessages}
 
 Инструкции от владельца: ${currentUserProfile.aiSettings.contextPrompt}`;
 
-      const response = await fetch('https://text.pollinations.ai/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: prompt
-      });
+      // ИЗМЕНЕНО НА GET-ЗАПРОС
+      const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}`);
+      
+      if (!response.ok) throw new Error('API Error');
       const text = await response.text();
       setNewMessage(text.trim());
     } catch (error) {
@@ -381,15 +380,15 @@ ${recentMessages}
       const prompt = `Ты менеджер магазина. Клиент давно не отвечал нам. Напиши очень короткое, дружелюбное сообщение-напоминание (follow-up) на русском языке, чтобы мягко вернуть его к диалогу. Без воды.
 Наши инструкции: ${currentUserProfile.aiSettings.contextPrompt}`;
 
-      const response = await fetch('https://text.pollinations.ai/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: prompt
-      });
+      // ИЗМЕНЕНО НА GET-ЗАПРОС
+      const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}`);
+      
+      if (!response.ok) throw new Error('API Error');
       const text = await response.text();
       setNewMessage(text.trim());
     } catch (error) {
       console.error('Ошибка ИИ:', error);
+      alert('Ошибка при генерации ответа');
     } finally {
       setIsGeneratingAi(false);
     }

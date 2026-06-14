@@ -4,9 +4,9 @@ import { updateProfile } from 'firebase/auth';
 import { db, auth } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { 
-  Camera, Save, CheckCircle2, User, Briefcase, 
+  Camera, User, Briefcase, 
   Phone, Globe, Package, Plus, Trash2, Image as ImageIcon, 
-  X, Loader2, UploadCloud, Edit2
+  Loader2, Edit2
 } from 'lucide-react';
 
 interface Product {

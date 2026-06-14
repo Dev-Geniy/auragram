@@ -17,6 +17,41 @@ interface Product {
   imageUrl: string;
 }
 
+// -----------------------------------------------------
+// 1. ФУНКЦИЯ СЖАТИЯ ИЗОБРАЖЕНИЙ ПЕРЕД ОТПРАВКОЙ
+// -----------------------------------------------------
+const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const scaleSize = maxWidth / img.width;
+        const width = img.width > maxWidth ? maxWidth : img.width;
+        const height = img.width > maxWidth ? img.height * scaleSize : img.height;
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const newFile = new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() });
+            resolve(newFile);
+          } else {
+            reject(new Error('Ошибка сжатия'));
+          }
+        }, 'image/jpeg', 0.8); // 80% качество
+      };
+    };
+    reader.onerror = error => reject(error);
+  });
+};
+
 // Утилита для загрузки изображений на ImgBB
 const uploadToImgBB = async (file: File): Promise<string> => {
   const formData = new FormData();
@@ -101,7 +136,8 @@ export default function ProfilePage() {
     if (!file) return;
     setIsUploadingAvatar(true);
     try {
-      const url = await uploadToImgBB(file);
+      const compressedFile = await compressImage(file, 800); // Сжимаем аватарку
+      const url = await uploadToImgBB(compressedFile);
       setProfile(prev => ({ ...prev, avatar: url }));
     } catch (error) {
       alert('Не удалось загрузить фото.');
@@ -115,7 +151,8 @@ export default function ProfilePage() {
     if (!file) return;
     setIsUploadingProductImage(true);
     try {
-      const url = await uploadToImgBB(file);
+      const compressedFile = await compressImage(file, 800); // Сжимаем товар
+      const url = await uploadToImgBB(compressedFile);
       if (isEdit) {
         setEditingProduct(prev => prev ? { ...prev, imageUrl: url } : null);
       } else {
@@ -210,6 +247,7 @@ export default function ProfilePage() {
             <img 
               src={profile.avatar} 
               alt="Avatar" 
+              loading="lazy" // ЛЕНИВАЯ ЗАГРУЗКА
               className="w-24 h-24 rounded-full object-cover shadow-sm bg-white border border-gray-200" 
             />
             <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -295,7 +333,7 @@ export default function ProfilePage() {
                     className="w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center cursor-pointer border border-gray-200 shrink-0 overflow-hidden relative"
                   >
                     {(editingProduct ? editingProduct.imageUrl : newProduct.imageUrl) ? (
-                      <img src={editingProduct ? editingProduct.imageUrl : newProduct.imageUrl} alt="preview" className="w-full h-full object-cover" />
+                      <img src={editingProduct ? editingProduct.imageUrl : newProduct.imageUrl} loading="lazy" alt="preview" className="w-full h-full object-cover" />
                     ) : (
                       <ImageIcon size={20} className="text-gray-400" />
                     )}
@@ -325,7 +363,7 @@ export default function ProfilePage() {
                 {profile.products.map(product => (
                   <div key={product.id} className="bg-white border border-gray-200/50 rounded-xl overflow-hidden shadow-sm flex flex-col relative group">
                     <div className="h-32 bg-gray-100 relative">
-                      {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" /> : <Package className="absolute inset-0 m-auto text-gray-300" size={32} />}
+                      {product.imageUrl ? <img src={product.imageUrl} loading="lazy" alt={product.name} className="w-full h-full object-cover" /> : <Package className="absolute inset-0 m-auto text-gray-300" size={32} />}
                       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={() => { setEditingProduct(product); setIsAddingProduct(false); }} className="w-7 h-7 bg-white/90 backdrop-blur rounded-md flex items-center justify-center text-gray-600 shadow-sm"><Edit2 size={14} /></button>
                         <button onClick={() => handleRemoveProduct(product.id)} className="w-7 h-7 bg-white/90 backdrop-blur rounded-md flex items-center justify-center text-red-500 shadow-sm"><Trash2 size={14} /></button>

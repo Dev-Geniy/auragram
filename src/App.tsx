@@ -21,11 +21,11 @@ const ShopPage = lazy(() => import('./pages/ShopPage'));
 // ГЛОБАЛЬНЫЙ ЗАГРУЗЧИК
 // ==========================================
 const GlobalLoader = () => (
-  <div className="min-h-screen flex items-center justify-center bg-white w-full">
+  <div className="min-h-screen flex items-center justify-center bg-white dark:bg-gray-950 w-full transition-colors duration-300">
     <div className="w-12 h-12 relative flex items-center justify-center">
-      <div className="absolute inset-0 bg-gray-100 rounded-full animate-ping opacity-50"></div>
-      <Hexagon size={32} className="text-gray-900 absolute" strokeWidth={1.5} />
-      <div className="w-12 h-12 border-[2px] border-gray-900 border-t-transparent rounded-full animate-spin relative z-10"></div>
+      <div className="absolute inset-0 bg-gray-100 dark:bg-gray-800 rounded-full animate-ping opacity-50"></div>
+      <Hexagon size={32} className="text-gray-900 dark:text-white absolute" strokeWidth={1.5} />
+      <div className="w-12 h-12 border-[2px] border-gray-900 dark:border-white border-t-transparent dark:border-t-transparent rounded-full animate-spin relative z-10"></div>
     </div>
   </div>
 );
@@ -50,7 +50,6 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const { user } = useAuthStore();
 
-  // Оставляем только самое необходимое
   const menuItems = [
     { path: '/chats', icon: <MessageCircle size={24} strokeWidth={2} />, label: 'Чаты' },
     { path: '/market', icon: <Store size={24} strokeWidth={2} />, label: 'Маркет' },
@@ -66,17 +65,17 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <div className="flex h-[100dvh] bg-white overflow-hidden font-sans antialiased text-gray-900">
+    <div className="flex h-[100dvh] bg-white dark:bg-gray-950 overflow-hidden font-sans antialiased text-gray-900 dark:text-gray-100 transition-colors duration-300">
       
-      {/* 💻 ДЕСКТОПНЫЙ САЙДБАР (Стиль Telegram Desktop) */}
-      <aside className="hidden md:flex w-[80px] lg:w-[260px] bg-gray-50 border-r border-gray-200 flex-col justify-between z-20">
+      {/* 💻 ДЕСКТОПНЫЙ САЙДБАР */}
+      <aside className="hidden md:flex w-[80px] lg:w-[260px] bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex-col justify-between z-20 transition-colors duration-300">
         <div className="flex flex-col h-full">
           
           <div className="h-16 flex items-center justify-center lg:justify-start lg:px-6 mb-4 mt-2">
-            <div className="w-10 h-10 bg-gray-900 rounded-xl flex items-center justify-center">
+            <div className="w-10 h-10 bg-gray-900 dark:bg-gray-800 rounded-xl flex items-center justify-center shadow-sm">
               <Hexagon size={22} className="text-white" strokeWidth={2.5} />
             </div>
-            <span className="hidden lg:block ml-3 font-black text-xl tracking-tight text-gray-900">
+            <span className="hidden lg:block ml-3 font-black text-xl tracking-tight text-gray-900 dark:text-white">
               Aura
             </span>
           </div>
@@ -90,8 +89,8 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
                   to={item.path}
                   className={`flex items-center lg:px-4 py-3 rounded-2xl transition-all duration-200 group ${
                     isActive
-                      ? 'bg-gray-900 text-white shadow-sm'
-                      : 'text-gray-500 hover:bg-gray-200 hover:text-gray-900'
+                      ? 'bg-gray-900 dark:bg-gray-800 text-white shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
                   }`}
                   title={item.label}
                 >
@@ -114,17 +113,17 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
                 <img 
                   src={user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=random`} 
                   alt="Profile" 
-                  className="w-10 h-10 rounded-full object-cover border border-gray-200" 
+                  className="w-10 h-10 rounded-full object-cover border border-gray-200 dark:border-gray-700" 
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-gray-900 truncate">{user.displayName || 'Пользователь'}</p>
-                  <p className="text-[11px] font-medium text-gray-500 truncate">Online</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{user.displayName || 'Пользователь'}</p>
+                  <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 truncate">Online</p>
                 </div>
               </div>
             )}
             <button
               onClick={handleLogout}
-              className="w-full flex items-center justify-center lg:justify-start lg:px-4 py-3 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-colors group"
+              className="w-full flex items-center justify-center lg:justify-start lg:px-4 py-3 text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-2xl transition-colors group"
               title="Выйти"
             >
               <LogOut size={22} className="lg:mr-3" />
@@ -134,15 +133,15 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
         </div>
       </aside>
 
-      {/* 📱 ОСНОВНОЙ КОНТЕЙНЕР (Без глобального хедера на мобилках) */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative pb-[60px] md:pb-0 bg-white">
+      {/* 📱 ОСНОВНОЙ КОНТЕЙНЕР */}
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative pb-[60px] md:pb-0 bg-white dark:bg-gray-950 transition-colors duration-300">
         <Suspense fallback={<GlobalLoader />}>
           {children}
         </Suspense>
       </main>
 
-      {/* 📱 МОБИЛЬНОЕ НИЖНЕЕ МЕНЮ (Стиль нативных приложений iOS/Telegram) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-[60px] pb-safe bg-white/85 backdrop-blur-xl border-t border-gray-200/80 z-50 flex items-center justify-around px-2">
+      {/* 📱 МОБИЛЬНОЕ НИЖНЕЕ МЕНЮ */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-[60px] pb-safe bg-white/85 dark:bg-gray-900/90 backdrop-blur-xl border-t border-gray-200/80 dark:border-gray-800/80 z-50 flex items-center justify-around px-2 transition-colors duration-300">
         {menuItems.map((item) => {
           const isActive = location.pathname === item.path || (item.path === '/market' && location.pathname.startsWith('/shop'));
           return (
@@ -151,10 +150,10 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
               to={item.path}
               className="flex flex-col items-center justify-center w-full h-full relative"
             >
-              <div className={`transition-colors duration-200 ${isActive ? 'text-gray-900' : 'text-gray-400'}`}>
+              <div className={`transition-colors duration-200 ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}>
                 {item.icon}
               </div>
-              <span className={`text-[10px] font-medium mt-1 transition-colors duration-200 ${isActive ? 'text-gray-900' : 'text-gray-400'}`}>
+              <span className={`text-[10px] font-medium mt-1 transition-colors duration-200 ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}>
                 {item.label}
               </span>
             </Link>
@@ -171,6 +170,18 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
 // ==========================================
 export default function App() {
   const { user, setUser, isLoading, setLoading } = useAuthStore();
+
+  // Инициализация темной темы при старте приложения
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+    if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -194,7 +205,6 @@ export default function App() {
           <Route path="/chats" element={<RequireAuth><MainLayout><ChatsPage /></MainLayout></RequireAuth>} />
           <Route path="/market" element={<RequireAuth><MainLayout><MarketPage /></MainLayout></RequireAuth>} />
           
-          {/* Обратите внимание: Мы больше не передаем currentSync и gender в ProfilePage */}
           <Route path="/profile" element={<RequireAuth><MainLayout><ProfilePage /></MainLayout></RequireAuth>} />
           <Route path="/shop/:id" element={<RequireAuth><MainLayout><ShopPage /></MainLayout></RequireAuth>} />
           

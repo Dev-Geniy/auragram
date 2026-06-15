@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { 
-  Plus, MoreVertical, Trash2, X, User, DollarSign, 
+  Plus, Trash2, X, User, DollarSign, 
   AlignLeft, Tag, CircleDashed, LayoutDashboard,
-  CheckCircle2, Clock, Truck, Inbox
+  CheckCircle2, Clock, Truck, Inbox, Loader2
 } from 'lucide-react';
 
 // ==========================================

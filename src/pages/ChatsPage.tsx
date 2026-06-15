@@ -213,7 +213,6 @@ export default function ChatsPage() {
   const soundEnabledRef = useRef(soundEnabled);
   const pushEnabledRef = useRef(pushEnabled);
   
-  // ПРЕДОХРАНИТЕЛИ ПРОТИВ ДУБЛЕЙ
   const checkoutProcessedRef = useRef(false);
   const isSendingRef = useRef(false);
   const actionProcessingRef = useRef(false);
@@ -381,13 +380,19 @@ export default function ChatsPage() {
       setNewMessage(savedDraft || '');
     }
 
-    const q = query(collection(db, 'messages'), where('chatId', '==', chatId));
+    // ИСПОЛЬЗУЕМ orderBy ДЛЯ ПОДДЕРЖКИ ИНДЕКСА И ОПТИМИЗАЦИИ
+    const q = query(
+      collection(db, 'messages'), 
+      where('chatId', '==', chatId),
+      orderBy('createdAt', 'desc'),
+      limit(messageLimit)
+    );
     
     const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
       let loadedMessages: Message[] = [];
 
       snapshot.forEach((docSnap) => {
-        // 🔥 ИСПРАВЛЕНИЕ: { serverTimestamps: 'estimate' } заставляет Firebase мгновенно давать дату новым отправленным сообщениям
+        // 🔥 ВАЖНО: { serverTimestamps: 'estimate' } заставляет отправленные сообщения появляться сразу
         const data = docSnap.data({ serverTimestamps: 'estimate' });
         loadedMessages.push({ 
           id: docSnap.id, 
@@ -396,19 +401,14 @@ export default function ChatsPage() {
         } as Message);
       });
 
-      loadedMessages.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : Date.now();
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : Date.now();
-        return timeA - timeB;
-      });
-
-      if (loadedMessages.length > messageLimit) {
-        loadedMessages = loadedMessages.slice(-messageLimit);
-      }
-
+      // Переворачиваем массив, чтобы новые сообщения были внизу
+      loadedMessages.reverse();
       setMessages(loadedMessages);
       setIsLoadingMore(false);
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+
+      if (messageLimit === 30) {
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }), 50);
+      }
     });
 
     markChatAsRead(selectedContact.id);
@@ -953,7 +953,7 @@ export default function ChatsPage() {
                                 <div className="flex justify-between items-center pt-2 border-t border-dashed border-gray-200 dark:border-gray-700">
                                   <span className="font-bold text-gray-400">Итого:</span>
                                   <span className="font-black text-[15px]">{msg.orderData.total > 0 ? `${msg.orderData.total}` : 'Уточняется'}</span>
-                                 </div>
+                                </div>
                               </div>
                               {!isMine && (
                                 <div className="p-2 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 flex gap-2">

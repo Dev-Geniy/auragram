@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, Timestamp, serverTimestamp, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, Timestamp, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -10,8 +10,7 @@ import {
   Bookmark, ArrowLeft, Image as ExternalLink,
   ShoppingBag, Truck, CheckCircle2, Package, 
   Users, Zap, Clock, Archive, ArchiveRestore, Reply,
-  Volume2, VolumeX, Bell, BellOff, ChevronDown, Edit2, WifiOff,
-  Phone, Globe, Store, User // Новые иконки для модалки
+  Trash2, Edit2, ChevronDown, WifiOff, Volume2, VolumeX, Bell, BellOff 
 } from 'lucide-react';
 
 interface UserProfile {
@@ -21,10 +20,7 @@ interface UserProfile {
   type: string;
   isSaved?: boolean;
   lastSeen?: any; 
-  typingTo?: string | null; 
-  role?: string;
-  contacts?: { phone?: string; website?: string; email?: string; };
-  products?: { id: string; name: string; price: string; description: string; imageUrl: string; }[];
+  typingTo?: string | null;
 }
 
 interface Message {
@@ -108,7 +104,7 @@ const playNotificationSound = () => {
 };
 
 // -----------------------------------------------------
-// СВАЙП СООБЩЕНИЯ (REPLY & DELETE)
+// КОМПОНЕНТ ДЛЯ СВАЙПА СООБЩЕНИЯ (REPLY & DELETE)
 // -----------------------------------------------------
 const SwipeableMessage = ({ children, onReply, onDelete, isMine }: { children: React.ReactNode, onReply: () => void, onDelete: () => void, isMine: boolean }) => {
   const [offsetX, setOffsetX] = useState(0);
@@ -147,9 +143,9 @@ const SwipeableMessage = ({ children, onReply, onDelete, isMine }: { children: R
 };
 
 // -----------------------------------------------------
-// СВАЙП КОНТАКТОВ В СПИСКЕ
+// КОМПОНЕНТ ДЛЯ СВАЙПОВ КОНТАКТОВ
 // -----------------------------------------------------
-const SwipeableContact = ({ contact, isSelected, onClick, onSwipeAction, onMarkRead, actionIcon: ActionIcon, actionColorClass, actionBgClass, unreadCount }: { contact: UserProfile, isSelected: boolean, onClick: () => void, onSwipeAction: (id: string) => void, onMarkRead: (id: string) => void, actionIcon: any, actionColorClass: string, actionBgClass: string, unreadCount: number }) => {
+const SwipeableContact = ({ contact, isSelected, onClick, onSwipeAction, onMarkRead, actionIcon: ActionIcon, actionColorClass, actionBgClass, unreadCount, currentUserId }: { contact: UserProfile, isSelected: boolean, onClick: () => void, onSwipeAction: (id: string) => void, onMarkRead: (id: string) => void, actionIcon: any, actionColorClass: string, actionBgClass: string, unreadCount: number, currentUserId?: string }) => {
   const [offsetX, setOffsetX] = useState(0);
   const startX = useRef(0);
   const isDragging = useRef(false);
@@ -172,7 +168,7 @@ const SwipeableContact = ({ contact, isSelected, onClick, onSwipeAction, onMarkR
             {unreadCount > 0 && !isSelected && <span className="ml-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-sm shrink-0">{unreadCount}</span>}
           </h4>
           <p className={`text-[13px] truncate ${isSelected ? 'text-white/80' : 'text-gray-500 dark:text-gray-400'}`}>
-            {contact.typingTo === user?.uid ? <span className="text-blue-500 dark:text-blue-400 italic animate-pulse">печатает...</span> : (contact.isSaved ? 'Сохраненные сообщения' : contact.type === 'business' ? 'Бизнес-аккаунт' : 'Клиент')}
+            {contact.typingTo === currentUserId ? <span className="text-blue-500 dark:text-blue-400 italic animate-pulse">печатает...</span> : (contact.isSaved ? 'Сохраненные сообщения' : contact.type === 'business' ? 'Бизнес-аккаунт' : 'Клиент')}
           </p>
         </div>
       </div>
@@ -205,14 +201,11 @@ export default function ChatsPage() {
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // 🔥 Стэйт для профиля магазина
-  
   const [soundEnabled, setSoundEnabled] = useState(() => JSON.parse(localStorage.getItem('chat_sound') ?? 'true'));
   const [pushEnabled, setPushEnabled] = useState(() => JSON.parse(localStorage.getItem('chat_push') ?? 'true'));
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   
-  const initialLoadRef = useRef(true);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [messageLimit, setMessageLimit] = useState(30);
   const [showScrollButton, setShowScrollButton] = useState(false); 
@@ -322,7 +315,7 @@ export default function ChatsPage() {
     return () => { unsubscribeUsers(); unsubscribeUnread(); };
   }, [user]);
 
-  // ОБРАБОТКА ПОКУПКИ
+  // ОБРАБОТКА ПОКУПКИ ИЗ КОРЗИНЫ
   useEffect(() => {
     const processCheckout = async () => {
       if (globalUsers.length > 0 && location.state?.selectedUserId) {
@@ -357,7 +350,7 @@ export default function ChatsPage() {
     processCheckout();
   }, [globalUsers, location.state, user, navigate, clearCart]);
 
-  // ЗАГРУЗКА ЛЕНТЫ ЧАТА И ЧЕРНОВИКОВ
+  // ЗАГРУЗКА ЛЕНТЫ ЧАТА
   useEffect(() => {
     if (!user || !selectedContact) {
       setMessages([]);
@@ -493,7 +486,6 @@ export default function ChatsPage() {
     if (!currentUserProfile?.aiSettings?.contextPrompt) return alert("Сначала добавьте текст быстрого ответа в настройках профиля!");
     setNewMessage(currentUserProfile.aiSettings.contextPrompt);
   };
-
   const insertFollowUp = () => setNewMessage("Здравствуйте! 👋 Вы ранее интересовались нашими товарами. Подскажите, актуален ли еще ваш запрос? Буду рад(а) помочь!");
 
   const handleOrderStatusUpdate = async (msgId: string, newStatus: string, statusText: string) => {
@@ -595,14 +587,14 @@ export default function ChatsPage() {
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-white dark:bg-gray-950 transition-colors relative">
       
-      {/* 🌟 ПЛАШКА ОТСУТСТВИЯ ИНТЕРНЕТА */}
+      {/* ПЛАШКА ОТСУТСТВИЯ ИНТЕРНЕТА */}
       {isOffline && (
         <div className="fixed top-0 left-0 right-0 z-[200] bg-red-500 text-white text-[12px] font-bold py-1.5 flex items-center justify-center gap-2 shadow-md">
           <WifiOff size={14} /> Нет подключения к интернету. Чат работает в оффлайн-режиме.
         </div>
       )}
 
-      {/* 🌟 IN-APP УВЕДОМЛЕНИЯ (ШТОРКИ) */}
+      {/* IN-APP УВЕДОМЛЕНИЯ (ШТОРКИ) */}
       <div className={`fixed ${isOffline ? 'top-10' : 'top-4'} left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 pointer-events-none px-4 w-full md:w-[400px]`}>
         {toasts.map(t => (
           <div key={t.id} onClick={() => { const contactToOpen = globalUsers.find(c => c.id === t.senderId); if (contactToOpen) setSelectedContact(contactToOpen); setToasts(prev => prev.filter(toast => toast.id !== t.id)); }} className="pointer-events-auto bg-white/95 dark:bg-gray-800/95 backdrop-blur-md shadow-xl rounded-2xl p-3 flex items-center gap-3 animate-fade-in w-full cursor-pointer border border-gray-100 dark:border-gray-700 hover:scale-[1.02] transition-transform">
@@ -623,61 +615,9 @@ export default function ChatsPage() {
         </div>
       )}
 
-      {/* 🌟 МОДАЛЬНОЕ ОКНО ПРОФИЛЯ / МАГАЗИНА 🌟 */}
-      {isProfileModalOpen && activeContactData && !activeContactData.isSaved && (
-        <div className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm flex justify-center items-end md:items-center p-0 md:p-4 animate-fade-in" onClick={() => setIsProfileModalOpen(false)}>
-          <div className="bg-white dark:bg-gray-900 w-full md:w-[480px] max-h-[90vh] overflow-y-auto custom-scrollbar rounded-t-3xl md:rounded-3xl shadow-2xl flex flex-col transition-transform transform translate-y-0" onClick={e => e.stopPropagation()}>
-            <div className="relative h-32 bg-gradient-to-r from-blue-500 to-indigo-500 shrink-0 rounded-t-3xl md:rounded-t-3xl">
-              <button onClick={() => setIsProfileModalOpen(false)} className="absolute top-4 right-4 w-8 h-8 bg-black/20 hover:bg-black/40 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-md"><X size={18} /></button>
-            </div>
-            <div className="px-6 pb-6 relative">
-              <img src={activeContactData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(activeContactData.name)}`} alt={activeContactData.name} className="w-24 h-24 rounded-full object-cover border-4 border-white dark:border-gray-900 absolute -top-12 shadow-md bg-white dark:bg-gray-800" />
-              <div className="mt-14">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                  {activeContactData.name}
-                  {activeContactData.type === 'business' ? <ShieldCheck size={18} className="text-blue-500" /> : <User size={18} className="text-gray-400" />}
-                </h2>
-                <p className={`text-[13px] font-medium mt-1 ${getOnlineStatus(activeContactData.lastSeen) === 'в сети' ? 'text-blue-500' : 'text-gray-500'}`}>{getOnlineStatus(activeContactData.lastSeen)}</p>
-                {activeContactData.role && <p className="mt-4 text-[14px] text-gray-600 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{activeContactData.role}</p>}
-                {activeContactData.contacts && (activeContactData.contacts.phone || activeContactData.contacts.website) && (
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {activeContactData.contacts.phone && <a href={`tel:${activeContactData.contacts.phone}`} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-lg text-[13px] font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"><Phone size={14} /> {activeContactData.contacts.phone}</a>}
-                    {activeContactData.contacts.website && <a href={activeContactData.contacts.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-lg text-[13px] font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"><Globe size={14} /> Веб-сайт</a>}
-                  </div>
-                )}
-              </div>
-              {activeContactData.type === 'business' && (
-                <div className="mt-8 border-t border-gray-100 dark:border-gray-800 pt-6">
-                  <h3 className="text-[15px] font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2"><Package size={18} className="text-indigo-500"/> Витрина магазина</h3>
-                  {activeContactData.products && activeContactData.products.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-3">
-                      {activeContactData.products.map((product: any) => (
-                        <div key={product.id} className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group flex flex-col">
-                          <div className="relative h-32 overflow-hidden bg-gray-50 dark:bg-gray-900">
-                            {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" /> : <div className="w-full h-full flex items-center justify-center text-gray-300 dark:text-gray-600"><ShoppingBag size={32}/></div>}
-                          </div>
-                          <div className="p-3 flex flex-col flex-1">
-                            <h4 className="font-semibold text-[13px] text-gray-900 dark:text-white line-clamp-1 mb-1">{product.name}</h4>
-                            <p className="text-blue-500 font-bold text-[13px] mt-auto">{product.price}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 border-dashed">
-                      <Store size={32} className="mx-auto text-gray-300 dark:text-gray-600 mb-2" />
-                      <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400">Товаров пока нет</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ЛЕВАЯ ПАНЕЛЬ */}
       <div className={`w-full md:w-[320px] lg:w-[380px] shrink-0 bg-white dark:bg-gray-900 md:border-r border-gray-200 dark:border-gray-800 flex flex-col z-10 transition-colors ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
+        
         {isArchiveMode ? (
           <div className="pt-4 pb-3 border-b border-gray-100 dark:border-gray-800 shrink-0 bg-blue-50/50 dark:bg-gray-800/50 flex items-center justify-between px-4">
             <button onClick={() => setIsArchiveMode(false)} className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold transition-colors hover:opacity-80">
@@ -692,6 +632,8 @@ export default function ChatsPage() {
                 <input type="text" placeholder="Поиск..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-transparent pl-2 pr-8 py-1 text-[15px] focus:outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400" />
                 {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={16} /></button>}
               </div>
+
+              {/* НАСТРОЙКИ УВЕДОМЛЕНИЙ */}
               <button onClick={() => setSoundEnabled(!soundEnabled)} className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${soundEnabled ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
                 {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
               </button>
@@ -726,9 +668,16 @@ export default function ChatsPage() {
               key={contact.id} contact={contact} isSelected={selectedContact?.id === contact.id}
               onClick={() => setSelectedContact(contact)} onSwipeAction={isArchiveMode ? handleUnarchive : handleArchive} onMarkRead={markChatAsRead}
               actionIcon={isArchiveMode ? ArchiveRestore : Archive} actionBgClass={isArchiveMode ? "bg-blue-50" : "bg-orange-50"} actionColorClass={isArchiveMode ? "text-blue-500" : "text-orange-500"}
-              unreadCount={unreadCounts[contact.id] || 0}
+              unreadCount={unreadCounts[contact.id] || 0} currentUserId={user?.uid}
             />
           ))}
+          
+          {filteredContacts.length === 0 && (
+             <div className="flex flex-col items-center justify-center mt-10 opacity-50">
+               <ArchiveRestore size={48} className="text-gray-400 dark:text-gray-600 mb-2" />
+               <div className="text-gray-500 dark:text-gray-400 text-[14px] font-medium">{isArchiveMode ? 'В архиве пусто' : 'В этой папке пусто'}</div>
+             </div>
+          )}
         </div>
       </div>
       
@@ -740,8 +689,7 @@ export default function ChatsPage() {
             <div className={`h-[60px] bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200/60 dark:border-gray-800 flex items-center justify-between px-4 shrink-0 shadow-sm z-10 transition-colors ${isOffline ? 'mt-6' : ''}`}>
               <div className="flex items-center gap-3">
                 <button onClick={() => setSelectedContact(null)} className="md:hidden text-blue-500 dark:text-blue-400 p-1"><ArrowLeft size={24} /></button>
-                {/* 🔥 ОТКРЫТИЕ МОДАЛКИ ПО КЛИКУ НА ИМЯ/АВАТАР */}
-                <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => !selectedContact.isSaved && setIsProfileModalOpen(true)}>
+                <div className="flex items-center gap-3 cursor-pointer">
                   {selectedContact.isSaved ? (
                     <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center"><Bookmark size={18} /></div>
                   ) : (

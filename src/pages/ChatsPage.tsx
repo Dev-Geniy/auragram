@@ -11,10 +11,9 @@ import {
   ShoppingBag, Truck, CheckCircle2, Package, 
   Users, Zap, Clock, Archive, ArchiveRestore, Reply,
   Trash2, Edit2, ChevronDown, WifiOff, Volume2, VolumeX, Bell, BellOff,
-  Phone, Globe, Store, User, MapPin, MessageSquare // Добавил MapPin и MessageSquare для карточки
+  Phone, Globe, Store, MessageSquare // Убраны User и MapPin, оставлен MessageSquare
 } from 'lucide-react';
 
-// ... (ИНТЕРФЕЙСЫ ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ)
 interface UserProfile {
   id: string;
   name: string;
@@ -54,9 +53,6 @@ interface ToastNotification {
   avatar: string;
 }
 
-// -----------------------------------------------------
-// ФУНКЦИИ СЖАТИЯ И ЗАГРУЗКИ (БЕЗ ИЗМЕНЕНИЙ)
-// -----------------------------------------------------
 const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -108,7 +104,6 @@ const playNotificationSound = () => {
   } catch(e) {}
 };
 
-// ... (КОМПОНЕНТЫ СВАЙПОВ БЕЗ ИЗМЕНЕНИЙ)
 const SwipeableMessage = ({ children, onReply, onDelete, isMine }: { children: React.ReactNode, onReply: () => void, onDelete: () => void, isMine: boolean }) => {
   const [offsetX, setOffsetX] = useState(0);
   const startX = useRef(0);
@@ -208,7 +203,6 @@ export default function ChatsPage() {
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [messageLimit, setMessageLimit] = useState(30);
   const [showScrollButton, setShowScrollButton] = useState(false); 
   
@@ -252,7 +246,6 @@ export default function ChatsPage() {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000); 
   };
 
-  // ... (ОСТАЛЬНЫЕ useEffect ДЛЯ FIREBASE ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ, Я ИХ СОХРАНИЛ В ПОЛНОМ ОБЪЕМЕ)
   useEffect(() => {
     if (!user) return;
     const updatePresence = async () => { try { await updateDoc(doc(db, 'users', user.uid), { lastSeen: serverTimestamp() }); } catch (error) {} };
@@ -408,7 +401,6 @@ export default function ChatsPage() {
     };
   }, [user?.uid, selectedContact?.id, messageLimit]);
 
-  // ОБРАБОТЧИКИ (Scroll, Type, Send, Delete...)
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
     if (target.scrollTop === 0) setMessageLimit((prev) => prev + 30);
@@ -505,13 +497,12 @@ export default function ChatsPage() {
   const handleImageAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setIsUploadingImage(true);
     try {
       const compressedFile = await compressImage(file, 800);
       const url = await uploadToImgBB(compressedFile);
       setAttachedImage(url);
     } catch (error) { alert('Не удалось загрузить изображение.'); } 
-    finally { setIsUploadingImage(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
+    finally { if (fileInputRef.current) fileInputRef.current.value = ''; }
   };
 
   const markChatAsRead = async (contactId: string) => {

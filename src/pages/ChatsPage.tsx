@@ -318,13 +318,11 @@ export default function ChatsPage() {
 
   useEffect(() => {
     const processCheckout = async () => {
-      // Снимаем блокировку, если мы не в состоянии оформления заказа
       if (!location.state?.checkoutCart) {
         checkoutProcessedRef.current = false;
         return;
       }
 
-      // Блокируем множественные срабатывания Strict Mode
       if (checkoutProcessedRef.current) return;
 
       if (globalUsers.length > 0 && location.state?.selectedUserId) {
@@ -333,7 +331,7 @@ export default function ChatsPage() {
           setSelectedContact(contact);
           
           if (location.state.checkoutCart.length > 0) {
-            checkoutProcessedRef.current = true; // Устанавливаем замок
+            checkoutProcessedRef.current = true; 
             
             const cartItems = location.state.checkoutCart;
             const chatId = [user!.uid, contact.id].sort().join('_');
@@ -354,7 +352,7 @@ export default function ChatsPage() {
               clearCart(contact.id);
               navigate('.', { replace: true, state: {} }); 
             } catch (err) {
-              checkoutProcessedRef.current = false; // Откатываем в случае сетевой ошибки
+              checkoutProcessedRef.current = false; 
             }
           }
         }
@@ -383,33 +381,34 @@ export default function ChatsPage() {
       setNewMessage(savedDraft || '');
     }
 
-    const q = query(
-      collection(db, 'messages'), 
-      where('chatId', '==', chatId),
-      orderBy('createdAt', 'desc'),
-      limit(messageLimit)
-    );
+    const q = query(collection(db, 'messages'), where('chatId', '==', chatId));
     
     const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
       let loadedMessages: Message[] = [];
 
       snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
+        // 🔥 ИСПРАВЛЕНИЕ: { serverTimestamps: 'estimate' } заставляет Firebase мгновенно давать дату новым отправленным сообщениям
+        const data = docSnap.data({ serverTimestamps: 'estimate' });
         loadedMessages.push({ 
           id: docSnap.id, 
           ...data,
-          createdAt: data.createdAt === null ? Timestamp.now() : data.createdAt 
+          createdAt: data.createdAt || Timestamp.now() 
         } as Message);
       });
 
-      // Переворачиваем для корректного отображения (новые снизу)
-      loadedMessages.reverse();
+      loadedMessages.sort((a, b) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : Date.now();
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : Date.now();
+        return timeA - timeB;
+      });
+
+      if (loadedMessages.length > messageLimit) {
+        loadedMessages = loadedMessages.slice(-messageLimit);
+      }
+
       setMessages(loadedMessages);
       setIsLoadingMore(false);
-
-      if (messageLimit === 30) {
-        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }), 50);
-      }
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     });
 
     markChatAsRead(selectedContact.id);
@@ -463,10 +462,10 @@ export default function ChatsPage() {
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (isSendingRef.current) return; // Предохранитель от двойных кликов/срабатываний
+    if (isSendingRef.current) return; 
     if (!user || !selectedContact || (!newMessage.trim() && !attachedImage) || isOffline) return;
 
-    isSendingRef.current = true; // Запираем замок
+    isSendingRef.current = true; 
     
     const textToSend = newMessage.trim();
     const imageToSend = attachedImage;
@@ -505,7 +504,7 @@ export default function ChatsPage() {
     } catch (error) {
       console.error("Ошибка при отправке сообщения:", error);
     } finally {
-      isSendingRef.current = false; // Отпираем замок после выполнения
+      isSendingRef.current = false; 
     }
   };
 
@@ -524,7 +523,7 @@ export default function ChatsPage() {
   const handleOrderStatusUpdate = async (msgId: string, newStatus: string, statusText: string) => {
     if (!user || !selectedContact || actionProcessingRef.current) return;
     
-    actionProcessingRef.current = true; // Запираем кнопку от двойного клика
+    actionProcessingRef.current = true; 
     const chatId = [user.uid, selectedContact.id].sort().join('_');
     
     try {
@@ -536,7 +535,7 @@ export default function ChatsPage() {
     } catch (error) {
       console.error(error);
     } finally {
-      actionProcessingRef.current = false; // Отпираем
+      actionProcessingRef.current = false; 
     }
   };
 
@@ -954,7 +953,7 @@ export default function ChatsPage() {
                                 <div className="flex justify-between items-center pt-2 border-t border-dashed border-gray-200 dark:border-gray-700">
                                   <span className="font-bold text-gray-400">Итого:</span>
                                   <span className="font-black text-[15px]">{msg.orderData.total > 0 ? `${msg.orderData.total}` : 'Уточняется'}</span>
-                                </div>
+                                 </div>
                               </div>
                               {!isMine && (
                                 <div className="p-2 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 flex gap-2">

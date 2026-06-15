@@ -20,6 +20,8 @@ const ChatsPage = lazy(() => import('./pages/ChatsPage'));
 const MarketPage = lazy(() => import('./pages/MarketPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const ShopPage = lazy(() => import('./pages/ShopPage'));
+const DatingPage = lazy(() => import('./pages/DatingPage'));
+const CRMPage = lazy(() => import('./pages/CRMPage'));
 
 // ==========================================
 // ВРЕМЕННЫЕ ЗАГЛУШКИ ДЛЯ НОВЫХ РАЗДЕЛОВ
@@ -324,9 +326,9 @@ export default function App() {
           <Route path="/profile" element={<RequireAuth><MainLayout><ProfilePage /></MainLayout></RequireAuth>} />
           <Route path="/shop/:id" element={<RequireAuth><MainLayout><ShopPage /></MainLayout></RequireAuth>} />
           
-          {/* НОВЫЕ ДИНАМИЧЕСКИЕ МАРШРУТЫ (ЗАГЛУШКИ) */}
-          <Route path="/dating" element={<RequireAuth><MainLayout><PlaceholderPage title="Знакомства" icon={Heart}/></MainLayout></RequireAuth>} />
-          <Route path="/crm" element={<RequireAuth><MainLayout><PlaceholderPage title="Smart CRM" icon={LineChart}/></MainLayout></RequireAuth>} />
+          {/* НОВЫЕ ДИНАМИЧЕСКИЕ МАРШРУТЫ */}
+          <Route path="/dating" element={<RequireAuth><MainLayout><DatingPage /></MainLayout></RequireAuth>} />
+          <Route path="/crm" element={<RequireAuth><MainLayout><CRMPage /></MainLayout></RequireAuth>} />
           <Route path="/apps" element={<RequireAuth><MainLayout><PlaceholderPage title="Blocko / Приложения" icon={LayoutDashboard}/></MainLayout></RequireAuth>} />
           
           <Route path="*" element={<Navigate to="/chats" replace />} />

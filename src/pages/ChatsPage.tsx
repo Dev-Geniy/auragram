@@ -11,7 +11,7 @@ import {
   ShoppingBag, Truck, CheckCircle2, Package, 
   Users, Zap, Clock, Archive, ArchiveRestore, Reply,
   Trash2, Edit2, ChevronDown, WifiOff, Volume2, VolumeX, Bell, BellOff,
-  Phone, Globe, Store, MessageSquare // Убраны User и MapPin, оставлен MessageSquare
+  Phone, Globe, Store, MessageSquare
 } from 'lucide-react';
 
 interface UserProfile {
@@ -212,6 +212,11 @@ export default function ChatsPage() {
   const soundEnabledRef = useRef(soundEnabled);
   const pushEnabledRef = useRef(pushEnabled);
   
+  // ПРЕДОХРАНИТЕЛИ ПРОТИВ ДУБЛЕЙ
+  const checkoutProcessedRef = useRef(false);
+  const isSendingRef = useRef(false);
+  const actionProcessingRef = useRef(false);
+  
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -312,12 +317,23 @@ export default function ChatsPage() {
 
   useEffect(() => {
     const processCheckout = async () => {
+      // Снимаем блокировку, если мы не в состоянии оформления заказа
+      if (!location.state?.checkoutCart) {
+        checkoutProcessedRef.current = false;
+        return;
+      }
+
+      // Блокируем множественные срабатывания Strict Mode
+      if (checkoutProcessedRef.current) return;
+
       if (globalUsers.length > 0 && location.state?.selectedUserId) {
         const contact = globalUsers.find(c => c.id === location.state.selectedUserId);
         if (contact) {
           setSelectedContact(contact);
           
-          if (location.state.checkoutCart && location.state.checkoutCart.length > 0) {
+          if (location.state.checkoutCart.length > 0) {
+            checkoutProcessedRef.current = true; // Устанавливаем замок
+            
             const cartItems = location.state.checkoutCart;
             const chatId = [user!.uid, contact.id].sort().join('_');
             
@@ -336,7 +352,9 @@ export default function ChatsPage() {
               });
               clearCart(contact.id);
               navigate('.', { replace: true, state: {} }); 
-            } catch (err) {}
+            } catch (err) {
+              checkoutProcessedRef.current = false; // Откатываем в случае сетевой ошибки
+            }
           }
         }
       }
@@ -430,8 +448,11 @@ export default function ChatsPage() {
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (isSendingRef.current) return; // Предохранитель от двойных кликов/срабатываний
     if (!user || !selectedContact || (!newMessage.trim() && !attachedImage) || isOffline) return;
 
+    isSendingRef.current = true; // Запираем замок
+    
     const textToSend = newMessage.trim();
     const imageToSend = attachedImage;
     const replyToSend = replyingTo;
@@ -447,27 +468,30 @@ export default function ChatsPage() {
 
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 10);
 
-    if (editingMessage) {
-      try {
+    try {
+      if (editingMessage) {
         await updateDoc(doc(db, 'messages', editingMessage.id), { text: textToSend, isEdited: true });
         setEditingMessage(null);
-      } catch (err) { console.error("Ошибка редактирования:", err); }
-      return;
+      } else {
+        const chatId = [user.uid, selectedContact.id].sort().join('_');
+        const messageData: any = {
+          chatId, text: textToSend, imageUrl: imageToSend,
+          senderId: user.uid, receiverId: selectedContact.id,
+          createdAt: serverTimestamp(), isRead: false
+        };
+
+        if (replyToSend) {
+          messageData.replyToText = replyToSend.text || (replyToSend.imageUrl ? 'Фотография' : 'Вложение');
+          messageData.replyToSender = replyToSend.senderId === user.uid ? 'Вы' : selectedContact.name;
+        }
+
+        await addDoc(collection(db, 'messages'), messageData);
+      }
+    } catch (error) {
+      console.error("Ошибка при отправке сообщения:", error);
+    } finally {
+      isSendingRef.current = false; // Отпираем замок после выполнения
     }
-
-    const chatId = [user.uid, selectedContact.id].sort().join('_');
-    const messageData: any = {
-      chatId, text: textToSend, imageUrl: imageToSend,
-      senderId: user.uid, receiverId: selectedContact.id,
-      createdAt: serverTimestamp(), isRead: false
-    };
-
-    if (replyToSend) {
-      messageData.replyToText = replyToSend.text || (replyToSend.imageUrl ? 'Фотография' : 'Вложение');
-      messageData.replyToSender = replyToSend.senderId === user.uid ? 'Вы' : selectedContact.name;
-    }
-
-    try { await addDoc(collection(db, 'messages'), messageData); } catch (error) {}
   };
 
   const handleDeleteMessage = async (msgId: string) => {
@@ -483,15 +507,22 @@ export default function ChatsPage() {
   const insertFollowUp = () => setNewMessage("Здравствуйте! 👋 Вы ранее интересовались нашими товарами. Подскажите, актуален ли еще ваш запрос? Буду рад(а) помочь!");
 
   const handleOrderStatusUpdate = async (msgId: string, newStatus: string, statusText: string) => {
-    if (!user || !selectedContact) return;
+    if (!user || !selectedContact || actionProcessingRef.current) return;
+    
+    actionProcessingRef.current = true; // Запираем кнопку от двойного клика
     const chatId = [user.uid, selectedContact.id].sort().join('_');
+    
     try {
       await updateDoc(doc(db, 'messages', msgId), { 'orderData.status': newStatus });
       await addDoc(collection(db, 'messages'), {
         chatId, type: 'system_status', statusText, senderId: user.uid, receiverId: selectedContact.id,
         createdAt: serverTimestamp(), isRead: false 
       });
-    } catch (error) {}
+    } catch (error) {
+      console.error(error);
+    } finally {
+      actionProcessingRef.current = false; // Отпираем
+    }
   };
 
   const handleImageAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {

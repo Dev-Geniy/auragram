@@ -6,7 +6,7 @@ import {
   Plus, Trash2, X, User, DollarSign, 
   AlignLeft, Tag, CircleDashed, LayoutDashboard,
   CheckCircle2, Clock, Truck, Inbox, Loader2,
-  Archive, BarChart3, Minimize2, Maximize2, 
+  Archive, BarChart3, Minimize2, 
   ChevronRight, ChevronLeft, Calendar
 } from 'lucide-react';
 

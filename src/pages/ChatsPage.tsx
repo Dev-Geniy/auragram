@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, updateDoc, doc, setDoc, orderBy, limit, getDocs, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, setDoc, orderBy, limit, getDocs, Timestamp, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -23,7 +23,7 @@ interface UserProfile {
 
 interface Message {
   id: string;
-  text?: string; // Сделали поле необязательным, так как у системных сообщений его нет
+  text?: string;
   imageUrl?: string;
   senderId: string;
   receiverId: string;
@@ -52,19 +52,13 @@ const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
         const scaleSize = maxWidth / img.width;
         const width = img.width > maxWidth ? maxWidth : img.width;
         const height = img.width > maxWidth ? img.height * scaleSize : img.height;
-        
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
-        
         canvas.toBlob((blob) => {
-          if (blob) {
-            const newFile = new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() });
-            resolve(newFile);
-          } else {
-            reject(new Error('Ошибка сжатия'));
-          }
+          if (blob) resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
+          else reject(new Error('Ошибка сжатия'));
         }, 'image/jpeg', 0.8);
       };
     };
@@ -76,14 +70,30 @@ const uploadToImgBB = async (file: File): Promise<string> => {
   const formData = new FormData();
   formData.append('image', file);
   const API_KEY = '22de10db6eb1f3ec3fca012dcc566961'; 
-  
-  const res = await fetch(`https://api.imgbb.com/1/upload?key=${API_KEY}`, {
-    method: 'POST',
-    body: formData,
-  });
+  const res = await fetch(`https://api.imgbb.com/1/upload?key=${API_KEY}`, { method: 'POST', body: formData });
   const data = await res.json();
   if (data.success) return data.data.url;
   throw new Error('Ошибка загрузки');
+};
+
+// -----------------------------------------------------
+// ЗВУКОВОЕ УВЕДОМЛЕНИЕ (Web Audio API)
+// -----------------------------------------------------
+const playNotificationSound = () => {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(600, ctx.currentTime); 
+    osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.3);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.3);
+  } catch(e) {}
 };
 
 // -----------------------------------------------------
@@ -136,11 +146,11 @@ const SwipeableMessage = ({ children, onReply, isMine }: { children: React.React
 // -----------------------------------------------------
 const SwipeableContact = ({ 
   contact, isSelected, onClick, onSwipeAction, onMarkRead,
-  actionIcon: ActionIcon, actionColorClass, actionBgClass 
+  actionIcon: ActionIcon, actionColorClass, actionBgClass, unreadCount 
 }: { 
   contact: UserProfile, isSelected: boolean, onClick: () => void, 
   onSwipeAction: (id: string) => void, onMarkRead: (id: string) => void,
-  actionIcon: any, actionColorClass: string, actionBgClass: string
+  actionIcon: any, actionColorClass: string, actionBgClass: string, unreadCount: number
 }) => {
   const [offsetX, setOffsetX] = useState(0);
   const startX = useRef(0);
@@ -154,7 +164,6 @@ const SwipeableContact = ({
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isDragging.current) return;
     const diff = e.touches[0].clientX - startX.current;
-    
     if (diff > 80) setOffsetX(80);
     else if (diff < -80) setOffsetX(-80);
     else setOffsetX(diff);
@@ -162,11 +171,8 @@ const SwipeableContact = ({
 
   const handleTouchEnd = () => {
     isDragging.current = false;
-    if (offsetX > 60) {
-      onMarkRead(contact.id); 
-    } else if (offsetX < -60) {
-      onSwipeAction(contact.id);
-    }
+    if (offsetX > 60) onMarkRead(contact.id); 
+    else if (offsetX < -60) onSwipeAction(contact.id);
     setOffsetX(0); 
   };
 
@@ -188,27 +194,24 @@ const SwipeableContact = ({
         onClick={onClick}
         style={{ transform: `translateX(${offsetX}px)` }}
         className={`relative z-10 flex items-center gap-3 px-4 py-3 cursor-pointer transition-all duration-200 ${
-          isSelected 
-            ? 'bg-blue-500 text-white' 
-            : 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 dark:text-white'
+          isSelected ? 'bg-blue-500 text-white' : 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 dark:text-white'
         }`}
       >
         {contact.isSaved ? (
-          <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-500 text-white'}`}>
-            <Bookmark size={20} />
-          </div>
+          <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-500 text-white'}`}><Bookmark size={20} /></div>
         ) : (
-          <img 
-            src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} 
-            alt={contact.name} 
-            loading="lazy"
-            className="w-12 h-12 rounded-full object-cover shrink-0 bg-gray-100 dark:bg-gray-800" 
-          />
+          <img src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}`} alt={contact.name} loading="lazy" className="w-12 h-12 rounded-full object-cover shrink-0 bg-gray-100 dark:bg-gray-800" />
         )}
         
         <div className="flex-1 min-w-0 pb-1">
-          <h4 className={`font-semibold text-[15px] truncate ${isSelected ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
-            {contact.name}
+          <h4 className={`font-semibold text-[15px] truncate flex items-center justify-between ${isSelected ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
+            <span className="truncate">{contact.name}</span>
+            {/* ЯРКИЙ БЕЙДЖ НЕПРОЧИТАННЫХ СООБЩЕНИЙ */}
+            {unreadCount > 0 && (
+              <span className="ml-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-sm shrink-0">
+                {unreadCount}
+              </span>
+            )}
           </h4>
           <p className={`text-[13px] truncate ${isSelected ? 'text-white/80' : 'text-gray-500 dark:text-gray-400'}`}>
             {contact.isSaved ? 'Сохраненные сообщения' : contact.type === 'business' ? 'Бизнес-аккаунт' : 'Клиент'}
@@ -241,6 +244,10 @@ export default function ChatsPage() {
   const [attachedImage, setAttachedImage] = useState<string>('');
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   
+  // 🔥 СОСТОЯНИЕ НЕПРОЧИТАННЫХ СООБЩЕНИЙ (Счетчик)
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const initialLoadRef = useRef(true);
+
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [messageLimit, setMessageLimit] = useState(30);
   
@@ -249,21 +256,27 @@ export default function ChatsPage() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ЗАПРОС РАЗРЕШЕНИЯ НА PUSH-УВЕДОМЛЕНИЯ ПРИ ВХОДЕ В ЧАТЫ
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
+
   // ОНЛАЙН СТАТУС
   useEffect(() => {
     if (!user) return;
     const updatePresence = async () => {
-      try { await updateDoc(doc(db, 'users', user.uid), { lastSeen: serverTimestamp() }); } catch (error) {}
+      try { await updateDoc(doc(db, 'users', user.uid), { lastSeen: Timestamp.now() }); } catch (error) {}
     };
     updatePresence();
     const interval = setInterval(updatePresence, 60000); 
     return () => clearInterval(interval);
   }, [user?.uid]);
 
-  // Загрузка контактов и Архива
+  // Загрузка профилей
   useEffect(() => {
     if (!user) return;
-    
     const savedArchive = localStorage.getItem(`archive_${user.uid}`);
     if (savedArchive) setArchivedContacts(JSON.parse(savedArchive));
 
@@ -281,6 +294,54 @@ export default function ChatsPage() {
     });
     return () => unsubscribe();
   }, [user]);
+
+  // 🔥 ГЛОБАЛЬНЫЙ СЛУШАТЕЛЬ УВЕДОМЛЕНИЙ И БЕЙДЖЕЙ
+  useEffect(() => {
+    if (!user) return;
+
+    // Слушаем ВСЕ входящие непрочитанные сообщения для этого пользователя
+    const q = query(
+      collection(db, 'messages'),
+      where('receiverId', '==', user.uid),
+      where('isRead', '==', false)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const counts: Record<string, number> = {};
+      
+      // Считаем бейджи для меню
+      snapshot.docs.forEach(doc => {
+        const msg = doc.data() as Message;
+        counts[msg.senderId] = (counts[msg.senderId] || 0) + 1;
+      });
+      setUnreadCounts(counts);
+
+      // Обработка новых уведомлений (пропускаем при первой загрузке страницы)
+      if (!initialLoadRef.current) {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const msg = change.doc.data() as Message;
+            
+            // Защита: не сигналим, если пользователь уже открыл этот чат
+            if (msg.senderId !== selectedContact?.id) {
+              playNotificationSound(); // Внутренний "Дзинь"
+              
+              // Нативное Push-уведомление ОС
+              if ("Notification" in window && Notification.permission === "granted") {
+                const senderName = globalUsers.find(u => u.id === msg.senderId)?.name || 'Пользователь';
+                const body = msg.text || (msg.imageUrl ? '📷 Фотография' : '🛒 Новый заказ');
+                new Notification(`Новое сообщение: ${senderName}`, { body });
+              }
+            }
+          }
+        });
+      } else {
+        initialLoadRef.current = false;
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user, selectedContact?.id, globalUsers]);
 
   // ОБРАБОТКА НОВОГО ЗАКАЗА
   useEffect(() => {
@@ -322,7 +383,7 @@ export default function ChatsPage() {
     processCheckout();
   }, [globalUsers, location.state, user, navigate, clearCart]);
 
-  // ЗАГРУЗКА СООБЩЕНИЙ
+  // ЗАГРУЗКА СООБЩЕНИЙ АКТИВНОГО ЧАТА
   useEffect(() => {
     if (!user || !selectedContact) {
       setMessages([]);
@@ -348,11 +409,13 @@ export default function ChatsPage() {
       limit(messageLimit)
     );
     
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
       const loadedMessages: Message[] = [];
       snapshot.forEach((docSnap) => {
-        const msg = { id: docSnap.id, ...docSnap.data() } as Message;
+        const msg = { id: docSnap.id, ...docSnap.data({ serverTimestamps: 'estimate' }) } as Message;
         loadedMessages.push(msg);
+
+        // Помечаем прочитанными те, что видим
         if (msg.receiverId === user.uid && !msg.isRead && msg.senderId !== user.uid) {
           updateDoc(doc(db, 'messages', msg.id), { isRead: true }).catch(() => {});
         }
@@ -374,7 +437,7 @@ export default function ChatsPage() {
     }
   };
 
-  // МОМЕНТАЛЬНАЯ ОТПРАВКА СООБЩЕНИЯ
+  // МОМЕНТАЛЬНАЯ ОТПРАВКА
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!user || !selectedContact || (!newMessage.trim() && !attachedImage)) return;
@@ -428,14 +491,12 @@ export default function ChatsPage() {
     setNewMessage("Здравствуйте! 👋 Вы ранее интересовались нашими товарами. Подскажите, актуален ли еще ваш запрос? Буду рад(а) помочь!");
   };
 
-  // МОМЕНТАЛЬНОЕ ОБНОВЛЕНИЕ СТАТУСА
+  // СМЕНА СТАТУСА ЗАКАЗА
   const handleOrderStatusUpdate = async (msgId: string, newStatus: string, statusText: string) => {
     if (!user || !selectedContact) return;
     const chatId = [user.uid, selectedContact.id].sort().join('_');
     
-    setMessages(prev => prev.map(msg => 
-      msg.id === msgId ? { ...msg, orderData: { ...msg.orderData, status: newStatus } } : msg
-    ));
+    setMessages(prev => prev.map(msg => msg.id === msgId ? { ...msg, orderData: { ...msg.orderData, status: newStatus } } : msg));
 
     const sysDocRef = doc(collection(db, 'messages'));
     const tempSysMsg = {
@@ -459,12 +520,8 @@ export default function ChatsPage() {
       const compressedFile = await compressImage(file, 800);
       const url = await uploadToImgBB(compressedFile);
       setAttachedImage(url);
-    } catch (error) {
-      alert('Не удалось загрузить изображение.');
-    } finally {
-      setIsUploadingImage(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
+    } catch (error) { alert('Не удалось загрузить изображение.'); } 
+    finally { setIsUploadingImage(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
   };
 
   const markChatAsRead = async (contactId: string) => {
@@ -542,7 +599,6 @@ export default function ChatsPage() {
   const isTemplatesAllowed = currentUserProfile?.type === 'business' && currentUserProfile?.aiSettings?.isEnabled && activeTab === 'clients' && selectedContact && !selectedContact.isSaved;
   const activeContactData = globalUsers.find(u => u.id === selectedContact?.id) || selectedContact;
 
-  // СЛИЯНИЕ БАЗОВЫХ И МГНОВЕННЫХ СООБЩЕНИЙ
   const displayMessages = [...messages];
   localMessages.forEach(localMsg => {
     if (!displayMessages.some(m => m.id === localMsg.id)) {
@@ -598,6 +654,7 @@ export default function ChatsPage() {
               key={contact.id} contact={contact} isSelected={selectedContact?.id === contact.id}
               onClick={() => setSelectedContact(contact)} onSwipeAction={isArchiveMode ? handleUnarchive : handleArchive} onMarkRead={markChatAsRead}
               actionIcon={isArchiveMode ? ArchiveRestore : Archive} actionBgClass={isArchiveMode ? "bg-blue-50" : "bg-orange-50"} actionColorClass={isArchiveMode ? "text-blue-500" : "text-orange-500"}
+              unreadCount={unreadCounts[contact.id] || 0} // 🔥 ПЕРЕДАЕМ СЧЕТЧИК НЕПРОЧИТАННЫХ
             />
           ))}
           
@@ -775,7 +832,7 @@ export default function ChatsPage() {
                 <input type="file" ref={fileInputRef} onChange={handleImageAttach} accept="image/*" className="hidden" />
                 <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploadingImage} className="p-2 text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors shrink-0 mb-1">{isUploadingImage ? <Loader2 size={24} className="animate-spin" /> : <Paperclip size={24} />}</button>
                 <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }} placeholder="Сообщение..." className="flex-1 bg-transparent text-[16px] max-h-32 min-h-[40px] py-2 outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none custom-scrollbar" rows={1} />
-                <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isUploadingImage} className={`p-2 shrink-0 mb-1 rounded-full transition-colors ${(newMessage.trim() || attachedImage) ? 'text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10' : 'text-gray-300 dark:text-gray-600'}`}><Send size={24} /></button>
+                <button type="submit" disabled={(!newMessage.trim() && !attachedImage)} className={`p-2 shrink-0 mb-1 rounded-full transition-colors ${(newMessage.trim() || attachedImage) ? 'text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10' : 'text-gray-300 dark:text-gray-600'}`}><Send size={24} /></button>
               </form>
             </div>
           </>

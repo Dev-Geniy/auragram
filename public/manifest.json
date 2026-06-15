@@ -1,7 +1,7 @@
 {
-  "name": "AuraGram Enterprise",
-  "short_name": "AuraGram",
-  "description": "Enterprise chat and e-commerce platform",
+  "name": "AuraGram",
+  "short_name": "Aura",
+  "description": "Chat and e-commerce platform",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

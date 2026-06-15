@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, getDocs, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, orderBy, limit, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -9,7 +9,8 @@ import {
   Loader2, Paperclip, Check, CheckCheck, 
   Bookmark, ArrowLeft, Image as ExternalLink,
   ShoppingBag, Truck, CheckCircle2, Package, 
-  Users, Zap, Clock, Archive, ArchiveRestore, Reply 
+  Users, Zap, Clock, Archive, ArchiveRestore, Reply,
+  Volume2, VolumeX, Bell, BellOff // Новые иконки для настроек уведомлений
 } from 'lucide-react';
 
 interface UserProfile {
@@ -36,6 +37,14 @@ interface Message {
   replyToText?: string;
   replyToSender?: string;
   chatId?: string;
+}
+
+interface ToastNotification {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  avatar: string;
 }
 
 // -----------------------------------------------------
@@ -95,125 +104,51 @@ const playNotificationSound = () => {
   } catch (e) {}
 };
 
-// -----------------------------------------------------
-// КОМПОНЕНТ ДЛЯ СВАЙПА СООБЩЕНИЯ (REPLY)
-// -----------------------------------------------------
+// ... (КОМПОНЕНТЫ SwipeableMessage и SwipeableContact БЕЗ ИЗМЕНЕНИЙ)
 const SwipeableMessage = ({ children, onReply, isMine }: { children: React.ReactNode, onReply: () => void, isMine: boolean }) => {
   const [offsetX, setOffsetX] = useState(0);
   const startX = useRef(0);
   const isDragging = useRef(false);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    startX.current = e.touches[0].clientX;
-    isDragging.current = true;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging.current) return;
-    const diff = e.touches[0].clientX - startX.current;
-    if (diff > 0 && diff <= 60) setOffsetX(diff); 
-  };
-
-  const handleTouchEnd = () => {
-    isDragging.current = false;
-    if (offsetX > 40) onReply(); 
-    setOffsetX(0); 
-  };
+  const handleTouchStart = (e: React.TouchEvent) => { startX.current = e.touches[0].clientX; isDragging.current = true; };
+  const handleTouchMove = (e: React.TouchEvent) => { if (!isDragging.current) return; const diff = e.touches[0].clientX - startX.current; if (diff > 0 && diff <= 60) setOffsetX(diff); };
+  const handleTouchEnd = () => { isDragging.current = false; if (offsetX > 40) onReply(); setOffsetX(0); };
 
   return (
     <div className="relative w-full flex items-center py-1">
       <div className="absolute left-4 transition-opacity flex items-center justify-center" style={{ opacity: offsetX / 60 }}>
-        <div className="w-8 h-8 bg-gray-200/50 dark:bg-gray-800/50 rounded-full flex items-center justify-center">
-          <Reply size={16} className="text-gray-500 dark:text-gray-400" />
-        </div>
+        <div className="w-8 h-8 bg-gray-200/50 dark:bg-gray-800/50 rounded-full flex items-center justify-center"><Reply size={16} className="text-gray-500 dark:text-gray-400" /></div>
       </div>
-      <div
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        style={{ transform: `translateX(${offsetX}px)`, transition: isDragging.current ? 'none' : 'transform 0.2s cubic-bezier(0.1, 1, 0.5, 1)' }}
-        className={`w-full flex ${isMine ? 'justify-end' : 'justify-start'}`}
-      >
+      <div onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} style={{ transform: `translateX(${offsetX}px)`, transition: isDragging.current ? 'none' : 'transform 0.2s cubic-bezier(0.1, 1, 0.5, 1)' }} className={`w-full flex ${isMine ? 'justify-end' : 'justify-start'}`}>
         {children}
       </div>
     </div>
   );
 };
 
-// -----------------------------------------------------
-// КОМПОНЕНТ ДЛЯ СВАЙПОВ В СПИСКЕ ЧАТОВ С БЕЙДЖАМИ
-// -----------------------------------------------------
-const SwipeableContact = ({ 
-  contact, isSelected, onClick, onSwipeAction, onMarkRead,
-  actionIcon: ActionIcon, actionColorClass, actionBgClass, unreadCount 
-}: { 
-  contact: UserProfile, isSelected: boolean, onClick: () => void, 
-  onSwipeAction: (id: string) => void, onMarkRead: (id: string) => void,
-  actionIcon: any, actionColorClass: string, actionBgClass: string, unreadCount: number
-}) => {
+const SwipeableContact = ({ contact, isSelected, onClick, onSwipeAction, onMarkRead, actionIcon: ActionIcon, actionColorClass, actionBgClass, unreadCount }: { contact: UserProfile, isSelected: boolean, onClick: () => void, onSwipeAction: (id: string) => void, onMarkRead: (id: string) => void, actionIcon: any, actionColorClass: string, actionBgClass: string, unreadCount: number }) => {
   const [offsetX, setOffsetX] = useState(0);
   const startX = useRef(0);
   const isDragging = useRef(false);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    startX.current = e.touches[0].clientX;
-    isDragging.current = true;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging.current) return;
-    const diff = e.touches[0].clientX - startX.current;
-    if (diff > 80) setOffsetX(80);
-    else if (diff < -80) setOffsetX(-80);
-    else setOffsetX(diff);
-  };
-
-  const handleTouchEnd = () => {
-    isDragging.current = false;
-    if (offsetX > 60) onMarkRead(contact.id); 
-    else if (offsetX < -60) onSwipeAction(contact.id);
-    setOffsetX(0); 
-  };
+  const handleTouchStart = (e: React.TouchEvent) => { startX.current = e.touches[0].clientX; isDragging.current = true; };
+  const handleTouchMove = (e: React.TouchEvent) => { if (!isDragging.current) return; const diff = e.touches[0].clientX - startX.current; if (diff > 80) setOffsetX(80); else if (diff < -80) setOffsetX(-80); else setOffsetX(diff); };
+  const handleTouchEnd = () => { isDragging.current = false; if (offsetX > 60) onMarkRead(contact.id); else if (offsetX < -60) onSwipeAction(contact.id); setOffsetX(0); };
 
   return (
     <div className="relative w-full overflow-hidden bg-[#F2F2F7] dark:bg-gray-950 border-b border-gray-100/50 dark:border-gray-800/50">
       <div className="absolute inset-0 flex justify-between">
-        <div className={`w-1/2 bg-blue-50 flex items-center pl-4 text-white transition-opacity ${offsetX > 0 ? 'opacity-100' : 'opacity-0'}`}>
-          <CheckCheck size={24} className="text-blue-500" />
-        </div>
-        <div className={`w-1/2 flex items-center justify-end pr-4 text-white transition-opacity ${offsetX < 0 ? 'opacity-100' : 'opacity-0'} ${actionBgClass}`}>
-          <ActionIcon size={24} className={actionColorClass} />
-        </div>
+        <div className={`w-1/2 bg-blue-50 flex items-center pl-4 text-white transition-opacity ${offsetX > 0 ? 'opacity-100' : 'opacity-0'}`}><CheckCheck size={24} className="text-blue-500" /></div>
+        <div className={`w-1/2 flex items-center justify-end pr-4 text-white transition-opacity ${offsetX < 0 ? 'opacity-100' : 'opacity-0'} ${actionBgClass}`}><ActionIcon size={24} className={actionColorClass} /></div>
       </div>
-
-      <div 
-        onClick={onClick}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        style={{ transform: `translateX(${offsetX}px)` }}
-        className={`relative z-10 flex items-center gap-3 px-4 py-3 cursor-pointer transition-all duration-200 ${
-          isSelected ? 'bg-blue-500 text-white' : 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 dark:text-white'
-        }`}
-      >
-        {contact.isSaved ? (
-          <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-500 text-white'}`}><Bookmark size={20} /></div>
-        ) : (
-          <img src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}`} alt={contact.name} loading="lazy" className="w-12 h-12 rounded-full object-cover shrink-0 bg-gray-100 dark:bg-gray-800" />
-        )}
-        
+      <div onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} onClick={onClick} style={{ transform: `translateX(${offsetX}px)` }} className={`relative z-10 flex items-center gap-3 px-4 py-3 cursor-pointer transition-all duration-200 ${isSelected ? 'bg-blue-500 text-white' : 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 dark:text-white'}`}>
+        {contact.isSaved ? <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-500 text-white'}`}><Bookmark size={20} /></div> : <img src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} alt={contact.name} loading="lazy" className="w-12 h-12 rounded-full object-cover shrink-0 bg-gray-100 dark:bg-gray-800" />}
         <div className="flex-1 min-w-0 pb-1">
           <h4 className={`font-semibold text-[15px] truncate flex items-center justify-between ${isSelected ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
             <span className="truncate">{contact.name}</span>
-            {unreadCount > 0 && !isSelected && (
-              <span className="ml-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-sm shrink-0">
-                {unreadCount}
-              </span>
-            )}
+            {unreadCount > 0 && !isSelected && <span className="ml-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-sm shrink-0">{unreadCount}</span>}
           </h4>
-          <p className={`text-[13px] truncate ${isSelected ? 'text-white/80' : 'text-gray-500 dark:text-gray-400'}`}>
-            {contact.isSaved ? 'Сохраненные сообщения' : contact.type === 'business' ? 'Бизнес-аккаунт' : 'Клиент'}
-          </p>
+          <p className={`text-[13px] truncate ${isSelected ? 'text-white/80' : 'text-gray-500 dark:text-gray-400'}`}>{contact.isSaved ? 'Сохраненные сообщения' : contact.type === 'business' ? 'Бизнес-аккаунт' : 'Клиент'}</p>
         </div>
       </div>
     </div>
@@ -239,45 +174,64 @@ export default function ChatsPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [attachedImage, setAttachedImage] = useState<string>('');
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   
-  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
-  const initialLoadRef = useRef(true);
-  const currentChatRef = useRef<string | null>(null);
-
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [messageLimit, setMessageLimit] = useState(30);
+
+  // 🔥 НАСТРОЙКИ УВЕДОМЛЕНИЙ
+  const [soundEnabled, setSoundEnabled] = useState(() => JSON.parse(localStorage.getItem('chat_sound') ?? 'true'));
+  const [pushEnabled, setPushEnabled] = useState(() => JSON.parse(localStorage.getItem('chat_push') ?? 'true'));
   
+  // 🔥 IN-APP ШТОРКИ (TOASTS)
+  const [toasts, setToasts] = useState<ToastNotification[]>([]);
+  
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  
+  const currentChatRef = useRef<string | null>(null); 
+  const activeContactIdRef = useRef<string | null>(null); // Ref для доступа внутри слушателей
+  const globalUsersRef = useRef<UserProfile[]>([]);
+  const soundEnabledRef = useRef(soundEnabled);
+  const pushEnabledRef = useRef(pushEnabled);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ФУНКЦИЯ ОТМЕТКИ СООБЩЕНИЙ ПРОЧИТАННЫМИ
-  const markChatAsRead = async (contactId: string) => {
-    if (!user) return;
-    const chatId = [user.uid, contactId].sort().join('_');
-    const q = query(collection(db, 'messages'), where('chatId', '==', chatId), where('receiverId', '==', user.uid), where('isRead', '==', false));
-    try {
-      const querySnapshot = await getDocs(q);
-      querySnapshot.forEach((docSnap) => {
-        updateDoc(doc(db, 'messages', docSnap.id), { isRead: true }).catch(() => {});
-      });
-    } catch (error) {}
-  };
+  // Синхронизация стейтов с Refs для слушателей
+  useEffect(() => { activeContactIdRef.current = selectedContact?.id || null; }, [selectedContact]);
+  useEffect(() => { globalUsersRef.current = globalUsers; }, [globalUsers]);
+  useEffect(() => { 
+    soundEnabledRef.current = soundEnabled; 
+    localStorage.setItem('chat_sound', JSON.stringify(soundEnabled));
+  }, [soundEnabled]);
+  useEffect(() => { 
+    pushEnabledRef.current = pushEnabled; 
+    localStorage.setItem('chat_push', JSON.stringify(pushEnabled));
+  }, [pushEnabled]);
 
-  // НАСТРОЙКА НА ТИВНЫХ УВЕДОМЛЕНИЙ В БРАУЗЕРЕ
-  useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
+  // ЗАПРОС РАЗРЕШЕНИЯ НА PUSH ПРИ ВКЛЮЧЕНИИ
+  const handleTogglePush = () => {
+    const newVal = !pushEnabled;
+    setPushEnabled(newVal);
+    if (newVal && "Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
-  }, []);
+  };
 
-  // ОБНОВЛЕНИЕ ТЕКУЩЕГО ОНЛАЙН СТАТУСА
+  // ПОКАЗ IN-APP УВЕДОМЛЕНИЯ
+  const showToast = (senderId: string, senderName: string, text: string, avatar: string) => {
+    const id = Date.now().toString();
+    setToasts(prev => [...prev, { id, senderId, senderName, text, avatar }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 5000); // Исчезает через 5 секунд
+  };
+
+  // ОНЛАЙН СТАТУС
   useEffect(() => {
     if (!user) return;
-    const updatePresence = async () => {
-      try { await updateDoc(doc(db, 'users', user.uid), { lastSeen: serverTimestamp() }); } catch (error) {}
-    };
+    const updatePresence = async () => { try { await updateDoc(doc(db, 'users', user.uid), { lastSeen: Timestamp.now() }); } catch (error) {} };
     updatePresence();
     const interval = setInterval(updatePresence, 60000); 
     return () => clearInterval(interval);
@@ -302,7 +256,10 @@ export default function ChatsPage() {
       setGlobalUsers(loadedUsers);
     });
 
+    // 🌟 СЛУШАТЕЛЬ НОВЫХ СООБЩЕНИЙ (Уведомления)
     const qUnread = query(collection(db, 'messages'), where('receiverId', '==', user.uid), where('isRead', '==', false));
+    let initialLoad = true;
+
     const unsubscribeUnread = onSnapshot(qUnread, (snapshot) => {
       const counts: Record<string, number> = {};
       snapshot.docs.forEach(docSnap => {
@@ -311,27 +268,38 @@ export default function ChatsPage() {
       });
       setUnreadCounts(counts);
 
-      if (!initialLoadRef.current) {
+      if (!initialLoad) {
         snapshot.docChanges().forEach((change) => {
           if (change.type === 'added') {
             const msg = change.doc.data() as Message;
-            if (msg.senderId !== selectedContact?.id) {
-              playNotificationSound();
-              if ("Notification" in window && Notification.permission === "granted") {
-                const senderName = globalUsers.find(u => u.id === msg.senderId)?.name || 'Пользователь';
-                const body = msg.text || (msg.imageUrl ? '📷 Фотография' : 'Новое сообщение');
-                new Notification(`Новое сообщение: ${senderName}`, { body });
+            
+            // Если сообщение от текущего собеседника ИЛИ если вкладка активна — не шлем Push, только звук и In-App (если другой чат)
+            if (msg.senderId !== activeContactIdRef.current) {
+              const senderProfile = globalUsersRef.current.find(u => u.id === msg.senderId);
+              const senderName = senderProfile?.name || 'Новое сообщение';
+              const avatar = senderProfile?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}`;
+              const body = msg.text || (msg.imageUrl ? '📷 Фотография' : 'Вложение');
+
+              // Звук
+              if (soundEnabledRef.current) playNotificationSound();
+              
+              // In-App Шторка (всегда показываем, если мы в другом чате)
+              showToast(msg.senderId, senderName, body, avatar);
+
+              // OS Push Notification (Только если Push включены И вкладка браузера свернута/неактивна)
+              if (pushEnabledRef.current && "Notification" in window && Notification.permission === "granted" && document.hidden) {
+                new Notification(`Новое сообщение от ${senderName}`, { body, icon: avatar });
               }
             }
           }
         });
       } else {
-        initialLoadRef.current = false;
+        initialLoad = false;
       }
     });
 
     return () => { unsubscribeUsers(); unsubscribeUnread(); };
-  }, [user, selectedContact?.id, globalUsers]);
+  }, [user]);
 
   // ОБРАБОТКА ПОКУПКИ ИЗ КОРЗИНЫ
   useEffect(() => {
@@ -356,7 +324,7 @@ export default function ChatsPage() {
               await addDoc(collection(db, 'messages'), {
                 chatId, text: '🛒 Оформлен новый заказ!', type: 'order_receipt',
                 orderData: { items: itemsList, total: totalPrice, status: 'new' },
-                senderId: user!.uid, receiverId: contact.id, createdAt: serverTimestamp(), isRead: false
+                senderId: user!.uid, receiverId: contact.id, createdAt: Timestamp.now(), isRead: false
               });
               clearCart(contact.id);
               navigate('.', { replace: true, state: {} }); 
@@ -368,7 +336,7 @@ export default function ChatsPage() {
     processCheckout();
   }, [globalUsers, location.state, user, navigate, clearCart]);
 
-  // СИНХРОНИЗАЦИЯ ЛЕНТЫ СООБЩЕНИЙ В РЕАЛЬНОМ ВРЕМЕНИ (БЕЗ БЛОКИРОВКИ ИНДЕКСАМИ)
+  // ЗАГРУЗКА ЛЕНТЫ ЧАТА
   useEffect(() => {
     if (!user || !selectedContact) {
       setMessages([]);
@@ -384,7 +352,6 @@ export default function ChatsPage() {
       currentChatRef.current = chatId;
     }
 
-    // Запрос без orderBy, чтобы исключить падения на стороне Firestore у получателя
     const q = query(collection(db, 'messages'), where('chatId', '==', chatId));
     
     const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
@@ -395,12 +362,10 @@ export default function ChatsPage() {
         loadedMessages.push({ 
           id: docSnap.id, 
           ...data,
-          // Опережающий расчёт времени предотвращает выпадение сообщений во время отправки
           createdAt: data.createdAt === null ? Timestamp.now() : data.createdAt 
         } as Message);
       });
 
-      // Локальная сортировка гарантирует идеальный хронологический порядок на обоих устройствах
       loadedMessages.sort((a, b) => {
         const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : Date.now();
         const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : Date.now();
@@ -412,7 +377,7 @@ export default function ChatsPage() {
       }
 
       setMessages(loadedMessages);
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }), 50);
     });
 
     markChatAsRead(selectedContact.id);
@@ -442,13 +407,9 @@ export default function ChatsPage() {
     const chatId = [user.uid, selectedContact.id].sort().join('_');
 
     const messageData: any = {
-      chatId,
-      text: textToSend,
-      imageUrl: imageToSend,
-      senderId: user.uid,
-      receiverId: selectedContact.id,
-      createdAt: serverTimestamp(),
-      isRead: false
+      chatId, text: textToSend, imageUrl: imageToSend,
+      senderId: user.uid, receiverId: selectedContact.id,
+      createdAt: Timestamp.now(), isRead: false
     };
 
     if (replyToSend) {
@@ -458,16 +419,13 @@ export default function ChatsPage() {
 
     try {
       await addDoc(collection(db, 'messages'), messageData);
-    } catch (error) {
-      console.error('Ошибка отправки:', error);
-    }
+    } catch (error) {}
   };
 
   const insertQuickReply = () => {
     if (!currentUserProfile?.aiSettings?.contextPrompt) return alert("Сначала добавьте текст быстрого ответа в настройках профиля!");
     setNewMessage(currentUserProfile.aiSettings.contextPrompt);
   };
-
   const insertFollowUp = () => setNewMessage("Здравствуйте! 👋 Вы ранее интересовались нашими товарами. Подскажите, актуален ли еще ваш запрос? Буду рад(а) помочь!");
 
   const handleOrderStatusUpdate = async (msgId: string, newStatus: string, statusText: string) => {
@@ -476,9 +434,10 @@ export default function ChatsPage() {
     try {
       await updateDoc(doc(db, 'messages', msgId), { 'orderData.status': newStatus });
       await addDoc(collection(db, 'messages'), {
-        chatId, type: 'system_status', statusText,
-        senderId: user.uid, receiverId: selectedContact.id, createdAt: serverTimestamp(), isRead: false 
+        chatId, type: 'system_status', statusText, senderId: user.uid, receiverId: selectedContact.id,
+        createdAt: Timestamp.now(), isRead: false 
       });
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     } catch (error) {}
   };
 
@@ -492,6 +451,16 @@ export default function ChatsPage() {
       setAttachedImage(url);
     } catch (error) { alert('Не удалось загрузить изображение.'); } 
     finally { setIsUploadingImage(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
+  };
+
+  const markChatAsRead = async (contactId: string) => {
+    if (!user) return;
+    const chatId = [user.uid, contactId].sort().join('_');
+    const q = query(collection(db, 'messages'), where('chatId', '==', chatId), where('receiverId', '==', user.uid), where('isRead', '==', false));
+    try {
+      const querySnapshot = await getDocs(q);
+      querySnapshot.forEach((docSnap) => updateDoc(doc(db, 'messages', docSnap.id), { isRead: true }).catch(()=>{}));
+    } catch (error) {}
   };
 
   const formatTime = (timestamp: any) => {
@@ -514,7 +483,6 @@ export default function ChatsPage() {
 
     const isToday = last.getDate() === now.getDate() && last.getMonth() === now.getMonth() && last.getFullYear() === now.getFullYear();
     if (isToday) return 'был(а) сегодня';
-
     return `был(а) ${last.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}`;
   };
 
@@ -553,7 +521,6 @@ export default function ChatsPage() {
     if (activeTab === 'personal') return c.type !== 'business' || c.isSaved;
     if (activeTab === 'business') return c.type === 'business';
     if (activeTab === 'clients') return c.type !== 'business' && !c.isSaved;
-    
     return true; 
   });
 
@@ -561,24 +528,58 @@ export default function ChatsPage() {
   const activeContactData = globalUsers.find(u => u.id === selectedContact?.id) || selectedContact;
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-white dark:bg-gray-950 transition-colors">
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-white dark:bg-gray-950 transition-colors relative">
       
+      {/* 🌟 IN-APP УВЕДОМЛЕНИЯ (ШТОРКИ) 🌟 */}
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 pointer-events-none px-4 w-full md:w-[400px]">
+        {toasts.map(t => (
+          <div 
+            key={t.id} 
+            onClick={() => {
+              const contactToOpen = globalUsers.find(c => c.id === t.senderId);
+              if (contactToOpen) setSelectedContact(contactToOpen);
+              setToasts(prev => prev.filter(toast => toast.id !== t.id)); // Скрываем по клику
+            }} 
+            className="pointer-events-auto bg-white/95 dark:bg-gray-800/95 backdrop-blur-md shadow-xl rounded-2xl p-3 flex items-center gap-3 animate-fade-in w-full cursor-pointer border border-gray-100 dark:border-gray-700 hover:scale-[1.02] transition-transform"
+          >
+            <img src={t.avatar} className="w-10 h-10 rounded-full object-cover shrink-0 bg-gray-100 dark:bg-gray-900" />
+            <div className="flex-1 min-w-0">
+              <h4 className="text-[14px] font-bold text-gray-900 dark:text-white truncate">{t.senderName}</h4>
+              <p className="text-[13px] text-gray-500 dark:text-gray-400 truncate">{t.text}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* ЛЕВАЯ ПАНЕЛЬ */}
       <div className={`w-full md:w-[320px] lg:w-[380px] shrink-0 bg-white dark:bg-gray-900 md:border-r border-gray-200 dark:border-gray-800 flex flex-col z-10 transition-colors ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
         
         {isArchiveMode ? (
-          <div className="pt-4 pb-3 border-b border-gray-100 dark:border-gray-800 shrink-0 bg-blue-50/50 dark:bg-gray-800/50">
-            <button onClick={() => setIsArchiveMode(false)} className="flex items-center gap-2 px-4 text-blue-600 dark:text-blue-400 font-bold transition-colors hover:opacity-80"><ArrowLeft size={20} /> Вернуться к чатам</button>
+          <div className="pt-4 pb-3 border-b border-gray-100 dark:border-gray-800 shrink-0 bg-blue-50/50 dark:bg-gray-800/50 flex items-center justify-between px-4">
+            <button onClick={() => setIsArchiveMode(false)} className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold transition-colors hover:opacity-80">
+              <ArrowLeft size={20} /> Вернуться к чатам
+            </button>
           </div>
         ) : (
           <div className="pt-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
-            <div className="px-3 mb-3">
-              <div className="relative flex items-center bg-[#F2F2F7] dark:bg-gray-800 rounded-[10px] px-3 py-1.5 focus-within:bg-gray-200/80 dark:focus-within:bg-gray-700 transition-colors">
+            
+            {/* ХЕДЕР С ПОИСКОМ И НАСТРОЙКАМИ УВЕДОМЛЕНИЙ */}
+            <div className="px-3 mb-3 flex items-center gap-2">
+              <div className="relative flex-1 flex items-center bg-[#F2F2F7] dark:bg-gray-800 rounded-[10px] px-3 py-1.5 focus-within:bg-gray-200/80 dark:focus-within:bg-gray-700 transition-colors">
                 <Search className="text-gray-400 dark:text-gray-500 shrink-0" size={18} />
                 <input type="text" placeholder="Поиск..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-transparent pl-2 pr-8 py-1 text-[15px] focus:outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400" />
                 {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={16} /></button>}
               </div>
+
+              {/* КНОПКИ УВЕДОМЛЕНИЙ */}
+              <button onClick={() => setSoundEnabled(!soundEnabled)} className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${soundEnabled ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
+                {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+              </button>
+              <button onClick={handleTogglePush} className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${pushEnabled ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
+                {pushEnabled ? <Bell size={18} /> : <BellOff size={18} />}
+              </button>
             </div>
+
             <div className="flex px-3 pb-2 gap-2 overflow-x-auto scrollbar-none">
               <button onClick={() => setActiveTab('all')} className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>Все</button>
               <button onClick={() => setActiveTab('personal')} className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'personal' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>Личные</button>
@@ -619,7 +620,7 @@ export default function ChatsPage() {
         </div>
       </div>
       
-      {/* ПРАВАЯ ПАНЕЛЬ */}
+      {/* ПРАВАЯ ПАНЕЛЬ: ЧАТ */}
       <div className={`flex-1 flex flex-col bg-[#EFEFEF] dark:bg-[#0F0F0F] relative min-w-0 z-20 transition-colors ${!selectedContact ? 'hidden md:flex' : 'flex'}`}>
         
         {selectedContact && activeContactData ? (

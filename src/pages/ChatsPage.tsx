@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, Timestamp, serverTimestamp, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, Timestamp, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -14,6 +14,9 @@ import {
   Phone, Globe, Store, MessageSquare
 } from 'lucide-react';
 
+// ==========================================
+// 1. ИНТЕРФЕЙСЫ
+// ==========================================
 interface UserProfile {
   id: string;
   name: string;
@@ -53,6 +56,9 @@ interface ToastNotification {
   avatar: string;
 }
 
+// ==========================================
+// 2. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (УТИЛИТЫ)
+// ==========================================
 const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -104,6 +110,9 @@ const playNotificationSound = () => {
   } catch(e) {}
 };
 
+// ==========================================
+// 3. КОМПОНЕНТЫ СО СВАЙПАМИ
+// ==========================================
 const SwipeableMessage = ({ children, onReply, onDelete, isMine }: { children: React.ReactNode, onReply: () => void, onDelete: () => void, isMine: boolean }) => {
   const [offsetX, setOffsetX] = useState(0);
   const startX = useRef(0);
@@ -171,64 +180,64 @@ const SwipeableContact = ({ contact, isSelected, onClick, onSwipeAction, onMarkR
   );
 };
 
+// ==========================================
+// 4. ГЛАВНЫЙ КОМПОНЕНТ СТРАНИЦЫ
+// ==========================================
 export default function ChatsPage() {
   const { user } = useAuthStore();
   const location = useLocation(); 
   const navigate = useNavigate();
   const { clearCart } = useCartStore(); 
   
+  // Стейты контактов и интерфейса
   const [globalUsers, setGlobalUsers] = useState<UserProfile[]>([]);
   const [selectedContact, setSelectedContact] = useState<UserProfile | null>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
-  
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'personal' | 'business' | 'clients'>('all');
-  
   const [isArchiveMode, setIsArchiveMode] = useState(false);
   const [archivedContacts, setArchivedContacts] = useState<string[]>([]);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   
+  // Стейты сообщений
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [attachedImage, setAttachedImage] = useState<string>('');
-  
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
+  const [messageLimit, setMessageLimit] = useState(30);
+  const [showScrollButton, setShowScrollButton] = useState(false); 
+  
+  // Настройки и системные стейты
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
-  
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  
   const [soundEnabled, setSoundEnabled] = useState(() => JSON.parse(localStorage.getItem('chat_sound') ?? 'true'));
   const [pushEnabled, setPushEnabled] = useState(() => JSON.parse(localStorage.getItem('chat_push') ?? 'true'));
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   
-  const [messageLimit, setMessageLimit] = useState(30);
-  const [showScrollButton, setShowScrollButton] = useState(false); 
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  
+  // Рефы для синхронизации и блокировки дублей
   const currentChatRef = useRef<string | null>(null); 
   const activeContactIdRef = useRef<string | null>(null);
   const globalUsersRef = useRef<UserProfile[]>([]);
   const soundEnabledRef = useRef(soundEnabled);
   const pushEnabledRef = useRef(pushEnabled);
-  
   const checkoutProcessedRef = useRef(false);
   const isSendingRef = useRef(false);
   const actionProcessingRef = useRef(false);
-  
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Синхронизация рефов
   useEffect(() => { activeContactIdRef.current = selectedContact?.id || null; }, [selectedContact]);
   useEffect(() => { globalUsersRef.current = globalUsers; }, [globalUsers]);
   useEffect(() => { soundEnabledRef.current = soundEnabled; localStorage.setItem('chat_sound', JSON.stringify(soundEnabled)); }, [soundEnabled]);
   useEffect(() => { pushEnabledRef.current = pushEnabled; localStorage.setItem('chat_push', JSON.stringify(pushEnabled)); }, [pushEnabled]);
 
+  // Слушатель онлайна
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
@@ -251,6 +260,7 @@ export default function ChatsPage() {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000); 
   };
 
+  // Статус присутствия
   useEffect(() => {
     if (!user) return;
     const updatePresence = async () => { try { await updateDoc(doc(db, 'users', user.uid), { lastSeen: serverTimestamp() }); } catch (error) {} };
@@ -259,6 +269,7 @@ export default function ChatsPage() {
     return () => clearInterval(interval);
   }, [user?.uid]);
 
+  // Загрузка контактов и непрочитанных сообщений
   useEffect(() => {
     if (!user) return;
     const savedArchive = localStorage.getItem(`archive_${user.uid}`);
@@ -315,13 +326,13 @@ export default function ChatsPage() {
     return () => { unsubscribeUsers(); unsubscribeUnread(); };
   }, [user]);
 
+  // Обработка чекаउиз корзины
   useEffect(() => {
     const processCheckout = async () => {
       if (!location.state?.checkoutCart) {
         checkoutProcessedRef.current = false;
         return;
       }
-
       if (checkoutProcessedRef.current) return;
 
       if (globalUsers.length > 0 && location.state?.selectedUserId) {
@@ -360,6 +371,9 @@ export default function ChatsPage() {
     processCheckout();
   }, [globalUsers, location.state, user, navigate, clearCart]);
 
+  // ==========================================
+  // 5. ОСНОВНОЙ ЭФФЕКТ ЗАГРУЗКИ СООБЩЕНИЙ
+  // ==========================================
   useEffect(() => {
     if (!user || !selectedContact) {
       setMessages([]);
@@ -380,19 +394,14 @@ export default function ChatsPage() {
       setNewMessage(savedDraft || '');
     }
 
-    // ИСПОЛЬЗУЕМ orderBy ДЛЯ ПОДДЕРЖКИ ИНДЕКСА И ОПТИМИЗАЦИИ
-    const q = query(
-      collection(db, 'messages'), 
-      where('chatId', '==', chatId),
-      orderBy('createdAt', 'desc'),
-      limit(messageLimit)
-    );
+    // Запрос без индексов (работает 100% стабильно)
+    const q = query(collection(db, 'messages'), where('chatId', '==', chatId));
     
     const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
       let loadedMessages: Message[] = [];
 
       snapshot.forEach((docSnap) => {
-        // 🔥 ВАЖНО: { serverTimestamps: 'estimate' } заставляет отправленные сообщения появляться сразу
+        // 🔥 ВОТ ОНО: estimate дает локальным сообщениям дату моментально, не дожидаясь сервера!
         const data = docSnap.data({ serverTimestamps: 'estimate' });
         loadedMessages.push({ 
           id: docSnap.id, 
@@ -401,13 +410,23 @@ export default function ChatsPage() {
         } as Message);
       });
 
-      // Переворачиваем массив, чтобы новые сообщения были внизу
-      loadedMessages.reverse();
-      setMessages(loadedMessages);
-      setIsLoadingMore(false);
+      // Сортировка по времени
+      loadedMessages.sort((a, b) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+        return timeA - timeB;
+      });
 
-      if (messageLimit === 30) {
-        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }), 50);
+      // Пагинация слайсом
+      if (loadedMessages.length > messageLimit) {
+        loadedMessages = loadedMessages.slice(-messageLimit);
+      }
+
+      setMessages(loadedMessages);
+      
+      // Скролл вниз только если мы не листаем историю
+      if (messageLimit === 30 || snapshot.docChanges().some(change => change.type === 'added')) {
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
       }
     });
 
@@ -420,22 +439,20 @@ export default function ChatsPage() {
     };
   }, [user?.uid, selectedContact?.id, messageLimit]);
 
+  // ==========================================
+  // 6. ОБРАБОТЧИКИ ДЕЙСТВИЙ (SCROLL, TYPE, SEND)
+  // ==========================================
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
-    
-    if (target.scrollTop === 0 && messages.length >= messageLimit && !isLoadingMore) {
-      setIsLoadingMore(true);
+    if (target.scrollTop === 0) {
       const previousScrollHeight = target.scrollHeight;
-      
       setMessageLimit((prev) => prev + 30);
-      
       setTimeout(() => {
         if (chatContainerRef.current) {
           chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight - previousScrollHeight;
         }
-      }, 100);
+      }, 10);
     }
-    
     const isScrolledUp = target.scrollHeight - target.scrollTop - target.clientHeight > 150;
     setShowScrollButton(isScrolledUp);
   };
@@ -465,7 +482,7 @@ export default function ChatsPage() {
     if (isSendingRef.current) return; 
     if (!user || !selectedContact || (!newMessage.trim() && !attachedImage) || isOffline) return;
 
-    isSendingRef.current = true; 
+    isSendingRef.current = true; // Запираем замок
     
     const textToSend = newMessage.trim();
     const imageToSend = attachedImage;
@@ -504,7 +521,7 @@ export default function ChatsPage() {
     } catch (error) {
       console.error("Ошибка при отправке сообщения:", error);
     } finally {
-      isSendingRef.current = false; 
+      isSendingRef.current = false; // Отпираем замок после выполнения
     }
   };
 
@@ -560,6 +577,9 @@ export default function ChatsPage() {
     } catch (error) {}
   };
 
+  // ==========================================
+  // 7. ФОРМАТИРОВАНИЕ И РЕНДЕР
+  // ==========================================
   const formatTime = (timestamp: any) => {
     if (!timestamp) return '';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -855,18 +875,14 @@ export default function ChatsPage() {
             )}
 
             <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col">
-              {messages.length === 0 && !isLoadingMore && (
+              {messages.length === 0 && (
                 <div className="flex-1 flex flex-col items-center justify-center opacity-50">
                   <ShieldCheck size={48} className="text-gray-400 dark:text-gray-600 mb-2" />
                   <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 bg-gray-200/50 dark:bg-gray-800/50 px-4 py-1.5 rounded-full">Здесь пока нет сообщений</p>
                 </div>
               )}
 
-              {isLoadingMore && (
-                <div className="flex justify-center py-2 mb-2 overflow-hidden h-8">
-                  <Loader2 size={20} className="animate-spin text-gray-400 dark:text-gray-600" />
-                </div>
-              )}
+              {messages.length >= messageLimit && <div className="flex justify-center py-2 mb-2"><Loader2 size={20} className="animate-spin text-gray-400 dark:text-gray-600" /></div>}
 
               {messages.map((msg, index) => {
                 const isMine = msg.senderId === user?.uid;

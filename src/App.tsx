@@ -8,6 +8,9 @@ import {
   MessageCircle, Store, Settings, LogOut, Hexagon
 } from 'lucide-react';
 
+// 🌟 ДОБАВЛЯЕМ ИМПОРТ ГЛОБАЛЬНЫХ УВЕДОМЛЕНИЙ
+import GlobalNotifications from './components/GlobalNotifications';
+
 // ==========================================
 // ЛЕНИВАЯ ЗАГРУЗКА СТРАНИЦ
 // ==========================================
@@ -198,6 +201,10 @@ export default function App() {
   return (
     <HashRouter>
       <Suspense fallback={<GlobalLoader />}>
+        
+        {/* 🌟 ГЛОБАЛЬНЫЕ УВЕДОМЛЕНИЯ (Рисуются поверх всего интерфейса) */}
+        {user && <GlobalNotifications />}
+
         <Routes>
           <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/chats" />} />
           

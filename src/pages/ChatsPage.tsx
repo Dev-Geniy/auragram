@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, orderBy, limit, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, getDocs, Timestamp, serverTimestamp, orderBy, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -10,7 +10,7 @@ import {
   Bookmark, ArrowLeft, Image as ExternalLink,
   ShoppingBag, Truck, CheckCircle2, Package, 
   Users, Zap, Clock, Archive, ArchiveRestore, Reply,
-  Volume2, VolumeX, Bell, BellOff // Новые иконки для настроек уведомлений
+  Volume2, VolumeX, Bell, BellOff, ChevronDown // Добавлен ChevronDown
 } from 'lucide-react';
 
 interface UserProfile {
@@ -48,7 +48,7 @@ interface ToastNotification {
 }
 
 // -----------------------------------------------------
-// ФУНКЦИИ СЖАТИЯ И ЗАГРУЗКИ ИЗОБРАЖЕНИЙ
+// ФУНКЦИИ СЖАТИЯ И ЗАГРУЗКИ
 // -----------------------------------------------------
 const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
   return new Promise((resolve, reject) => {
@@ -84,9 +84,6 @@ const uploadToImgBB = async (file: File): Promise<string> => {
   throw new Error('Ошибка загрузки');
 };
 
-// -----------------------------------------------------
-// СИСТЕМНЫЙ ЗВУК УВЕДОМЛЕНИЯ (Web Audio API)
-// -----------------------------------------------------
 const playNotificationSound = () => {
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -101,10 +98,12 @@ const playNotificationSound = () => {
     gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.3);
     osc.start();
     osc.stop(ctx.currentTime + 0.3);
-  } catch (e) {}
+  } catch(e) {}
 };
 
-// ... (КОМПОНЕНТЫ SwipeableMessage и SwipeableContact БЕЗ ИЗМЕНЕНИЙ)
+// -----------------------------------------------------
+// КОМПОНЕНТ ДЛЯ СВАЙПА СООБЩЕНИЯ (REPLY)
+// -----------------------------------------------------
 const SwipeableMessage = ({ children, onReply, isMine }: { children: React.ReactNode, onReply: () => void, isMine: boolean }) => {
   const [offsetX, setOffsetX] = useState(0);
   const startX = useRef(0);
@@ -115,7 +114,7 @@ const SwipeableMessage = ({ children, onReply, isMine }: { children: React.React
   const handleTouchEnd = () => { isDragging.current = false; if (offsetX > 40) onReply(); setOffsetX(0); };
 
   return (
-    <div className="relative w-full flex items-center py-1">
+    <div className="relative w-full flex items-center">
       <div className="absolute left-4 transition-opacity flex items-center justify-center" style={{ opacity: offsetX / 60 }}>
         <div className="w-8 h-8 bg-gray-200/50 dark:bg-gray-800/50 rounded-full flex items-center justify-center"><Reply size={16} className="text-gray-500 dark:text-gray-400" /></div>
       </div>
@@ -126,6 +125,9 @@ const SwipeableMessage = ({ children, onReply, isMine }: { children: React.React
   );
 };
 
+// -----------------------------------------------------
+// КОМПОНЕНТ ДЛЯ СВАЙПОВ В СПИСКЕ ЧАТОВ
+// -----------------------------------------------------
 const SwipeableContact = ({ contact, isSelected, onClick, onSwipeAction, onMarkRead, actionIcon: ActionIcon, actionColorClass, actionBgClass, unreadCount }: { contact: UserProfile, isSelected: boolean, onClick: () => void, onSwipeAction: (id: string) => void, onMarkRead: (id: string) => void, actionIcon: any, actionColorClass: string, actionBgClass: string, unreadCount: number }) => {
   const [offsetX, setOffsetX] = useState(0);
   const startX = useRef(0);
@@ -141,7 +143,7 @@ const SwipeableContact = ({ contact, isSelected, onClick, onSwipeAction, onMarkR
         <div className={`w-1/2 bg-blue-50 flex items-center pl-4 text-white transition-opacity ${offsetX > 0 ? 'opacity-100' : 'opacity-0'}`}><CheckCheck size={24} className="text-blue-500" /></div>
         <div className={`w-1/2 flex items-center justify-end pr-4 text-white transition-opacity ${offsetX < 0 ? 'opacity-100' : 'opacity-0'} ${actionBgClass}`}><ActionIcon size={24} className={actionColorClass} /></div>
       </div>
-      <div onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} onClick={onClick} style={{ transform: `translateX(${offsetX}px)` }} className={`relative z-10 flex items-center gap-3 px-4 py-3 cursor-pointer transition-all duration-200 ${isSelected ? 'bg-blue-500 text-white' : 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 dark:text-white'}`}>
+      <div onClick={onClick} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} style={{ transform: `translateX(${offsetX}px)` }} className={`relative z-10 flex items-center gap-3 px-4 py-3 cursor-pointer transition-all duration-200 ${isSelected ? 'bg-blue-500 text-white' : 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 dark:text-white'}`}>
         {contact.isSaved ? <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-500 text-white'}`}><Bookmark size={20} /></div> : <img src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} alt={contact.name} loading="lazy" className="w-12 h-12 rounded-full object-cover shrink-0 bg-gray-100 dark:bg-gray-800" />}
         <div className="flex-1 min-w-0 pb-1">
           <h4 className={`font-semibold text-[15px] truncate flex items-center justify-between ${isSelected ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
@@ -176,20 +178,20 @@ export default function ChatsPage() {
   const [attachedImage, setAttachedImage] = useState<string>('');
   
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
-  const [messageLimit, setMessageLimit] = useState(30);
-
-  // 🔥 НАСТРОЙКИ УВЕДОМЛЕНИЙ
+  const [viewingImage, setViewingImage] = useState<string | null>(null);
+  
   const [soundEnabled, setSoundEnabled] = useState(() => JSON.parse(localStorage.getItem('chat_sound') ?? 'true'));
   const [pushEnabled, setPushEnabled] = useState(() => JSON.parse(localStorage.getItem('chat_push') ?? 'true'));
-  
-  // 🔥 IN-APP ШТОРКИ (TOASTS)
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
-  
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   
+  const initialLoadRef = useRef(true);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [messageLimit, setMessageLimit] = useState(30);
+  const [showScrollButton, setShowScrollButton] = useState(false); // 🔥 Состояние кнопки скролла
+  
   const currentChatRef = useRef<string | null>(null); 
-  const activeContactIdRef = useRef<string | null>(null); // Ref для доступа внутри слушателей
+  const activeContactIdRef = useRef<string | null>(null);
   const globalUsersRef = useRef<UserProfile[]>([]);
   const soundEnabledRef = useRef(soundEnabled);
   const pushEnabledRef = useRef(pushEnabled);
@@ -198,19 +200,11 @@ export default function ChatsPage() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Синхронизация стейтов с Refs для слушателей
   useEffect(() => { activeContactIdRef.current = selectedContact?.id || null; }, [selectedContact]);
   useEffect(() => { globalUsersRef.current = globalUsers; }, [globalUsers]);
-  useEffect(() => { 
-    soundEnabledRef.current = soundEnabled; 
-    localStorage.setItem('chat_sound', JSON.stringify(soundEnabled));
-  }, [soundEnabled]);
-  useEffect(() => { 
-    pushEnabledRef.current = pushEnabled; 
-    localStorage.setItem('chat_push', JSON.stringify(pushEnabled));
-  }, [pushEnabled]);
+  useEffect(() => { soundEnabledRef.current = soundEnabled; localStorage.setItem('chat_sound', JSON.stringify(soundEnabled)); }, [soundEnabled]);
+  useEffect(() => { pushEnabledRef.current = pushEnabled; localStorage.setItem('chat_push', JSON.stringify(pushEnabled)); }, [pushEnabled]);
 
-  // ЗАПРОС РАЗРЕШЕНИЯ НА PUSH ПРИ ВКЛЮЧЕНИИ
   const handleTogglePush = () => {
     const newVal = !pushEnabled;
     setPushEnabled(newVal);
@@ -219,16 +213,12 @@ export default function ChatsPage() {
     }
   };
 
-  // ПОКАЗ IN-APP УВЕДОМЛЕНИЯ
   const showToast = (senderId: string, senderName: string, text: string, avatar: string) => {
     const id = Date.now().toString();
     setToasts(prev => [...prev, { id, senderId, senderName, text, avatar }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 5000); // Исчезает через 5 секунд
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000); 
   };
 
-  // ОНЛАЙН СТАТУС
   useEffect(() => {
     if (!user) return;
     const updatePresence = async () => { try { await updateDoc(doc(db, 'users', user.uid), { lastSeen: Timestamp.now() }); } catch (error) {} };
@@ -237,7 +227,6 @@ export default function ChatsPage() {
     return () => clearInterval(interval);
   }, [user?.uid]);
 
-  // ЗАГРУЗКА ПОЛЬЗОВАТЕЛЕЙ И ФОНОВЫЙ МОНИТОРИНГ УВЕДОМЛЕНИЙ
   useEffect(() => {
     if (!user) return;
     const savedArchive = localStorage.getItem(`archive_${user.uid}`);
@@ -256,7 +245,6 @@ export default function ChatsPage() {
       setGlobalUsers(loadedUsers);
     });
 
-    // 🌟 СЛУШАТЕЛЬ НОВЫХ СООБЩЕНИЙ (Уведомления)
     const qUnread = query(collection(db, 'messages'), where('receiverId', '==', user.uid), where('isRead', '==', false));
     let initialLoad = true;
 
@@ -272,21 +260,15 @@ export default function ChatsPage() {
         snapshot.docChanges().forEach((change) => {
           if (change.type === 'added') {
             const msg = change.doc.data() as Message;
-            
-            // Если сообщение от текущего собеседника ИЛИ если вкладка активна — не шлем Push, только звук и In-App (если другой чат)
             if (msg.senderId !== activeContactIdRef.current) {
               const senderProfile = globalUsersRef.current.find(u => u.id === msg.senderId);
               const senderName = senderProfile?.name || 'Новое сообщение';
               const avatar = senderProfile?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}`;
               const body = msg.text || (msg.imageUrl ? '📷 Фотография' : 'Вложение');
 
-              // Звук
               if (soundEnabledRef.current) playNotificationSound();
-              
-              // In-App Шторка (всегда показываем, если мы в другом чате)
               showToast(msg.senderId, senderName, body, avatar);
 
-              // OS Push Notification (Только если Push включены И вкладка браузера свернута/неактивна)
               if (pushEnabledRef.current && "Notification" in window && Notification.permission === "granted" && document.hidden) {
                 new Notification(`Новое сообщение от ${senderName}`, { body, icon: avatar });
               }
@@ -301,7 +283,6 @@ export default function ChatsPage() {
     return () => { unsubscribeUsers(); unsubscribeUnread(); };
   }, [user]);
 
-  // ОБРАБОТКА ПОКУПКИ ИЗ КОРЗИНЫ
   useEffect(() => {
     const processCheckout = async () => {
       if (globalUsers.length > 0 && location.state?.selectedUserId) {
@@ -312,7 +293,6 @@ export default function ChatsPage() {
           if (location.state.checkoutCart && location.state.checkoutCart.length > 0) {
             const cartItems = location.state.checkoutCart;
             const chatId = [user!.uid, contact.id].sort().join('_');
-            
             let totalPrice = 0;
             const itemsList = cartItems.map((item: any) => {
               const numPrice = parseFloat(item.price.replace(/[^\d.-]/g, '')) || 0;
@@ -336,7 +316,6 @@ export default function ChatsPage() {
     processCheckout();
   }, [globalUsers, location.state, user, navigate, clearCart]);
 
-  // ЗАГРУЗКА ЛЕНТЫ ЧАТА
   useEffect(() => {
     if (!user || !selectedContact) {
       setMessages([]);
@@ -377,21 +356,36 @@ export default function ChatsPage() {
       }
 
       setMessages(loadedMessages);
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }), 50);
+      
+      // Авто-скролл, если мы находимся не далеко от низа
+      if (chatContainerRef.current) {
+        const { scrollHeight, scrollTop, clientHeight } = chatContainerRef.current;
+        if (scrollHeight - scrollTop - clientHeight < 200) {
+          setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+        }
+      } else {
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+      }
     });
 
     markChatAsRead(selectedContact.id);
-
     return () => unsubscribe();
   }, [user?.uid, selectedContact?.id, messageLimit]);
 
-  const handleScroll = () => {
-    if (chatContainerRef.current && chatContainerRef.current.scrollTop === 0) {
+  // 🔥 ОБРАБОТКА СКРОЛЛА И КНОПКА "ВНИЗ"
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    
+    // Подгрузка истории
+    if (target.scrollTop === 0) {
       setMessageLimit((prev) => prev + 30);
     }
+
+    // Показ кнопки прокрутки вниз (если скроллим вверх больше чем на 150px)
+    const isScrolledUp = target.scrollHeight - target.scrollTop - target.clientHeight > 150;
+    setShowScrollButton(isScrolledUp);
   };
 
-  // ОТПРАВКА СООБЩЕНИЯ
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!user || !selectedContact || (!newMessage.trim() && !attachedImage)) return;
@@ -409,7 +403,7 @@ export default function ChatsPage() {
     const messageData: any = {
       chatId, text: textToSend, imageUrl: imageToSend,
       senderId: user.uid, receiverId: selectedContact.id,
-      createdAt: Timestamp.now(), isRead: false
+      createdAt: serverTimestamp(), isRead: false
     };
 
     if (replyToSend) {
@@ -419,6 +413,7 @@ export default function ChatsPage() {
 
     try {
       await addDoc(collection(db, 'messages'), messageData);
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     } catch (error) {}
   };
 
@@ -426,6 +421,7 @@ export default function ChatsPage() {
     if (!currentUserProfile?.aiSettings?.contextPrompt) return alert("Сначала добавьте текст быстрого ответа в настройках профиля!");
     setNewMessage(currentUserProfile.aiSettings.contextPrompt);
   };
+
   const insertFollowUp = () => setNewMessage("Здравствуйте! 👋 Вы ранее интересовались нашими товарами. Подскажите, актуален ли еще ваш запрос? Буду рад(а) помочь!");
 
   const handleOrderStatusUpdate = async (msgId: string, newStatus: string, statusText: string) => {
@@ -437,7 +433,6 @@ export default function ChatsPage() {
         chatId, type: 'system_status', statusText, senderId: user.uid, receiverId: selectedContact.id,
         createdAt: Timestamp.now(), isRead: false 
       });
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     } catch (error) {}
   };
 
@@ -514,10 +509,8 @@ export default function ChatsPage() {
   const filteredContacts = globalUsers.filter(c => {
     const matchSearch = c.name?.toLowerCase().includes(searchQuery.toLowerCase().trim());
     if (!matchSearch) return false;
-    
     if (isArchiveMode) return archivedContacts.includes(c.id);
     if (archivedContacts.includes(c.id)) return false;
-
     if (activeTab === 'personal') return c.type !== 'business' || c.isSaved;
     if (activeTab === 'business') return c.type === 'business';
     if (activeTab === 'clients') return c.type !== 'business' && !c.isSaved;
@@ -530,7 +523,7 @@ export default function ChatsPage() {
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-white dark:bg-gray-950 transition-colors relative">
       
-      {/* 🌟 IN-APP УВЕДОМЛЕНИЯ (ШТОРКИ) 🌟 */}
+      {/* 🌟 IN-APP УВЕДОМЛЕНИЯ (ШТОРКИ) */}
       <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 pointer-events-none px-4 w-full md:w-[400px]">
         {toasts.map(t => (
           <div 
@@ -538,7 +531,7 @@ export default function ChatsPage() {
             onClick={() => {
               const contactToOpen = globalUsers.find(c => c.id === t.senderId);
               if (contactToOpen) setSelectedContact(contactToOpen);
-              setToasts(prev => prev.filter(toast => toast.id !== t.id)); // Скрываем по клику
+              setToasts(prev => prev.filter(toast => toast.id !== t.id));
             }} 
             className="pointer-events-auto bg-white/95 dark:bg-gray-800/95 backdrop-blur-md shadow-xl rounded-2xl p-3 flex items-center gap-3 animate-fade-in w-full cursor-pointer border border-gray-100 dark:border-gray-700 hover:scale-[1.02] transition-transform"
           >
@@ -551,6 +544,13 @@ export default function ChatsPage() {
         ))}
       </div>
 
+      {viewingImage && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setViewingImage(null)}>
+          <img src={viewingImage} alt="Full screen" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />
+          <button className="absolute top-6 right-6 text-white/70 hover:text-white p-2 rounded-full bg-black/50 backdrop-blur-md transition-colors"><X size={28} /></button>
+        </div>
+      )}
+
       {/* ЛЕВАЯ ПАНЕЛЬ */}
       <div className={`w-full md:w-[320px] lg:w-[380px] shrink-0 bg-white dark:bg-gray-900 md:border-r border-gray-200 dark:border-gray-800 flex flex-col z-10 transition-colors ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
         
@@ -562,8 +562,6 @@ export default function ChatsPage() {
           </div>
         ) : (
           <div className="pt-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
-            
-            {/* ХЕДЕР С ПОИСКОМ И НАСТРОЙКАМИ УВЕДОМЛЕНИЙ */}
             <div className="px-3 mb-3 flex items-center gap-2">
               <div className="relative flex-1 flex items-center bg-[#F2F2F7] dark:bg-gray-800 rounded-[10px] px-3 py-1.5 focus-within:bg-gray-200/80 dark:focus-within:bg-gray-700 transition-colors">
                 <Search className="text-gray-400 dark:text-gray-500 shrink-0" size={18} />
@@ -571,7 +569,7 @@ export default function ChatsPage() {
                 {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={16} /></button>}
               </div>
 
-              {/* КНОПКИ УВЕДОМЛЕНИЙ */}
+              {/* НАСТРОЙКИ УВЕДОМЛЕНИЙ */}
               <button onClick={() => setSoundEnabled(!soundEnabled)} className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${soundEnabled ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
                 {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
               </button>
@@ -579,7 +577,6 @@ export default function ChatsPage() {
                 {pushEnabled ? <Bell size={18} /> : <BellOff size={18} />}
               </button>
             </div>
-
             <div className="flex px-3 pb-2 gap-2 overflow-x-auto scrollbar-none">
               <button onClick={() => setActiveTab('all')} className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>Все</button>
               <button onClick={() => setActiveTab('personal')} className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'personal' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>Личные</button>
@@ -645,25 +642,74 @@ export default function ChatsPage() {
               <button onClick={() => setSelectedContact(null)} className="hidden md:flex items-center gap-1.5 text-[13px] font-bold text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors">Закрыть чат <X size={16} /></button>
             </div>
             
-            <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-1.5 custom-scrollbar">
+            {/* КНОПКА СКРОЛЛА ВНИЗ */}
+            {showScrollButton && (
+              <button 
+                onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                className="absolute bottom-[90px] right-6 z-30 w-11 h-11 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all animate-fade-in"
+              >
+                <ChevronDown size={24} />
+                {/* Бейдж на кнопке скролла, если есть новые */}
+                {unreadCounts[selectedContact.id] > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-sm border-2 border-white dark:border-gray-800">
+                    {unreadCounts[selectedContact.id]}
+                  </span>
+                )}
+              </button>
+            )}
+
+            <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col">
               {messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-full opacity-50">
+                <div className="flex-1 flex flex-col items-center justify-center opacity-50">
                   <ShieldCheck size={48} className="text-gray-400 dark:text-gray-600 mb-2" />
                   <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 bg-gray-200/50 dark:bg-gray-800/50 px-4 py-1.5 rounded-full">Здесь пока нет сообщений</p>
                 </div>
               )}
 
+              {messages.length >= messageLimit && <div className="flex justify-center py-2 mb-2"><Loader2 size={20} className="animate-spin text-gray-400 dark:text-gray-600" /></div>}
+
               {messages.map((msg, index) => {
                 const isMine = msg.senderId === user?.uid;
-                const isSequential = index > 0 && messages[index - 1].senderId === msg.senderId;
+                
+                // 🔥 ЛОГИКА ГРУППИРОВКИ СООБЩЕНИЙ (Message Bubbles)
+                const prevMsg = index > 0 ? messages[index - 1] : null;
+                const nextMsg = index < messages.length - 1 ? messages[index + 1] : null;
+
+                const currentMsgDateStr = msg.createdAt ? (msg.createdAt.toDate ? msg.createdAt.toDate() : new Date(msg.createdAt)).toDateString() : new Date().toDateString();
+                const prevMsgDateStr = prevMsg?.createdAt ? (prevMsg.createdAt.toDate ? prevMsg.createdAt.toDate() : new Date(prevMsg.createdAt)).toDateString() : null;
+                const nextMsgDateStr = nextMsg?.createdAt ? (nextMsg.createdAt.toDate ? nextMsg.createdAt.toDate() : new Date(nextMsg.createdAt)).toDateString() : null;
+
+                const showDateDivider = index === 0 || currentMsgDateStr !== prevMsgDateStr;
+
+                const isPrevMine = prevMsg?.senderId === msg.senderId && currentMsgDateStr === prevMsgDateStr;
+                const isNextMine = nextMsg?.senderId === msg.senderId && currentMsgDateStr === nextMsgDateStr;
+
+                const isFirstInGroup = !isPrevMine;
+                const isLastInGroup = !isNextMine;
+
+                // Умные отступы: больше между чужими, меньше между своими
+                const marginTopClass = isFirstInGroup && !showDateDivider ? 'mt-3' : 'mt-0.5';
+
+                // Скругления для создания эффекта "монолитного блока"
+                let bubbleRadius = isMine 
+                  ? 'rounded-2xl rounded-tr-sm' 
+                  : 'rounded-2xl rounded-tl-sm';
+
+                if (isMine) {
+                  if (isFirstInGroup && isLastInGroup) bubbleRadius = 'rounded-2xl rounded-br-sm'; // Изолированное сообщение
+                  else if (isFirstInGroup) bubbleRadius = 'rounded-2xl rounded-br-sm'; // Верхнее
+                  else if (isLastInGroup) bubbleRadius = 'rounded-2xl rounded-tr-sm';  // Нижнее
+                  else bubbleRadius = 'rounded-2xl rounded-r-sm'; // В середине группы
+                } else {
+                  if (isFirstInGroup && isLastInGroup) bubbleRadius = 'rounded-2xl rounded-bl-sm';
+                  else if (isFirstInGroup) bubbleRadius = 'rounded-2xl rounded-bl-sm';
+                  else if (isLastInGroup) bubbleRadius = 'rounded-2xl rounded-tl-sm';
+                  else bubbleRadius = 'rounded-2xl rounded-l-sm';
+                }
+
                 const isCard = msg.type === 'share_card' && msg.cardData;
                 const isReceipt = msg.type === 'order_receipt' && msg.orderData;
                 const isSystem = msg.type === 'system_status';
-
-                const currentMsgDateStr = msg.createdAt ? (msg.createdAt.toDate ? msg.createdAt.toDate() : new Date(msg.createdAt)).toDateString() : new Date().toDateString();
-                const prevMsg = index > 0 ? messages[index - 1] : null;
-                const prevMsgDateStr = prevMsg?.createdAt ? (prevMsg.createdAt.toDate ? prevMsg.createdAt.toDate() : new Date(prevMsg.createdAt)).toDateString() : null;
-                const showDateDivider = index === 0 || currentMsgDateStr !== prevMsgDateStr;
 
                 return (
                   <div key={msg.id}>
@@ -682,9 +728,9 @@ export default function ChatsPage() {
                     ) : (
                       <SwipeableMessage onReply={() => setReplyingTo(msg)} isMine={isMine}>
                         <div className={`relative max-w-[85%] sm:max-w-[70%] flex flex-col ${
-                          isMine ? 'bg-[#E3FECE] dark:bg-[#1E3A8A] text-gray-900 dark:text-white rounded-2xl rounded-tr-sm' 
-                                 : 'bg-white dark:bg-[#202020] text-gray-900 dark:text-white rounded-2xl rounded-tl-sm border border-gray-100 dark:border-gray-800 shadow-sm'
-                        } ${(isCard || isReceipt) ? 'p-1.5' : 'px-3 pt-2 pb-1.5 text-[15px] leading-relaxed'} ${isSequential && !showDateDivider ? (isMine ? 'mt-0.5' : 'mt-0.5') : 'mt-2'}`}>
+                          isMine ? `bg-[#E3FECE] dark:bg-[#1E3A8A] text-gray-900 dark:text-white ${bubbleRadius}` 
+                                 : `bg-white dark:bg-[#202020] text-gray-900 dark:text-white border border-gray-100 dark:border-gray-800 shadow-sm ${bubbleRadius}`
+                        } ${(isCard || isReceipt) ? 'p-1.5' : 'px-3 pt-2 pb-1.5 text-[15px] leading-relaxed'} ${marginTopClass}`}>
                           
                           {msg.replyToText && (
                             <div className="mb-1.5 pl-2 border-l-[3px] border-blue-500 bg-black/5 dark:bg-black/20 rounded-r-md py-1 pr-2">
@@ -720,7 +766,7 @@ export default function ChatsPage() {
                             </div>
                           ) : isCard ? (
                             <div className="flex flex-col w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-200/50 dark:border-gray-700">
-                              <img src={msg.cardData!.imageUrl} loading="lazy" className="w-full h-36 object-cover" alt="card" />
+                              <img src={msg.cardData!.imageUrl} onClick={() => setViewingImage(msg.cardData!.imageUrl)} loading="lazy" className="w-full h-36 object-cover cursor-pointer hover:opacity-90 transition-opacity" alt="card" />
                               <div className="p-3">
                                 <h4 className="font-semibold text-[14px] text-gray-900 dark:text-white line-clamp-1 mb-1">{msg.cardData!.title}</h4>
                                 {msg.cardData!.price && <span className="text-[13px] font-bold text-blue-500 dark:text-blue-400">{msg.cardData!.price}</span>}
@@ -729,7 +775,7 @@ export default function ChatsPage() {
                             </div>
                           ) : (
                             <>
-                              {msg.imageUrl && <img src={msg.imageUrl} loading="lazy" alt="attachment" className="w-full max-w-[280px] h-auto rounded-xl mb-1 object-cover" />}
+                              {msg.imageUrl && <img src={msg.imageUrl} onClick={() => setViewingImage(msg.imageUrl!)} loading="lazy" alt="attachment" className="w-full max-w-[280px] h-auto rounded-xl mb-1 object-cover cursor-pointer hover:opacity-90 transition-opacity" />}
                               {msg.text && <span className="whitespace-pre-wrap break-words">{msg.text}</span>}
                             </>
                           )}

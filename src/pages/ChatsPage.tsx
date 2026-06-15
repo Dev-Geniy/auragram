@@ -11,9 +11,10 @@ import {
   ShoppingBag, Truck, CheckCircle2, Package, 
   Users, Zap, Clock, Archive, ArchiveRestore, Reply,
   Trash2, Edit2, ChevronDown, WifiOff, Volume2, VolumeX, Bell, BellOff,
-  Phone, Globe, Store, User // Иконки для профиля
+  Phone, Globe, Store, User, MapPin, MessageSquare // Добавил MapPin и MessageSquare для карточки
 } from 'lucide-react';
 
+// ... (ИНТЕРФЕЙСЫ ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ)
 interface UserProfile {
   id: string;
   name: string;
@@ -54,7 +55,7 @@ interface ToastNotification {
 }
 
 // -----------------------------------------------------
-// ФУНКЦИИ СЖАТИЯ И ЗАГРУЗКИ
+// ФУНКЦИИ СЖАТИЯ И ЗАГРУЗКИ (БЕЗ ИЗМЕНЕНИЙ)
 // -----------------------------------------------------
 const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
   return new Promise((resolve, reject) => {
@@ -107,9 +108,7 @@ const playNotificationSound = () => {
   } catch(e) {}
 };
 
-// -----------------------------------------------------
-// СВАЙП СООБЩЕНИЯ (REPLY & DELETE)
-// -----------------------------------------------------
+// ... (КОМПОНЕНТЫ СВАЙПОВ БЕЗ ИЗМЕНЕНИЙ)
 const SwipeableMessage = ({ children, onReply, onDelete, isMine }: { children: React.ReactNode, onReply: () => void, onDelete: () => void, isMine: boolean }) => {
   const [offsetX, setOffsetX] = useState(0);
   const startX = useRef(0);
@@ -146,9 +145,6 @@ const SwipeableMessage = ({ children, onReply, onDelete, isMine }: { children: R
   );
 };
 
-// -----------------------------------------------------
-// СВАЙП КОНТАКТОВ В СПИСКЕ
-// -----------------------------------------------------
 const SwipeableContact = ({ contact, isSelected, onClick, onSwipeAction, onMarkRead, actionIcon: ActionIcon, actionColorClass, actionBgClass, unreadCount, currentUserId }: { contact: UserProfile, isSelected: boolean, onClick: () => void, onSwipeAction: (id: string) => void, onMarkRead: (id: string) => void, actionIcon: any, actionColorClass: string, actionBgClass: string, unreadCount: number, currentUserId?: string }) => {
   const [offsetX, setOffsetX] = useState(0);
   const startX = useRef(0);
@@ -205,7 +201,6 @@ export default function ChatsPage() {
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   
-  // 🔥 МОДАЛЬНОЕ ОКНО ПРОФИЛЯ
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   
   const [soundEnabled, setSoundEnabled] = useState(() => JSON.parse(localStorage.getItem('chat_sound') ?? 'true'));
@@ -235,7 +230,6 @@ export default function ChatsPage() {
   useEffect(() => { soundEnabledRef.current = soundEnabled; localStorage.setItem('chat_sound', JSON.stringify(soundEnabled)); }, [soundEnabled]);
   useEffect(() => { pushEnabledRef.current = pushEnabled; localStorage.setItem('chat_push', JSON.stringify(pushEnabled)); }, [pushEnabled]);
 
-  // ОФФЛАЙН ДЕТЕКТОР
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
@@ -258,6 +252,7 @@ export default function ChatsPage() {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000); 
   };
 
+  // ... (ОСТАЛЬНЫЕ useEffect ДЛЯ FIREBASE ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ, Я ИХ СОХРАНИЛ В ПОЛНОМ ОБЪЕМЕ)
   useEffect(() => {
     if (!user) return;
     const updatePresence = async () => { try { await updateDoc(doc(db, 'users', user.uid), { lastSeen: serverTimestamp() }); } catch (error) {} };
@@ -322,7 +317,6 @@ export default function ChatsPage() {
     return () => { unsubscribeUsers(); unsubscribeUnread(); };
   }, [user]);
 
-  // ОБРАБОТКА ПОКУПКИ
   useEffect(() => {
     const processCheckout = async () => {
       if (globalUsers.length > 0 && location.state?.selectedUserId) {
@@ -357,7 +351,6 @@ export default function ChatsPage() {
     processCheckout();
   }, [globalUsers, location.state, user, navigate, clearCart]);
 
-  // ЗАГРУЗКА ЛЕНТЫ ЧАТА И ЧЕРНОВИКОВ
   useEffect(() => {
     if (!user || !selectedContact) {
       setMessages([]);
@@ -371,14 +364,13 @@ export default function ChatsPage() {
       setMessageLimit(30);
       setReplyingTo(null); 
       setEditingMessage(null);
-      setIsProfileModalOpen(false); // Закрываем профиль при смене чата
+      setIsProfileModalOpen(false); 
       currentChatRef.current = chatId;
       
       const savedDraft = localStorage.getItem(`draft_${user.uid}_${selectedContact.id}`);
       setNewMessage(savedDraft || '');
     }
 
-    // Без orderBy - забираем всё и сортируем локально для идеальной мгновенной синхронизации
     const q = query(collection(db, 'messages'), where('chatId', '==', chatId));
     
     const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
@@ -416,6 +408,7 @@ export default function ChatsPage() {
     };
   }, [user?.uid, selectedContact?.id, messageLimit]);
 
+  // ОБРАБОТЧИКИ (Scroll, Type, Send, Delete...)
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
     if (target.scrollTop === 0) setMessageLimit((prev) => prev + 30);
@@ -624,78 +617,102 @@ export default function ChatsPage() {
         </div>
       )}
 
-      {/* 🌟 МОДАЛЬНОЕ ОКНО ПРОФИЛЯ / МАГАЗИНА */}
+      {/* 🌟 ИДЕАЛЬНОЕ МОДАЛЬНОЕ ОКНО ПРОФИЛЯ ПО МАКЕТУ 🌟 */}
       {isProfileModalOpen && activeContactData && !activeContactData.isSaved && (
         <div className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm flex justify-center items-end md:items-center p-0 md:p-4 animate-fade-in" onClick={() => setIsProfileModalOpen(false)}>
-          <div className="bg-white dark:bg-gray-900 w-full md:w-[480px] max-h-[90vh] overflow-y-auto custom-scrollbar rounded-t-3xl md:rounded-3xl shadow-2xl flex flex-col transition-transform transform translate-y-0" onClick={e => e.stopPropagation()}>
-            {/* Градиентная обложка */}
-            <div className="relative h-32 bg-gradient-to-r from-blue-500 to-indigo-500 shrink-0 rounded-t-3xl md:rounded-t-3xl">
+          <div className="bg-white dark:bg-gray-900 w-full md:w-[420px] max-h-[90vh] overflow-y-auto custom-scrollbar rounded-t-[32px] md:rounded-3xl shadow-2xl flex flex-col transition-transform transform translate-y-0" onClick={e => e.stopPropagation()}>
+            
+            {/* ГРАДИЕНТНАЯ ОБЛОЖКА */}
+            <div className="relative h-32 bg-gradient-to-r from-[#A0C4FF] to-[#C4A0FF] shrink-0 rounded-t-[32px] md:rounded-t-3xl">
               <button onClick={() => setIsProfileModalOpen(false)} className="absolute top-4 right-4 w-8 h-8 bg-black/20 hover:bg-black/40 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-md"><X size={18} /></button>
             </div>
             
-            {/* Данные профиля */}
-            <div className="px-6 pb-6 relative">
-              <img src={activeContactData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(activeContactData.name)}`} alt={activeContactData.name} className="w-24 h-24 rounded-full object-cover border-4 border-white dark:border-gray-900 absolute -top-12 shadow-md bg-white dark:bg-gray-800" />
+            {/* ДАННЫЕ ПРОФИЛЯ */}
+            <div className="px-6 pb-8 relative flex flex-col items-center -mt-12">
+              <img src={activeContactData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(activeContactData.name)}`} alt={activeContactData.name} className="w-24 h-24 rounded-full object-cover border-4 border-white dark:border-gray-900 shadow-md bg-white dark:bg-gray-800 z-10" />
               
-              <div className="mt-14">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <div className="mt-3 w-full text-center">
+                <h2 className="text-[22px] font-bold text-gray-900 dark:text-white flex items-center justify-center gap-2">
                   {activeContactData.name}
-                  {activeContactData.type === 'business' ? <ShieldCheck size={18} className="text-blue-500" /> : <User size={18} className="text-gray-400" />}
+                  {activeContactData.type === 'business' && <ShieldCheck size={20} className="text-blue-500" />}
                 </h2>
-                <p className={`text-[13px] font-medium mt-1 ${getOnlineStatus(activeContactData.lastSeen) === 'в сети' ? 'text-blue-500' : 'text-gray-500'}`}>
+                <p className={`text-[13px] font-semibold mt-1 ${getOnlineStatus(activeContactData.lastSeen) === 'в сети' ? 'text-blue-500' : 'text-gray-500'}`}>
                   {getOnlineStatus(activeContactData.lastSeen)}
                 </p>
                 
-                {/* О себе / Описание */}
-                {activeContactData.role && <p className="mt-4 text-[14px] text-gray-600 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{activeContactData.role}</p>}
-                
-                {/* Контакты */}
-                {activeContactData.contacts && (activeContactData.contacts.phone || activeContactData.contacts.website) && (
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {activeContactData.contacts.phone && <a href={`tel:${activeContactData.contacts.phone}`} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-lg text-[13px] font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"><Phone size={14} /> {activeContactData.contacts.phone}</a>}
-                    {activeContactData.contacts.website && <a href={activeContactData.contacts.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-lg text-[13px] font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"><Globe size={14} /> Веб-сайт</a>}
+                {/* КНОПКА ВОЗВРАТА К ЧАТУ */}
+                <button onClick={() => setIsProfileModalOpen(false)} className="mt-4 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-[16px] flex items-center justify-center gap-2 shadow-sm transition-colors">
+                  <MessageSquare size={18} /> Написать сообщение
+                </button>
+
+                {/* О СЕБЕ */}
+                {activeContactData.role && (
+                  <div className="mt-6 text-left w-full">
+                    <h3 className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider mb-2">О себе</h3>
+                    <p className="text-[15px] text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">{activeContactData.role}</p>
                   </div>
                 )}
-              </div>
+                
+                {/* КОНТАКТЫ */}
+                {activeContactData.contacts && (activeContactData.contacts.phone || activeContactData.contacts.website) && (
+                  <div className="mt-6 text-left w-full">
+                    <h3 className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Контакты</h3>
+                    <div className="flex flex-col gap-2">
+                      {activeContactData.contacts.phone && (
+                        <a href={`tel:${activeContactData.contacts.phone}`} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                          <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 text-green-600 flex items-center justify-center rounded-full"><Phone size={18} /></div>
+                          <div className="flex flex-col">
+                            <span className="text-[15px] font-bold text-gray-900 dark:text-white">{activeContactData.contacts.phone}</span>
+                            <span className="text-[12px] text-gray-500">Мобильный</span>
+                          </div>
+                        </a>
+                      )}
+                      {activeContactData.contacts.website && (
+                        <a href={activeContactData.contacts.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                          <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center rounded-full"><Globe size={18} /></div>
+                          <div className="flex flex-col">
+                            <span className="text-[15px] font-bold text-gray-900 dark:text-white line-clamp-1">{activeContactData.contacts.website.replace(/^https?:\/\//, '')}</span>
+                            <span className="text-[12px] text-gray-500">Веб-сайт</span>
+                          </div>
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
 
-              {/* ВИТРИНА МАГАЗИНА (Только для бизнеса) */}
-              {activeContactData.type === 'business' && (
-                <div className="mt-8 border-t border-gray-100 dark:border-gray-800 pt-6">
-                  <h3 className="text-[15px] font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2"><Package size={18} className="text-indigo-500"/> Витрина магазина</h3>
-                  
-                  {activeContactData.products && activeContactData.products.length > 0 ? (
-                    <>
-                      <div className="grid grid-cols-2 gap-3">
-                        {/* Показываем только первые 4 товара в превью */}
-                        {activeContactData.products.slice(0, 4).map((product: any) => (
-                          <div key={product.id} className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group flex flex-col">
-                            <div className="relative h-32 overflow-hidden bg-gray-50 dark:bg-gray-900">
+                {/* ВИТРИНА МАГАЗИНА (Только для бизнеса) */}
+                {activeContactData.type === 'business' && (
+                  <div className="mt-6 text-left w-full">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider">Витрина ({activeContactData.products?.length || 0})</h3>
+                      {activeContactData.products && activeContactData.products.length > 0 && (
+                        <button onClick={(e) => { e.stopPropagation(); setIsProfileModalOpen(false); navigate(`/shop/${activeContactData.id}`); }} className="text-[13px] font-bold text-blue-500 hover:text-blue-600">Все товары</button>
+                      )}
+                    </div>
+                    
+                    {activeContactData.products && activeContactData.products.length > 0 ? (
+                      <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-none snap-x">
+                        {activeContactData.products.slice(0, 5).map((product: any) => (
+                          <div key={product.id} className="min-w-[140px] max-w-[140px] bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-[16px] overflow-hidden shadow-sm hover:shadow-md transition-shadow group flex flex-col snap-start cursor-pointer" onClick={(e) => { e.stopPropagation(); setIsProfileModalOpen(false); navigate(`/shop/${activeContactData.id}`); }}>
+                            <div className="relative h-[140px] overflow-hidden bg-gray-50 dark:bg-gray-900">
                               {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" /> : <div className="w-full h-full flex items-center justify-center text-gray-300 dark:text-gray-600"><ShoppingBag size={32}/></div>}
                             </div>
-                            <div className="p-3 flex flex-col flex-1">
-                              <h4 className="font-semibold text-[13px] text-gray-900 dark:text-white line-clamp-1 mb-1">{product.name}</h4>
-                              <p className="text-blue-500 font-bold text-[13px] mt-auto">{product.price}</p>
+                            <div className="p-3 flex flex-col flex-1 bg-gray-50/50 dark:bg-gray-800/50">
+                              <h4 className="font-bold text-[13px] text-gray-900 dark:text-white line-clamp-1 mb-1">{product.name}</h4>
+                              <p className="text-blue-500 font-black text-[13px] mt-auto">{product.price}</p>
                             </div>
                           </div>
                         ))}
                       </div>
-                      
-                      {/* Кнопка перехода в полноценный магазин */}
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); setIsProfileModalOpen(false); navigate(`/shop/${activeContactData.id}`); }}
-                        className="w-full mt-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
-                      >
-                        <ShoppingBag size={18} /> Смотреть все товары
-                      </button>
-                    </>
-                  ) : (
-                    <div className="text-center py-8 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 border-dashed">
-                      <Store size={32} className="mx-auto text-gray-300 dark:text-gray-600 mb-2" />
-                      <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400">Товаров пока нет</p>
-                    </div>
-                  )}
-                </div>
-              )}
+                    ) : (
+                      <div className="text-center py-6 bg-gray-50 dark:bg-gray-800/50 rounded-[16px] border border-gray-100 dark:border-gray-800 border-dashed">
+                        <Store size={28} className="mx-auto text-gray-300 dark:text-gray-600 mb-2" />
+                        <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400">Товаров пока нет</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -718,8 +735,6 @@ export default function ChatsPage() {
                 <input type="text" placeholder="Поиск..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-transparent pl-2 pr-8 py-1 text-[15px] focus:outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400" />
                 {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={16} /></button>}
               </div>
-
-              {/* НАСТРОЙКИ УВЕДОМЛЕНИЙ */}
               <button onClick={() => setSoundEnabled(!soundEnabled)} className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${soundEnabled ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
                 {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
               </button>
@@ -757,6 +772,13 @@ export default function ChatsPage() {
               unreadCount={unreadCounts[contact.id] || 0} currentUserId={user?.uid}
             />
           ))}
+          
+          {filteredContacts.length === 0 && (
+             <div className="flex flex-col items-center justify-center mt-10 opacity-50">
+               <ArchiveRestore size={48} className="text-gray-400 dark:text-gray-600 mb-2" />
+               <div className="text-gray-500 dark:text-gray-400 text-[14px] font-medium">{isArchiveMode ? 'В архиве пусто' : 'В этой папке пусто'}</div>
+             </div>
+          )}
         </div>
       </div>
       
@@ -768,8 +790,6 @@ export default function ChatsPage() {
             <div className={`h-[60px] bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200/60 dark:border-gray-800 flex items-center justify-between px-4 shrink-0 shadow-sm z-10 transition-colors ${isOffline ? 'mt-6' : ''}`}>
               <div className="flex items-center gap-3">
                 <button onClick={() => setSelectedContact(null)} className="md:hidden text-blue-500 dark:text-blue-400 p-1"><ArrowLeft size={24} /></button>
-                
-                {/* 🌟 КЛИКАБЕЛЬНАЯ ШАПКА ДЛЯ ОТКРЫТИЯ МОДАЛКИ */}
                 <div className={`flex items-center gap-3 transition-opacity ${!selectedContact.isSaved ? 'cursor-pointer hover:opacity-80' : ''}`} onClick={() => !selectedContact.isSaved && setIsProfileModalOpen(true)}>
                   {selectedContact.isSaved ? (
                     <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center"><Bookmark size={18} /></div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, Timestamp, serverTimestamp, orderBy, limit, startAfter } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, Timestamp, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -187,13 +187,7 @@ export default function ChatsPage() {
   const [isArchiveMode, setIsArchiveMode] = useState(false);
   const [archivedContacts, setArchivedContacts] = useState<string[]>([]);
   
-  // ПАГИНАЦИЯ И СООБЩЕНИЯ
   const [messages, setMessages] = useState<Message[]>([]);
-  const [lastVisibleDoc, setLastVisibleDoc] = useState<any>(null);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [hasMoreHistory, setHasMoreHistory] = useState(true);
-  const chatStartTimeRef = useRef<any>(null);
-
   const [newMessage, setNewMessage] = useState('');
   const [attachedImage, setAttachedImage] = useState<string>('');
   
@@ -209,6 +203,7 @@ export default function ChatsPage() {
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   
+  const [messageLimit, setMessageLimit] = useState(30);
   const [showScrollButton, setShowScrollButton] = useState(false); 
   
   const currentChatRef = useRef<string | null>(null); 
@@ -217,6 +212,7 @@ export default function ChatsPage() {
   const soundEnabledRef = useRef(soundEnabled);
   const pushEnabledRef = useRef(pushEnabled);
   
+  // ПРЕДОХРАНИТЕЛИ ПРОТИВ ДУБЛЕЙ
   const checkoutProcessedRef = useRef(false);
   const isSendingRef = useRef(false);
   const actionProcessingRef = useRef(false);
@@ -321,10 +317,13 @@ export default function ChatsPage() {
 
   useEffect(() => {
     const processCheckout = async () => {
+      // Снимаем блокировку, если мы не в состоянии оформления заказа
       if (!location.state?.checkoutCart) {
         checkoutProcessedRef.current = false;
         return;
       }
+
+      // Блокируем множественные срабатывания Strict Mode
       if (checkoutProcessedRef.current) return;
 
       if (globalUsers.length > 0 && location.state?.selectedUserId) {
@@ -333,7 +332,7 @@ export default function ChatsPage() {
           setSelectedContact(contact);
           
           if (location.state.checkoutCart.length > 0) {
-            checkoutProcessedRef.current = true; 
+            checkoutProcessedRef.current = true; // Устанавливаем замок
             
             const cartItems = location.state.checkoutCart;
             const chatId = [user!.uid, contact.id].sort().join('_');
@@ -354,7 +353,7 @@ export default function ChatsPage() {
               clearCart(contact.id);
               navigate('.', { replace: true, state: {} }); 
             } catch (err) {
-              checkoutProcessedRef.current = false; 
+              checkoutProcessedRef.current = false; // Откатываем в случае сетевой ошибки
             }
           }
         }
@@ -363,7 +362,6 @@ export default function ChatsPage() {
     processCheckout();
   }, [globalUsers, location.state, user, navigate, clearCart]);
 
-  // ОСНОВНОЙ ЭФФЕКТ ЗАГРУЗКИ (ПАГИНАЦИЯ + REALTIME)
   useEffect(() => {
     if (!user || !selectedContact) {
       setMessages([]);
@@ -374,80 +372,42 @@ export default function ChatsPage() {
     
     if (currentChatRef.current !== chatId) {
       setMessages([]); 
-      setLastVisibleDoc(null);
-      setHasMoreHistory(true);
+      setMessageLimit(30);
       setReplyingTo(null); 
       setEditingMessage(null);
       setIsProfileModalOpen(false); 
       currentChatRef.current = chatId;
-      chatStartTimeRef.current = Timestamp.now();
       
       const savedDraft = localStorage.getItem(`draft_${user.uid}_${selectedContact.id}`);
       setNewMessage(savedDraft || '');
     }
 
-    // 1. Статическая загрузка истории (первые 30 сообщений до момента открытия чата)
-    const fetchInitialHistory = async () => {
-      const qInitial = query(
-        collection(db, 'messages'),
-        where('chatId', '==', chatId),
-        where('createdAt', '<=', chatStartTimeRef.current),
-        orderBy('createdAt', 'desc'),
-        limit(30)
-      );
-
-      try {
-        const snapshot = await getDocs(qInitial);
-        if (snapshot.empty) {
-          setHasMoreHistory(false);
-        } else {
-          setLastVisibleDoc(snapshot.docs[snapshot.docs.length - 1]);
-          if (snapshot.docs.length < 30) setHasMoreHistory(false);
-
-          const initialMessages = snapshot.docs.map(docSnap => ({
-            id: docSnap.id, ...docSnap.data(), createdAt: docSnap.data().createdAt || Timestamp.now()
-          })) as Message[];
-          
-          setMessages(initialMessages.reverse());
-          setTimeout(() => messagesEndRef.current?.scrollIntoView(), 50);
-        }
-      } catch (error) {
-        console.error("Ошибка загрузки истории:", error);
-      }
-    };
-
-    fetchInitialHistory();
-
-    // 2. Realtime слушатель ТОЛЬКО для новых сообщений (написанных после открытия чата)
-    const qRealtime = query(
-      collection(db, 'messages'), 
-      where('chatId', '==', chatId),
-      where('createdAt', '>', chatStartTimeRef.current),
-      orderBy('createdAt', 'asc')
-    );
+    const q = query(collection(db, 'messages'), where('chatId', '==', chatId));
     
-    const unsubscribe = onSnapshot(qRealtime, { includeMetadataChanges: true }, (snapshot) => {
-      snapshot.docChanges().forEach(change => {
-        const msgData = { id: change.doc.id, ...change.doc.data(), createdAt: change.doc.data().createdAt || Timestamp.now() } as Message;
-        
-        if (change.type === 'added' || change.type === 'modified') {
-          setMessages(prev => {
-            const existsIndex = prev.findIndex(m => m.id === msgData.id);
-            if (existsIndex >= 0) {
-              const next = [...prev];
-              next[existsIndex] = msgData;
-              return next;
-            }
-            return [...prev, msgData];
-          });
-          
-          if (change.type === 'added') {
-             setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
-          }
-        } else if (change.type === 'removed') {
-          setMessages(prev => prev.filter(m => m.id !== msgData.id));
-        }
+    const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+      let loadedMessages: Message[] = [];
+
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        loadedMessages.push({ 
+          id: docSnap.id, 
+          ...data,
+          createdAt: data.createdAt === null ? Timestamp.now() : data.createdAt 
+        } as Message);
       });
+
+      loadedMessages.sort((a, b) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : Date.now();
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : Date.now();
+        return timeA - timeB;
+      });
+
+      if (loadedMessages.length > messageLimit) {
+        loadedMessages = loadedMessages.slice(-messageLimit);
+      }
+
+      setMessages(loadedMessages);
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     });
 
     markChatAsRead(selectedContact.id);
@@ -457,54 +417,13 @@ export default function ChatsPage() {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       updateDoc(doc(db, 'users', user.uid), { typingTo: null }).catch(() => {});
     };
-  }, [user?.uid, selectedContact?.id]);
+  }, [user?.uid, selectedContact?.id, messageLimit]);
 
-  // ОБРАБОТКА СКРОЛЛА (ПОДГРУЗКА ИСТОРИИ)
-  const handleScroll = async (e: React.UIEvent<HTMLDivElement>) => {
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
+    if (target.scrollTop === 0) setMessageLimit((prev) => prev + 30);
     const isScrolledUp = target.scrollHeight - target.scrollTop - target.clientHeight > 150;
     setShowScrollButton(isScrolledUp);
-
-    if (target.scrollTop === 0 && hasMoreHistory && !isLoadingHistory && lastVisibleDoc) {
-      setIsLoadingHistory(true);
-      const previousScrollHeight = target.scrollHeight;
-
-      const qHistory = query(
-        collection(db, 'messages'),
-        where('chatId', '==', currentChatRef.current),
-        where('createdAt', '<=', chatStartTimeRef.current),
-        orderBy('createdAt', 'desc'),
-        startAfter(lastVisibleDoc),
-        limit(30)
-      );
-
-      try {
-        const snapshot = await getDocs(qHistory);
-        if (snapshot.empty) {
-          setHasMoreHistory(false);
-        } else {
-          setLastVisibleDoc(snapshot.docs[snapshot.docs.length - 1]);
-          if (snapshot.docs.length < 30) setHasMoreHistory(false);
-
-          const historicalMessages = snapshot.docs.map(docSnap => ({
-            id: docSnap.id, ...docSnap.data(), createdAt: docSnap.data().createdAt || Timestamp.now()
-          })) as Message[];
-
-          setMessages(prev => [...historicalMessages.reverse(), ...prev]);
-
-          // Компенсируем позицию скролла, чтобы интерфейс не дергался
-          setTimeout(() => {
-            if (chatContainerRef.current) {
-              chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight - previousScrollHeight;
-            }
-          }, 0);
-        }
-      } catch (error) {
-        console.error("Ошибка при подгрузке истории:", error);
-      } finally {
-        setIsLoadingHistory(false);
-      }
-    }
   };
 
   const handleTyping = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -529,10 +448,10 @@ export default function ChatsPage() {
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (isSendingRef.current) return; 
+    if (isSendingRef.current) return; // Предохранитель от двойных кликов/срабатываний
     if (!user || !selectedContact || (!newMessage.trim() && !attachedImage) || isOffline) return;
 
-    isSendingRef.current = true; 
+    isSendingRef.current = true; // Запираем замок
     
     const textToSend = newMessage.trim();
     const imageToSend = attachedImage;
@@ -552,9 +471,6 @@ export default function ChatsPage() {
     try {
       if (editingMessage) {
         await updateDoc(doc(db, 'messages', editingMessage.id), { text: textToSend, isEdited: true });
-        
-        // Вручную обновляем стейт, так как старые сообщения не слушают изменения через onSnapshot
-        setMessages(prev => prev.map(m => m.id === editingMessage.id ? { ...m, text: textToSend, isEdited: true } : m));
         setEditingMessage(null);
       } else {
         const chatId = [user.uid, selectedContact.id].sort().join('_');
@@ -574,17 +490,13 @@ export default function ChatsPage() {
     } catch (error) {
       console.error("Ошибка при отправке сообщения:", error);
     } finally {
-      isSendingRef.current = false; 
+      isSendingRef.current = false; // Отпираем замок после выполнения
     }
   };
 
   const handleDeleteMessage = async (msgId: string) => {
     if (window.confirm('Удалить сообщение у всех?')) {
-      try { 
-        await deleteDoc(doc(db, 'messages', msgId)); 
-        // Ручное удаление из стейта (для истории)
-        setMessages(prev => prev.filter(m => m.id !== msgId));
-      } catch (error) { console.error("Ошибка удаления:", error); }
+      try { await deleteDoc(doc(db, 'messages', msgId)); } catch (error) { console.error("Ошибка удаления:", error); }
     }
   };
 
@@ -597,7 +509,7 @@ export default function ChatsPage() {
   const handleOrderStatusUpdate = async (msgId: string, newStatus: string, statusText: string) => {
     if (!user || !selectedContact || actionProcessingRef.current) return;
     
-    actionProcessingRef.current = true; 
+    actionProcessingRef.current = true; // Запираем кнопку от двойного клика
     const chatId = [user.uid, selectedContact.id].sort().join('_');
     
     try {
@@ -606,12 +518,10 @@ export default function ChatsPage() {
         chatId, type: 'system_status', statusText, senderId: user.uid, receiverId: selectedContact.id,
         createdAt: serverTimestamp(), isRead: false 
       });
-      // Ручное обновление стейта
-      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, orderData: { ...m.orderData, status: newStatus } } : m));
     } catch (error) {
       console.error(error);
     } finally {
-      actionProcessingRef.current = false; 
+      actionProcessingRef.current = false; // Отпираем
     }
   };
 
@@ -930,15 +840,15 @@ export default function ChatsPage() {
               </button>
             )}
 
-            <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col relative">
-              {messages.length === 0 && !isLoadingHistory && (
+            <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col">
+              {messages.length === 0 && (
                 <div className="flex-1 flex flex-col items-center justify-center opacity-50">
                   <ShieldCheck size={48} className="text-gray-400 dark:text-gray-600 mb-2" />
                   <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 bg-gray-200/50 dark:bg-gray-800/50 px-4 py-1.5 rounded-full">Здесь пока нет сообщений</p>
                 </div>
               )}
 
-              {isLoadingHistory && <div className="flex justify-center py-2 mb-2"><Loader2 size={20} className="animate-spin text-gray-400 dark:text-gray-600" /></div>}
+              {messages.length >= messageLimit && <div className="flex justify-center py-2 mb-2"><Loader2 size={20} className="animate-spin text-gray-400 dark:text-gray-600" /></div>}
 
               {messages.map((msg, index) => {
                 const isMine = msg.senderId === user?.uid;

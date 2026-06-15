@@ -10,7 +10,8 @@ import {
   Bookmark, ArrowLeft, Image as ExternalLink,
   ShoppingBag, Truck, CheckCircle2, Package, 
   Users, Zap, Clock, Archive, ArchiveRestore, Reply,
-  Trash2, Edit2, ChevronDown, WifiOff, Volume2, VolumeX, Bell, BellOff 
+  Trash2, Edit2, ChevronDown, WifiOff, Volume2, VolumeX, Bell, BellOff,
+  Phone, Globe, Store, User // Иконки для профиля
 } from 'lucide-react';
 
 interface UserProfile {
@@ -21,6 +22,9 @@ interface UserProfile {
   isSaved?: boolean;
   lastSeen?: any; 
   typingTo?: string | null;
+  role?: string;
+  contacts?: { phone?: string; website?: string; email?: string; };
+  products?: { id: string; name: string; price: string; description: string; imageUrl: string; }[];
 }
 
 interface Message {
@@ -104,7 +108,7 @@ const playNotificationSound = () => {
 };
 
 // -----------------------------------------------------
-// КОМПОНЕНТ ДЛЯ СВАЙПА СООБЩЕНИЯ (REPLY & DELETE)
+// СВАЙП СООБЩЕНИЯ (REPLY & DELETE)
 // -----------------------------------------------------
 const SwipeableMessage = ({ children, onReply, onDelete, isMine }: { children: React.ReactNode, onReply: () => void, onDelete: () => void, isMine: boolean }) => {
   const [offsetX, setOffsetX] = useState(0);
@@ -143,7 +147,7 @@ const SwipeableMessage = ({ children, onReply, onDelete, isMine }: { children: R
 };
 
 // -----------------------------------------------------
-// КОМПОНЕНТ ДЛЯ СВАЙПОВ КОНТАКТОВ
+// СВАЙП КОНТАКТОВ В СПИСКЕ
 // -----------------------------------------------------
 const SwipeableContact = ({ contact, isSelected, onClick, onSwipeAction, onMarkRead, actionIcon: ActionIcon, actionColorClass, actionBgClass, unreadCount, currentUserId }: { contact: UserProfile, isSelected: boolean, onClick: () => void, onSwipeAction: (id: string) => void, onMarkRead: (id: string) => void, actionIcon: any, actionColorClass: string, actionBgClass: string, unreadCount: number, currentUserId?: string }) => {
   const [offsetX, setOffsetX] = useState(0);
@@ -200,6 +204,9 @@ export default function ChatsPage() {
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  
+  // 🔥 МОДАЛЬНОЕ ОКНО ПРОФИЛЯ
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   
   const [soundEnabled, setSoundEnabled] = useState(() => JSON.parse(localStorage.getItem('chat_sound') ?? 'true'));
   const [pushEnabled, setPushEnabled] = useState(() => JSON.parse(localStorage.getItem('chat_push') ?? 'true'));
@@ -315,7 +322,7 @@ export default function ChatsPage() {
     return () => { unsubscribeUsers(); unsubscribeUnread(); };
   }, [user]);
 
-  // ОБРАБОТКА ПОКУПКИ ИЗ КОРЗИНЫ
+  // ОБРАБОТКА ПОКУПКИ
   useEffect(() => {
     const processCheckout = async () => {
       if (globalUsers.length > 0 && location.state?.selectedUserId) {
@@ -350,7 +357,7 @@ export default function ChatsPage() {
     processCheckout();
   }, [globalUsers, location.state, user, navigate, clearCart]);
 
-  // ЗАГРУЗКА ЛЕНТЫ ЧАТА
+  // ЗАГРУЗКА ЛЕНТЫ ЧАТА И ЧЕРНОВИКОВ
   useEffect(() => {
     if (!user || !selectedContact) {
       setMessages([]);
@@ -364,12 +371,14 @@ export default function ChatsPage() {
       setMessageLimit(30);
       setReplyingTo(null); 
       setEditingMessage(null);
+      setIsProfileModalOpen(false); // Закрываем профиль при смене чата
       currentChatRef.current = chatId;
       
       const savedDraft = localStorage.getItem(`draft_${user.uid}_${selectedContact.id}`);
       setNewMessage(savedDraft || '');
     }
 
+    // Без orderBy - забираем всё и сортируем локально для идеальной мгновенной синхронизации
     const q = query(collection(db, 'messages'), where('chatId', '==', chatId));
     
     const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
@@ -615,6 +624,83 @@ export default function ChatsPage() {
         </div>
       )}
 
+      {/* 🌟 МОДАЛЬНОЕ ОКНО ПРОФИЛЯ / МАГАЗИНА */}
+      {isProfileModalOpen && activeContactData && !activeContactData.isSaved && (
+        <div className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm flex justify-center items-end md:items-center p-0 md:p-4 animate-fade-in" onClick={() => setIsProfileModalOpen(false)}>
+          <div className="bg-white dark:bg-gray-900 w-full md:w-[480px] max-h-[90vh] overflow-y-auto custom-scrollbar rounded-t-3xl md:rounded-3xl shadow-2xl flex flex-col transition-transform transform translate-y-0" onClick={e => e.stopPropagation()}>
+            {/* Градиентная обложка */}
+            <div className="relative h-32 bg-gradient-to-r from-blue-500 to-indigo-500 shrink-0 rounded-t-3xl md:rounded-t-3xl">
+              <button onClick={() => setIsProfileModalOpen(false)} className="absolute top-4 right-4 w-8 h-8 bg-black/20 hover:bg-black/40 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-md"><X size={18} /></button>
+            </div>
+            
+            {/* Данные профиля */}
+            <div className="px-6 pb-6 relative">
+              <img src={activeContactData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(activeContactData.name)}`} alt={activeContactData.name} className="w-24 h-24 rounded-full object-cover border-4 border-white dark:border-gray-900 absolute -top-12 shadow-md bg-white dark:bg-gray-800" />
+              
+              <div className="mt-14">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  {activeContactData.name}
+                  {activeContactData.type === 'business' ? <ShieldCheck size={18} className="text-blue-500" /> : <User size={18} className="text-gray-400" />}
+                </h2>
+                <p className={`text-[13px] font-medium mt-1 ${getOnlineStatus(activeContactData.lastSeen) === 'в сети' ? 'text-blue-500' : 'text-gray-500'}`}>
+                  {getOnlineStatus(activeContactData.lastSeen)}
+                </p>
+                
+                {/* О себе / Описание */}
+                {activeContactData.role && <p className="mt-4 text-[14px] text-gray-600 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{activeContactData.role}</p>}
+                
+                {/* Контакты */}
+                {activeContactData.contacts && (activeContactData.contacts.phone || activeContactData.contacts.website) && (
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {activeContactData.contacts.phone && <a href={`tel:${activeContactData.contacts.phone}`} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-lg text-[13px] font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"><Phone size={14} /> {activeContactData.contacts.phone}</a>}
+                    {activeContactData.contacts.website && <a href={activeContactData.contacts.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-lg text-[13px] font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"><Globe size={14} /> Веб-сайт</a>}
+                  </div>
+                )}
+              </div>
+
+              {/* ВИТРИНА МАГАЗИНА (Только для бизнеса) */}
+              {activeContactData.type === 'business' && (
+                <div className="mt-8 border-t border-gray-100 dark:border-gray-800 pt-6">
+                  <h3 className="text-[15px] font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2"><Package size={18} className="text-indigo-500"/> Витрина магазина</h3>
+                  
+                  {activeContactData.products && activeContactData.products.length > 0 ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Показываем только первые 4 товара в превью */}
+                        {activeContactData.products.slice(0, 4).map((product: any) => (
+                          <div key={product.id} className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group flex flex-col">
+                            <div className="relative h-32 overflow-hidden bg-gray-50 dark:bg-gray-900">
+                              {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" /> : <div className="w-full h-full flex items-center justify-center text-gray-300 dark:text-gray-600"><ShoppingBag size={32}/></div>}
+                            </div>
+                            <div className="p-3 flex flex-col flex-1">
+                              <h4 className="font-semibold text-[13px] text-gray-900 dark:text-white line-clamp-1 mb-1">{product.name}</h4>
+                              <p className="text-blue-500 font-bold text-[13px] mt-auto">{product.price}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* Кнопка перехода в полноценный магазин */}
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setIsProfileModalOpen(false); navigate(`/shop/${activeContactData.id}`); }}
+                        className="w-full mt-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
+                      >
+                        <ShoppingBag size={18} /> Смотреть все товары
+                      </button>
+                    </>
+                  ) : (
+                    <div className="text-center py-8 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 border-dashed">
+                      <Store size={32} className="mx-auto text-gray-300 dark:text-gray-600 mb-2" />
+                      <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400">Товаров пока нет</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ЛЕВАЯ ПАНЕЛЬ */}
       <div className={`w-full md:w-[320px] lg:w-[380px] shrink-0 bg-white dark:bg-gray-900 md:border-r border-gray-200 dark:border-gray-800 flex flex-col z-10 transition-colors ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
         
@@ -671,13 +757,6 @@ export default function ChatsPage() {
               unreadCount={unreadCounts[contact.id] || 0} currentUserId={user?.uid}
             />
           ))}
-          
-          {filteredContacts.length === 0 && (
-             <div className="flex flex-col items-center justify-center mt-10 opacity-50">
-               <ArchiveRestore size={48} className="text-gray-400 dark:text-gray-600 mb-2" />
-               <div className="text-gray-500 dark:text-gray-400 text-[14px] font-medium">{isArchiveMode ? 'В архиве пусто' : 'В этой папке пусто'}</div>
-             </div>
-          )}
         </div>
       </div>
       
@@ -689,11 +768,13 @@ export default function ChatsPage() {
             <div className={`h-[60px] bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200/60 dark:border-gray-800 flex items-center justify-between px-4 shrink-0 shadow-sm z-10 transition-colors ${isOffline ? 'mt-6' : ''}`}>
               <div className="flex items-center gap-3">
                 <button onClick={() => setSelectedContact(null)} className="md:hidden text-blue-500 dark:text-blue-400 p-1"><ArrowLeft size={24} /></button>
-                <div className="flex items-center gap-3 cursor-pointer">
+                
+                {/* 🌟 КЛИКАБЕЛЬНАЯ ШАПКА ДЛЯ ОТКРЫТИЯ МОДАЛКИ */}
+                <div className={`flex items-center gap-3 transition-opacity ${!selectedContact.isSaved ? 'cursor-pointer hover:opacity-80' : ''}`} onClick={() => !selectedContact.isSaved && setIsProfileModalOpen(true)}>
                   {selectedContact.isSaved ? (
                     <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center"><Bookmark size={18} /></div>
                   ) : (
-                    <img src={selectedContact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}`} alt={selectedContact.name} loading="lazy" className="w-10 h-10 rounded-full object-cover bg-gray-100 dark:bg-gray-800" />
+                    <img src={selectedContact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}`} alt={selectedContact.name} loading="lazy" className="w-10 h-10 rounded-full object-cover bg-gray-100 dark:bg-gray-800 shadow-sm" />
                   )}
                   <div>
                     <h3 className="font-semibold text-[15px] text-gray-900 dark:text-white leading-tight">{selectedContact.name}</h3>
@@ -890,9 +971,9 @@ export default function ChatsPage() {
 
               <form onSubmit={handleSendMessage} className="flex items-end gap-2 max-w-4xl mx-auto relative w-full">
                 <input type="file" ref={fileInputRef} onChange={handleImageAttach} accept="image/*" className="hidden" />
-                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploadingImage || isOffline} className="p-2 text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors shrink-0 mb-1 disabled:opacity-50">{isUploadingImage ? <Loader2 size={24} className="animate-spin" /> : <Paperclip size={24} />}</button>
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isOffline} className="p-2 text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors shrink-0 mb-1 disabled:opacity-50"><Paperclip size={24} /></button>
                 <textarea value={newMessage} onChange={handleTyping} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }} placeholder={editingMessage ? "Отредактируйте сообщение..." : "Сообщение..."} disabled={isOffline} className="flex-1 bg-transparent text-[16px] max-h-32 min-h-[40px] py-2 outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none custom-scrollbar disabled:opacity-50" rows={1} />
-                <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isUploadingImage || isOffline} className={`p-2 shrink-0 mb-1 rounded-full transition-colors ${(newMessage.trim() || attachedImage) && !isOffline ? 'text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10' : 'text-gray-300 dark:text-gray-600 disabled:opacity-50'}`}>
+                <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isOffline} className={`p-2 shrink-0 mb-1 rounded-full transition-colors ${(newMessage.trim() || attachedImage) && !isOffline ? 'text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10' : 'text-gray-300 dark:text-gray-600 disabled:opacity-50'}`}>
                   {editingMessage ? <Check size={24} /> : <Send size={24} />}
                 </button>
               </form>

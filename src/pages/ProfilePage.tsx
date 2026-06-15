@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
 import { db, auth } from '../services/firebase';
@@ -6,7 +6,8 @@ import { useAuthStore } from '../store/useAuthStore';
 import { 
   Camera, User, Briefcase, 
   Phone, Globe, Package, Plus, Trash2, Image as ImageIcon, 
-  Loader2, Edit2, Moon, Sun, Zap, MessageSquareText
+  Loader2, Edit2, Moon, Sun, Zap, MessageSquareText,
+  Target, LayoutList, GripVertical, Heart, Store, MessageCircle, ShoppingBag, LineChart, LayoutDashboard, Settings
 } from 'lucide-react';
 
 interface Product {
@@ -17,9 +18,6 @@ interface Product {
   imageUrl: string;
 }
 
-// -----------------------------------------------------
-// ФУНКЦИИ СЖАТИЯ И ЗАГРУЗКИ
-// -----------------------------------------------------
 const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -56,17 +54,26 @@ const uploadToImgBB = async (file: File): Promise<string> => {
   const res = await fetch(`https://api.imgbb.com/1/upload?key=${API_KEY}`, { method: 'POST', body: formData });
   const data = await res.json();
   if (data.success) return data.data.url;
-  throw new Error('Ошибка загрузки ImgBB');
+  throw new Error('Ошибка загрузки в ImgBB');
 };
+
+// Все возможные пункты меню для настройки "Вид"
+const ALL_MENU_ITEMS = [
+  { id: 'chats', label: 'Чаты', icon: MessageCircle },
+  { id: 'market', label: 'Маркет', icon: Store },
+  { id: 'dating', label: 'Знакомства', icon: Heart },
+  { id: 'myshop', label: 'Мой магазин', icon: ShoppingBag },
+  { id: 'crm', label: 'Smart CRM', icon: LineChart },
+  { id: 'apps', label: 'Приложения', icon: LayoutDashboard },
+  { id: 'profile', label: 'Настройки', icon: Settings },
+];
 
 export default function ProfilePage() {
   const { user, setUser } = useAuthStore();
-  
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [isDark, setIsDark] = useState(false);
-
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isUploadingProductImg, setIsUploadingProductImage] = useState(false);
   
@@ -77,7 +84,7 @@ export default function ProfilePage() {
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [newProduct, setNewProduct] = useState<Product>({ id: '', name: '', price: '', description: '', imageUrl: '' });
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  
+
   const [profile, setProfile] = useState({
     name: '',
     type: 'personal', 
@@ -85,14 +92,18 @@ export default function ProfilePage() {
     avatar: '',
     contacts: { phone: '', email: '', website: '' },
     products: [] as Product[],
-    // Оставляем ключ aiSettings для обратной совместимости в базе, 
-    // но по факту используем как настройки шаблонов
+    goals: [] as string[],
+    menuOrder: [] as string[],
     aiSettings: {
       isEnabled: false,
       contextPrompt: '', 
       followUps: true 
     }
   });
+
+  // DRAG AND DROP (Перетаскивание меню)
+  const dragItem = useRef<number | null>(null);
+  const dragOverItem = useRef<number | null>(null);
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
@@ -117,7 +128,6 @@ export default function ProfilePage() {
       try {
         const docRef = doc(db, 'users', user.uid);
         const docSnap = await getDoc(docRef);
-
         if (docSnap.exists()) {
           const data = docSnap.data();
           setProfile({ 
@@ -126,6 +136,8 @@ export default function ProfilePage() {
             avatar: data.avatar || user.photoURL || '',
             contacts: data.contacts || { phone: '', email: '', website: '' },
             products: data.products || [],
+            goals: data.goals || [],
+            menuOrder: data.menuOrder || ['chats', 'market', 'profile'],
             aiSettings: data.aiSettings || { isEnabled: false, contextPrompt: '', followUps: true }
           });
         } else {
@@ -136,13 +148,44 @@ export default function ProfilePage() {
           }));
         }
       } catch (error) {
-        console.error('Ошибка при загрузке профиля:', error);
+        console.error('Ошибка:', error);
       } finally {
         setIsLoading(false);
       }
     };
     fetchProfile();
   }, [user]);
+
+  // Вычисляем активные пункты меню для сортировки
+  const activeMenuItems = useMemo(() => {
+    let items = ['chats', 'market', 'profile'];
+    if (profile.goals.includes('dating')) items.push('dating');
+    if (profile.goals.includes('productivity')) items.push('apps');
+    if (profile.type === 'business') {
+      items.push('myshop');
+      items.push('crm');
+    }
+    
+    // Оставляем только те, что сейчас активны
+    let currentOrder = profile.menuOrder.filter(id => items.includes(id));
+    // Добавляем новые, если они появились, но их еще нет в order
+    items.forEach(id => {
+      if (!currentOrder.includes(id)) currentOrder.push(id);
+    });
+
+    return currentOrder.map(id => ALL_MENU_ITEMS.find(item => item.id === id)).filter(Boolean) as typeof ALL_MENU_ITEMS;
+  }, [profile.goals, profile.type, profile.menuOrder]);
+
+  const handleSortMenu = () => {
+    if (dragItem.current !== null && dragOverItem.current !== null) {
+      let _menuOrder = [...activeMenuItems.map(i => i.id)];
+      const draggedItemContent = _menuOrder.splice(dragItem.current, 1)[0];
+      _menuOrder.splice(dragOverItem.current, 0, draggedItemContent);
+      setProfile(prev => ({ ...prev, menuOrder: _menuOrder }));
+    }
+    dragItem.current = null;
+    dragOverItem.current = null;
+  };
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -172,7 +215,7 @@ export default function ProfilePage() {
         setNewProduct(prev => ({ ...prev, imageUrl: url }));
       }
     } catch (error) {
-      alert('Не удалось загрузить изображение.');
+      alert('Не удалось загрузить фото.');
     } finally {
       setIsUploadingProductImage(false);
     }
@@ -195,7 +238,7 @@ export default function ProfilePage() {
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (error) {
-      console.error('Ошибка при сохранении:', error);
+      console.error('Ошибка сохранения:', error);
     } finally {
       setIsSaving(false);
     }
@@ -210,7 +253,7 @@ export default function ProfilePage() {
   };
 
   const handleRemoveProduct = (productId: string) => {
-    if (window.confirm('Удалить этот товар?')) {
+    if (window.confirm('Точно удалить?')) {
       setProfile({ ...profile, products: profile.products.filter(p => p.id !== productId) });
     }
   };
@@ -222,6 +265,15 @@ export default function ProfilePage() {
       products: profile.products.map(p => p.id === editingProduct.id ? editingProduct : p)
     });
     setEditingProduct(null);
+  };
+
+  const toggleGoal = (goalId: string) => {
+    setProfile(prev => {
+      const newGoals = prev.goals.includes(goalId) 
+        ? prev.goals.filter(g => g !== goalId) 
+        : [...prev.goals, goalId];
+      return { ...prev, goals: newGoals };
+    });
   };
 
   const blockClass = "bg-white dark:bg-gray-900 rounded-2xl overflow-hidden border border-gray-200/50 dark:border-gray-800 mb-6 transition-colors";
@@ -245,6 +297,7 @@ export default function ProfilePage() {
 
       <div className="max-w-2xl mx-auto p-4 md:p-6">
         
+        {/* Аватар */}
         <div className="flex flex-col items-center justify-center mb-8 mt-4">
           <div className="relative group cursor-pointer" onClick={() => avatarInputRef.current?.click()}>
             <img src={profile.avatar} alt="Avatar" loading="lazy" className="w-24 h-24 rounded-full object-cover shadow-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 transition-colors" />
@@ -257,7 +310,8 @@ export default function ProfilePage() {
           <button onClick={() => avatarInputRef.current?.click()} className="text-[13px] font-medium text-blue-500 mt-3">Изменить фото</button>
         </div>
 
-        <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2">Приложение</h2>
+        {/* Тема */}
+        <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2">Оформление</h2>
         <div className={blockClass}>
           <div className="flex items-center justify-between px-4 py-3 cursor-pointer" onClick={toggleTheme}>
             <div className="flex items-center gap-3">
@@ -270,18 +324,72 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2">Профиль</h2>
+        {/* ЦЕЛИ И ЗАДАЧИ */}
+        <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2 mt-6 flex items-center gap-1.5"><Target size={16}/> Мои цели</h2>
         <div className={blockClass}>
-          <div className={inputRowClass}>
-            <span className={labelClass}>Имя</span>
-            <input type="text" value={profile.name} onChange={(e) => setProfile({...profile, name: e.target.value})} className={inputClass} placeholder="Ваше имя" />
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 cursor-pointer" onClick={() => toggleGoal('dating')}>
+            <div className="flex items-center gap-3">
+              <Heart size={20} className={profile.goals.includes('dating') ? "text-pink-500" : "text-gray-400"} />
+              <div>
+                <span className="text-[15px] font-medium text-gray-900 dark:text-white block">Поиск знакомств</span>
+                <span className="text-[12px] text-gray-500 dark:text-gray-400 block mt-0.5">Включить Tinder-подобный сервис</span>
+              </div>
+            </div>
+            <div className={`w-10 h-5 rounded-full flex items-center p-1 transition-colors ${profile.goals.includes('dating') ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+              <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${profile.goals.includes('dating') ? 'translate-x-5' : 'translate-x-0'}`} />
+            </div>
           </div>
-          <div className="flex flex-col px-4 py-3">
-            <span className="text-[15px] font-medium text-gray-900 dark:text-gray-100 mb-1">О себе</span>
-            <textarea value={profile.role} onChange={(e) => setProfile({...profile, role: e.target.value})} className="w-full bg-transparent text-[15px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none h-20 custom-scrollbar" placeholder="Расскажите о себе..." />
+          <div className="flex items-center justify-between px-4 py-3 cursor-pointer" onClick={() => toggleGoal('productivity')}>
+            <div className="flex items-center gap-3">
+              <LayoutDashboard size={20} className={profile.goals.includes('productivity') ? "text-indigo-500" : "text-gray-400"} />
+              <div>
+                <span className="text-[15px] font-medium text-gray-900 dark:text-white block">Продуктивность</span>
+                <span className="text-[12px] text-gray-500 dark:text-gray-400 block mt-0.5">Mind Map, Канбан-доски и чеклисты</span>
+              </div>
+            </div>
+            <div className={`w-10 h-5 rounded-full flex items-center p-1 transition-colors ${profile.goals.includes('productivity') ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+              <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${profile.goals.includes('productivity') ? 'translate-x-5' : 'translate-x-0'}`} />
+            </div>
           </div>
         </div>
 
+        {/* НАСТРОЙКА ВИДА МЕНЮ (DRAG AND DROP) */}
+        <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2 mt-6 flex items-center gap-1.5"><LayoutList size={16}/> Вид меню</h2>
+        <p className="text-[12px] text-gray-500 dark:text-gray-400 px-4 mb-3">Перетаскивайте пункты, чтобы изменить порядок отображения в меню приложения.</p>
+        <div className={`${blockClass} py-2`}>
+          {activeMenuItems.map((item, index) => (
+            <div 
+              key={item.id}
+              draggable
+              onDragStart={() => (dragItem.current = index)}
+              onDragEnter={() => (dragOverItem.current = index)}
+              onDragEnd={handleSortMenu}
+              onDragOver={(e) => e.preventDefault()}
+              className="flex items-center justify-between px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-grab active:cursor-grabbing border-b border-gray-100 dark:border-gray-800 last:border-0"
+            >
+              <div className="flex items-center gap-3 pointer-events-none">
+                <item.icon size={20} className="text-gray-400 dark:text-gray-500" />
+                <span className="text-[15px] font-medium text-gray-900 dark:text-white">{item.label}</span>
+              </div>
+              <GripVertical size={20} className="text-gray-300 dark:text-gray-600" />
+            </div>
+          ))}
+        </div>
+
+        {/* Личные данные */}
+        <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2 mt-6">Личные данные</h2>
+        <div className={blockClass}>
+          <div className={inputRowClass}>
+            <span className={labelClass}>Имя профиля</span>
+            <input type="text" value={profile.name} onChange={(e) => setProfile({...profile, name: e.target.value})} className={inputClass} placeholder="Имя профиля" />
+          </div>
+          <div className="flex flex-col px-4 py-3">
+            <span className="text-[15px] font-medium text-gray-900 dark:text-gray-100 mb-1">О себе</span>
+            <textarea value={profile.role} onChange={(e) => setProfile({...profile, role: e.target.value})} className="w-full bg-transparent text-[15px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none h-20 custom-scrollbar" placeholder="Чем вы занимаетесь..." />
+          </div>
+        </div>
+
+        {/* Тип аккаунта */}
         <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2">Тип аккаунта</h2>
         <div className={blockClass}>
           <div className="flex bg-gray-100 dark:bg-gray-800 p-1 m-2 rounded-xl transition-colors">
@@ -290,16 +398,17 @@ export default function ProfilePage() {
           </div>
         </div>
 
+        {/* Бизнес-настройки */}
         {profile.type === 'business' && (
           <div className="animate-fade-in">
             
-            {/* БЛОК: ШАБЛОНЫ ОТВЕТОВ */}
-            <h2 className="text-[13px] font-semibold text-indigo-500 dark:text-indigo-400 uppercase tracking-wide px-4 mb-2 mt-6 flex items-center gap-1.5"><Zap size={16}/> Шаблоны ответов</h2>
+            {/* AI Assistant */}
+            <h2 className="text-[13px] font-semibold text-indigo-500 dark:text-indigo-400 uppercase tracking-wide px-4 mb-2 mt-6 flex items-center gap-1.5"><Zap size={16}/> Smart CRM / ИИ</h2>
             <div className={`${blockClass} border-indigo-100 dark:border-indigo-900/50`}>
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 cursor-pointer" onClick={() => setProfile({...profile, aiSettings: {...profile.aiSettings, isEnabled: !profile.aiSettings.isEnabled}})}>
                 <div>
-                  <span className="text-[15px] font-bold text-gray-900 dark:text-white block">Быстрые ответы в чате</span>
-                  <span className="text-[12px] text-gray-500 dark:text-gray-400 block mt-0.5">Вставка заготовленного текста одной кнопкой</span>
+                  <span className="text-[15px] font-bold text-gray-900 dark:text-white block">ИИ-Помощник продаж</span>
+                  <span className="text-[12px] text-gray-500 dark:text-gray-400 block mt-0.5">Шаблоны ответов и нейросеть</span>
                 </div>
                 <div className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${profile.aiSettings.isEnabled ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
                   <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${profile.aiSettings.isEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
@@ -309,21 +418,21 @@ export default function ProfilePage() {
               {profile.aiSettings.isEnabled && (
                 <>
                   <div className="flex flex-col px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                    <span className="text-[14px] font-semibold text-gray-900 dark:text-gray-100 mb-1">Текст шаблона</span>
-                    <span className="text-[11px] text-gray-500 dark:text-gray-400 mb-2">Напишите здесь приветствие или условия работы, чтобы отправлять их в чат в один клик.</span>
+                    <span className="text-[14px] font-semibold text-gray-900 dark:text-gray-100 mb-1">Базовый контекст для ИИ</span>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 mb-2">Этот текст будет использоваться для быстрого ответа по кнопке.</span>
                     <textarea 
                       value={profile.aiSettings.contextPrompt} 
                       onChange={(e) => setProfile({...profile, aiSettings: {...profile.aiSettings, contextPrompt: e.target.value}})} 
                       className="w-full bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/50 rounded-xl p-3 text-[14px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none h-24 custom-scrollbar" 
-                      placeholder="Пример: Здравствуйте! Мы отправляем Новой Почтой в день заказа. Подсказать вам реквизиты для оплаты?" 
+                      placeholder="Например: Здравствуйте! Мы находимся по адресу ул. Ленина, 15. Доставка по городу бесплатная." 
                     />
                   </div>
                   <div className="flex items-center justify-between px-4 py-3 cursor-pointer" onClick={() => setProfile({...profile, aiSettings: {...profile.aiSettings, followUps: !profile.aiSettings.followUps}})}>
                     <div className="flex items-center gap-2">
                       <MessageSquareText size={18} className="text-gray-400" />
                       <div>
-                        <span className="text-[14px] font-semibold text-gray-900 dark:text-white block">Кнопка Напоминания</span>
-                        <span className="text-[11px] text-gray-500 dark:text-gray-400 block mt-0.5">Показать кнопку "Напоминание" для забытых диалогов</span>
+                        <span className="text-[14px] font-semibold text-gray-900 dark:text-white block">Умные напоминания</span>
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400 block mt-0.5">Кнопка авто-напоминания о заказе</span>
                       </div>
                     </div>
                     <div className={`w-10 h-5 rounded-full flex items-center p-1 transition-colors ${profile.aiSettings.followUps ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
@@ -334,7 +443,7 @@ export default function ProfilePage() {
               )}
             </div>
 
-            <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2 mt-6">Контакты</h2>
+            <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2 mt-6">Контакты магазина</h2>
             <div className={blockClass}>
               <div className={inputRowClass}>
                 <Phone size={18} className="text-gray-400 dark:text-gray-500" />
@@ -342,7 +451,7 @@ export default function ProfilePage() {
               </div>
               <div className={inputRowClass}>
                 <Globe size={18} className="text-gray-400 dark:text-gray-500" />
-                <input type="text" placeholder="Сайт или соцсеть" value={profile.contacts.website} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, website: e.target.value}})} className={inputClass} />
+                <input type="text" placeholder="Веб-сайт" value={profile.contacts.website} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, website: e.target.value}})} className={inputClass} />
               </div>
             </div>
 
@@ -361,7 +470,7 @@ export default function ProfilePage() {
                     {isUploadingProductImg && <div className="absolute inset-0 bg-white/70 dark:bg-black/60 flex items-center justify-center"><Loader2 size={16} className="animate-spin text-gray-900 dark:text-white" /></div>}
                   </div>
                   <div className="flex-1 space-y-2">
-                    <input type="text" placeholder="Название товара (обязательно)" value={editingProduct ? editingProduct.name : newProduct.name} onChange={e => editingProduct ? setEditingProduct({...editingProduct, name: e.target.value}) : setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-lg text-[15px] outline-none font-semibold transition-colors" />
+                    <input type="text" placeholder="Название (напр. Кроссовки)" value={editingProduct ? editingProduct.name : newProduct.name} onChange={e => editingProduct ? setEditingProduct({...editingProduct, name: e.target.value}) : setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-lg text-[15px] outline-none font-semibold transition-colors" />
                     <input type="text" placeholder="Цена" value={editingProduct ? editingProduct.price : newProduct.price} onChange={e => editingProduct ? setEditingProduct({...editingProduct, price: e.target.value}) : setNewProduct({...newProduct, price: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-lg text-sm outline-none transition-colors" />
                   </div>
                 </div>
@@ -372,11 +481,10 @@ export default function ProfilePage() {
                   onChange={e => editingProduct ? setEditingProduct({...editingProduct, description: e.target.value}) : setNewProduct({...newProduct, description: e.target.value})} 
                   className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-lg text-sm outline-none resize-none h-24 custom-scrollbar transition-colors mb-3" 
                 />
-
                 <input type="file" ref={productImgInputRef} onChange={(e) => handleProductImageChange(e, false)} accept="image/*" className="hidden" />
                 <input type="file" ref={editProductImgInputRef} onChange={(e) => handleProductImageChange(e, true)} accept="image/*" className="hidden" />
                 <button onClick={editingProduct ? handleSaveEditProduct : handleAddProduct} disabled={!(editingProduct ? editingProduct.name : newProduct.name) || !(editingProduct ? editingProduct.price : newProduct.price)} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm disabled:opacity-50 transition-colors">
-                  {editingProduct ? 'Сохранить изменения' : 'Добавить товар'}
+                  {editingProduct ? 'Сохранить изменения' : 'Добавить в магазин'}
                 </button>
               </div>
             )}
@@ -404,7 +512,6 @@ export default function ProfilePage() {
             )}
           </div>
         )}
-
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, Timestamp, serverTimestamp, orderBy, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -205,6 +205,7 @@ export default function ChatsPage() {
   
   const [messageLimit, setMessageLimit] = useState(30);
   const [showScrollButton, setShowScrollButton] = useState(false); 
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   
   const currentChatRef = useRef<string | null>(null); 
   const activeContactIdRef = useRef<string | null>(null);
@@ -382,7 +383,12 @@ export default function ChatsPage() {
       setNewMessage(savedDraft || '');
     }
 
-    const q = query(collection(db, 'messages'), where('chatId', '==', chatId));
+    const q = query(
+      collection(db, 'messages'), 
+      where('chatId', '==', chatId),
+      orderBy('createdAt', 'desc'),
+      limit(messageLimit)
+    );
     
     const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
       let loadedMessages: Message[] = [];
@@ -396,18 +402,14 @@ export default function ChatsPage() {
         } as Message);
       });
 
-      loadedMessages.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : Date.now();
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : Date.now();
-        return timeA - timeB;
-      });
-
-      if (loadedMessages.length > messageLimit) {
-        loadedMessages = loadedMessages.slice(-messageLimit);
-      }
-
+      // Переворачиваем для корректного отображения (новые снизу)
+      loadedMessages.reverse();
       setMessages(loadedMessages);
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+      setIsLoadingMore(false);
+
+      if (messageLimit === 30) {
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }), 50);
+      }
     });
 
     markChatAsRead(selectedContact.id);
@@ -421,7 +423,20 @@ export default function ChatsPage() {
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
-    if (target.scrollTop === 0) setMessageLimit((prev) => prev + 30);
+    
+    if (target.scrollTop === 0 && messages.length >= messageLimit && !isLoadingMore) {
+      setIsLoadingMore(true);
+      const previousScrollHeight = target.scrollHeight;
+      
+      setMessageLimit((prev) => prev + 30);
+      
+      setTimeout(() => {
+        if (chatContainerRef.current) {
+          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight - previousScrollHeight;
+        }
+      }, 100);
+    }
+    
     const isScrolledUp = target.scrollHeight - target.scrollTop - target.clientHeight > 150;
     setShowScrollButton(isScrolledUp);
   };
@@ -841,14 +856,18 @@ export default function ChatsPage() {
             )}
 
             <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col">
-              {messages.length === 0 && (
+              {messages.length === 0 && !isLoadingMore && (
                 <div className="flex-1 flex flex-col items-center justify-center opacity-50">
                   <ShieldCheck size={48} className="text-gray-400 dark:text-gray-600 mb-2" />
                   <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 bg-gray-200/50 dark:bg-gray-800/50 px-4 py-1.5 rounded-full">Здесь пока нет сообщений</p>
                 </div>
               )}
 
-              {messages.length >= messageLimit && <div className="flex justify-center py-2 mb-2"><Loader2 size={20} className="animate-spin text-gray-400 dark:text-gray-600" /></div>}
+              {isLoadingMore && (
+                <div className="flex justify-center py-2 mb-2 overflow-hidden h-8">
+                  <Loader2 size={20} className="animate-spin text-gray-400 dark:text-gray-600" />
+                </div>
+              )}
 
               {messages.map((msg, index) => {
                 const isMine = msg.senderId === user?.uid;
@@ -976,7 +995,7 @@ export default function ChatsPage() {
                   </div>
                 );
               })}
-              <div ref={messagesEndRef} className="h-2" />
+              <div ref={messagesEndRef} className="h-2 shrink-0" />
             </div>
             
             {(replyingTo || editingMessage) && (

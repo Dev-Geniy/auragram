@@ -11,7 +11,7 @@ import {
   ShoppingBag, Truck, CheckCircle2, Package, 
   Users, Zap, Clock, Archive, ArchiveRestore, Reply,
   Trash2, Edit2, ChevronDown, WifiOff, Volume2, VolumeX, Bell, BellOff,
-  Phone, Globe, Store, MessageSquare
+  Phone, Globe, Store, MessageSquare, Pin, PinOff
 } from 'lucide-react';
 
 // ==========================================
@@ -149,23 +149,36 @@ const SwipeableMessage = ({ children, onReply, onDelete, isMine }: { children: R
   );
 };
 
-const SwipeableContact = ({ contact, isSelected, onClick, onSwipeAction, onMarkRead, actionIcon: ActionIcon, actionColorClass, actionBgClass, unreadCount, currentUserId }: { contact: UserProfile, isSelected: boolean, onClick: () => void, onSwipeAction: (id: string) => void, onMarkRead: (id: string) => void, actionIcon: any, actionColorClass: string, actionBgClass: string, unreadCount: number, currentUserId?: string }) => {
+const SwipeableContact = ({ contact, isSelected, isPinned, onClick, onSwipeLeft, onSwipeRight, rightIcon: RightIcon, leftIcon: LeftIcon, rightBgClass, leftBgClass, unreadCount, currentUserId }: any) => {
   const [offsetX, setOffsetX] = useState(0);
   const startX = useRef(0);
   const isDragging = useRef(false);
 
   const handleTouchStart = (e: React.TouchEvent) => { startX.current = e.touches[0].clientX; isDragging.current = true; };
-  const handleTouchMove = (e: React.TouchEvent) => { if (!isDragging.current) return; const diff = e.touches[0].clientX - startX.current; if (diff > 80) setOffsetX(80); else if (diff < -80) setOffsetX(-80); else setOffsetX(diff); };
-  const handleTouchEnd = () => { isDragging.current = false; if (offsetX > 60) onMarkRead(contact.id); else if (offsetX < -60) onSwipeAction(contact.id); setOffsetX(0); };
+  const handleTouchMove = (e: React.TouchEvent) => { 
+    if (!isDragging.current) return; 
+    const diff = e.touches[0].clientX - startX.current; 
+    if (diff > 80) setOffsetX(80); else if (diff < -80) setOffsetX(-80); else setOffsetX(diff); 
+  };
+  const handleTouchEnd = () => { 
+    isDragging.current = false; 
+    if (offsetX > 60) onSwipeRight(contact.id); // Swipe right -> Pin/Unpin
+    else if (offsetX < -60) onSwipeLeft(contact.id); // Swipe left -> Archive
+    setOffsetX(0); 
+  };
 
   return (
     <div className="relative w-full overflow-hidden bg-[#F2F2F7] dark:bg-gray-950 border-b border-gray-100/50 dark:border-gray-800/50">
       <div className="absolute inset-0 flex justify-between">
-        <div className={`w-1/2 bg-blue-50 flex items-center pl-4 text-white transition-opacity ${offsetX > 0 ? 'opacity-100' : 'opacity-0'}`}><CheckCheck size={24} className="text-blue-500" /></div>
-        <div className={`w-1/2 flex items-center justify-end pr-4 text-white transition-opacity ${offsetX < 0 ? 'opacity-100' : 'opacity-0'} ${actionBgClass}`}><ActionIcon size={24} className={actionColorClass} /></div>
+        <div className={`w-1/2 ${rightBgClass} flex items-center pl-4 text-white transition-opacity ${offsetX > 0 ? 'opacity-100' : 'opacity-0'}`}><RightIcon size={24} className="text-white" /></div>
+        <div className={`w-1/2 flex items-center justify-end pr-4 text-white transition-opacity ${offsetX < 0 ? 'opacity-100' : 'opacity-0'} ${leftBgClass}`}><LeftIcon size={24} className="text-white" /></div>
       </div>
       <div onClick={onClick} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} style={{ transform: `translateX(${offsetX}px)` }} className={`relative z-10 flex items-center gap-3 px-4 py-3 cursor-pointer transition-all duration-200 ${isSelected ? 'bg-blue-500 text-white' : 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 dark:text-white'}`}>
-        {contact.isSaved ? <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-500 text-white'}`}><Bookmark size={20} /></div> : <img src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} alt={contact.name} loading="lazy" className="w-12 h-12 rounded-full object-cover shrink-0 bg-gray-100 dark:bg-gray-800" />}
+        <div className="relative shrink-0">
+          {contact.isSaved ? <div className={`w-12 h-12 rounded-full flex items-center justify-center ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-500 text-white'}`}><Bookmark size={20} /></div> : <img src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} alt={contact.name} loading="lazy" className="w-12 h-12 rounded-full object-cover bg-gray-100 dark:bg-gray-800" />}
+          {isPinned && !isSelected && <div className="absolute -bottom-1 -right-1 bg-white dark:bg-gray-900 rounded-full p-0.5 shadow-sm"><Pin size={12} className="text-blue-500 transform rotate-45" /></div>}
+          {isPinned && isSelected && <div className="absolute -bottom-1 -right-1 bg-blue-600 rounded-full p-0.5 shadow-sm"><Pin size={12} className="text-white transform rotate-45" /></div>}
+        </div>
         <div className="flex-1 min-w-0 pb-1">
           <h4 className={`font-semibold text-[15px] truncate flex items-center justify-between ${isSelected ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
             <span className="truncate">{contact.name}</span>
@@ -196,9 +209,13 @@ export default function ChatsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'personal' | 'business' | 'clients'>('all');
   const [isArchiveMode, setIsArchiveMode] = useState(false);
-  const [archivedContacts, setArchivedContacts] = useState<string[]>([]);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   
+  // Локальные стейты для сортировки и фильтрации (ЭТАП 1)
+  const [archivedContacts, setArchivedContacts] = useState<string[]>(() => JSON.parse(localStorage.getItem(`archive_${user?.uid}`) || '[]'));
+  const [pinnedChats, setPinnedChats] = useState<string[]>(() => JSON.parse(localStorage.getItem(`pinned_${user?.uid}`) || '[]'));
+  const [chatActivity, setChatActivity] = useState<Record<string, number>>(() => JSON.parse(localStorage.getItem(`activity_${user?.uid}`) || '{}'));
+
   // Стейты сообщений
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -216,7 +233,7 @@ export default function ChatsPage() {
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   
-  // Рефы для синхронизации и блокировки дублей
+  // Рефы для синхронизации
   const currentChatRef = useRef<string | null>(null); 
   const activeContactIdRef = useRef<string | null>(null);
   const globalUsersRef = useRef<UserProfile[]>([]);
@@ -231,13 +248,16 @@ export default function ChatsPage() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Синхронизация рефов
   useEffect(() => { activeContactIdRef.current = selectedContact?.id || null; }, [selectedContact]);
   useEffect(() => { globalUsersRef.current = globalUsers; }, [globalUsers]);
   useEffect(() => { soundEnabledRef.current = soundEnabled; localStorage.setItem('chat_sound', JSON.stringify(soundEnabled)); }, [soundEnabled]);
   useEffect(() => { pushEnabledRef.current = pushEnabled; localStorage.setItem('chat_push', JSON.stringify(pushEnabled)); }, [pushEnabled]);
+  
+  // Сохранение стейтов сортировки локально
+  useEffect(() => { if (user) localStorage.setItem(`archive_${user.uid}`, JSON.stringify(archivedContacts)); }, [archivedContacts, user]);
+  useEffect(() => { if (user) localStorage.setItem(`pinned_${user.uid}`, JSON.stringify(pinnedChats)); }, [pinnedChats, user]);
+  useEffect(() => { if (user) localStorage.setItem(`activity_${user.uid}`, JSON.stringify(chatActivity)); }, [chatActivity, user]);
 
-  // Слушатель онлайна
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
@@ -272,8 +292,6 @@ export default function ChatsPage() {
   // Загрузка контактов и непрочитанных сообщений
   useEffect(() => {
     if (!user) return;
-    const savedArchive = localStorage.getItem(`archive_${user.uid}`);
-    if (savedArchive) setArchivedContacts(JSON.parse(savedArchive));
 
     const unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
       const loadedUsers: UserProfile[] = [];
@@ -293,9 +311,16 @@ export default function ChatsPage() {
 
     const unsubscribeUnread = onSnapshot(qUnread, (snapshot) => {
       const counts: Record<string, number> = {};
+      
       snapshot.docs.forEach(docSnap => {
         const msg = docSnap.data() as Message;
         counts[msg.senderId] = (counts[msg.senderId] || 0) + 1;
+        
+        // Обновляем активность, чтобы чат поднялся наверх
+        if (msg.createdAt) {
+          const time = msg.createdAt.toMillis ? msg.createdAt.toMillis() : Date.now();
+          setChatActivity(prev => ({ ...prev, [msg.senderId]: Math.max(prev[msg.senderId] || 0, time) }));
+        }
       });
       setUnreadCounts(counts);
 
@@ -326,7 +351,7 @@ export default function ChatsPage() {
     return () => { unsubscribeUsers(); unsubscribeUnread(); };
   }, [user]);
 
-  // Обработка чекаउиз корзины
+  // Обработка чекаута из корзины
   useEffect(() => {
     const processCheckout = async () => {
       if (!location.state?.checkoutCart) {
@@ -359,6 +384,7 @@ export default function ChatsPage() {
                 orderData: { items: itemsList, total: totalPrice, status: 'new' },
                 senderId: user!.uid, receiverId: contact.id, createdAt: serverTimestamp(), isRead: false
               });
+              setChatActivity(prev => ({ ...prev, [contact.id]: Date.now() }));
               clearCart(contact.id);
               navigate('.', { replace: true, state: {} }); 
             } catch (err) {
@@ -371,9 +397,7 @@ export default function ChatsPage() {
     processCheckout();
   }, [globalUsers, location.state, user, navigate, clearCart]);
 
-  // ==========================================
-  // 5. ОСНОВНОЙ ЭФФЕКТ ЗАГРУЗКИ СООБЩЕНИЙ
-  // ==========================================
+  // ОСНОВНОЙ ЭФФЕКТ ЗАГРУЗКИ СООБЩЕНИЙ
   useEffect(() => {
     if (!user || !selectedContact) {
       setMessages([]);
@@ -394,15 +418,17 @@ export default function ChatsPage() {
       setNewMessage(savedDraft || '');
     }
 
-    // Запрос без индексов (работает 100% стабильно)
     const q = query(collection(db, 'messages'), where('chatId', '==', chatId));
     
     const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
       let loadedMessages: Message[] = [];
+      let latestTime = 0;
 
       snapshot.forEach((docSnap) => {
-        // 🔥 ВОТ ОНО: estimate дает локальным сообщениям дату моментально, не дожидаясь сервера!
         const data = docSnap.data({ serverTimestamps: 'estimate' });
+        const msgTime = data.createdAt?.toMillis ? data.createdAt.toMillis() : 0;
+        if (msgTime > latestTime) latestTime = msgTime;
+
         loadedMessages.push({ 
           id: docSnap.id, 
           ...data,
@@ -410,21 +436,23 @@ export default function ChatsPage() {
         } as Message);
       });
 
-      // Сортировка по времени
+      // Обновляем активность (чтобы чат всегда был актуальным в списке)
+      if (latestTime > 0) {
+         setChatActivity(prev => ({ ...prev, [selectedContact.id]: Math.max(prev[selectedContact.id] || 0, latestTime) }));
+      }
+
       loadedMessages.sort((a, b) => {
         const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
         const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
         return timeA - timeB;
       });
 
-      // Пагинация слайсом
       if (loadedMessages.length > messageLimit) {
         loadedMessages = loadedMessages.slice(-messageLimit);
       }
 
       setMessages(loadedMessages);
       
-      // Скролл вниз только если мы не листаем историю
       if (messageLimit === 30 || snapshot.docChanges().some(change => change.type === 'added')) {
         setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
       }
@@ -439,9 +467,6 @@ export default function ChatsPage() {
     };
   }, [user?.uid, selectedContact?.id, messageLimit]);
 
-  // ==========================================
-  // 6. ОБРАБОТЧИКИ ДЕЙСТВИЙ (SCROLL, TYPE, SEND)
-  // ==========================================
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
     if (target.scrollTop === 0) {
@@ -482,7 +507,7 @@ export default function ChatsPage() {
     if (isSendingRef.current) return; 
     if (!user || !selectedContact || (!newMessage.trim() && !attachedImage) || isOffline) return;
 
-    isSendingRef.current = true; // Запираем замок
+    isSendingRef.current = true; 
     
     const textToSend = newMessage.trim();
     const imageToSend = attachedImage;
@@ -492,6 +517,9 @@ export default function ChatsPage() {
     setAttachedImage('');
     setReplyingTo(null);
     localStorage.removeItem(`draft_${user.uid}_${selectedContact.id}`);
+
+    // Обновляем активность локально моментально для UI
+    setChatActivity(prev => ({ ...prev, [selectedContact.id]: Date.now() }));
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     updateDoc(doc(db, 'users', user.uid), { typingTo: null }).catch(() => {});
@@ -521,7 +549,7 @@ export default function ChatsPage() {
     } catch (error) {
       console.error("Ошибка при отправке сообщения:", error);
     } finally {
-      isSendingRef.current = false; // Отпираем замок после выполнения
+      isSendingRef.current = false; 
     }
   };
 
@@ -549,6 +577,7 @@ export default function ChatsPage() {
         chatId, type: 'system_status', statusText, senderId: user.uid, receiverId: selectedContact.id,
         createdAt: serverTimestamp(), isRead: false 
       });
+      setChatActivity(prev => ({ ...prev, [selectedContact.id]: Date.now() }));
     } catch (error) {
       console.error(error);
     } finally {
@@ -578,8 +607,68 @@ export default function ChatsPage() {
   };
 
   // ==========================================
-  // 7. ФОРМАТИРОВАНИЕ И РЕНДЕР
+  // ЛОГИКА АРХИВА И ЗАКРЕПЛЕНИЯ
   // ==========================================
+  const toggleArchive = (contactId: string) => {
+    if (archivedContacts.includes(contactId)) {
+      setArchivedContacts(prev => prev.filter(id => id !== contactId));
+    } else {
+      setArchivedContacts(prev => [...prev, contactId]);
+      if (selectedContact?.id === contactId) setSelectedContact(null);
+    }
+  };
+
+  const togglePin = (contactId: string) => {
+    if (pinnedChats.includes(contactId)) {
+      setPinnedChats(prev => prev.filter(id => id !== contactId));
+    } else {
+      if (pinnedChats.length >= 10) {
+        alert('Максимум 10 закрепленных чатов');
+        return;
+      }
+      setPinnedChats(prev => [...prev, contactId]);
+    }
+  };
+
+  // ФИЛЬТРАЦИЯ И УМНЫЙ ПОИСК
+  const filteredContacts = globalUsers.filter(c => {
+    const q = searchQuery.toLowerCase().trim();
+    
+    // Если идет поиск - ищем глобально по имени или EMAIL
+    if (q) {
+      const matchName = c.name?.toLowerCase().includes(q);
+      const matchEmail = c.contacts?.email?.toLowerCase().includes(q);
+      return matchName || matchEmail;
+    }
+
+    if (isArchiveMode) return archivedContacts.includes(c.id);
+    if (archivedContacts.includes(c.id)) return false;
+
+    // Скрываем незнакомцев, если нет поиска
+    const hasActivity = chatActivity[c.id] || unreadCounts[c.id] > 0 || c.isSaved;
+    const isPinned = pinnedChats.includes(c.id);
+    if (!hasActivity && !isPinned) return false;
+
+    if (activeTab === 'personal') return c.type !== 'business' || c.isSaved;
+    if (activeTab === 'business') return c.type === 'business';
+    if (activeTab === 'clients') return c.type !== 'business' && !c.isSaved;
+    return true; 
+  }).sort((a, b) => {
+    // 1. Сначала закрепленные
+    const aPinned = pinnedChats.includes(a.id);
+    const bPinned = pinnedChats.includes(b.id);
+    if (aPinned && !bPinned) return -1;
+    if (!aPinned && bPinned) return 1;
+    
+    // 2. Затем по активности
+    const aTime = chatActivity[a.id] || 0;
+    const bTime = chatActivity[b.id] || 0;
+    return bTime - aTime;
+  });
+
+  const isTemplatesAllowed = currentUserProfile?.type === 'business' && currentUserProfile?.aiSettings?.isEnabled && activeTab === 'clients' && selectedContact && !selectedContact.isSaved;
+  const activeContactData = globalUsers.find(u => u.id === selectedContact?.id) || selectedContact;
+
   const formatTime = (timestamp: any) => {
     if (!timestamp) return '';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -615,44 +704,15 @@ export default function ChatsPage() {
     return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
   };
 
-  const handleArchive = (contactId: string) => {
-    const newArchived = [...archivedContacts, contactId];
-    setArchivedContacts(newArchived);
-    localStorage.setItem(`archive_${user?.uid}`, JSON.stringify(newArchived));
-    if (selectedContact?.id === contactId) setSelectedContact(null); 
-  };
-
-  const handleUnarchive = (contactId: string) => {
-    const newArchived = archivedContacts.filter(id => id !== contactId);
-    setArchivedContacts(newArchived);
-    localStorage.setItem(`archive_${user?.uid}`, JSON.stringify(newArchived));
-  };
-
-  const filteredContacts = globalUsers.filter(c => {
-    const matchSearch = c.name?.toLowerCase().includes(searchQuery.toLowerCase().trim());
-    if (!matchSearch) return false;
-    if (isArchiveMode) return archivedContacts.includes(c.id);
-    if (archivedContacts.includes(c.id)) return false;
-    if (activeTab === 'personal') return c.type !== 'business' || c.isSaved;
-    if (activeTab === 'business') return c.type === 'business';
-    if (activeTab === 'clients') return c.type !== 'business' && !c.isSaved;
-    return true; 
-  });
-
-  const isTemplatesAllowed = currentUserProfile?.type === 'business' && currentUserProfile?.aiSettings?.isEnabled && activeTab === 'clients' && selectedContact && !selectedContact.isSaved;
-  const activeContactData = globalUsers.find(u => u.id === selectedContact?.id) || selectedContact;
-
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-white dark:bg-gray-950 transition-colors relative">
       
-      {/* ПЛАШКА ОТСУТСТВИЯ ИНТЕРНЕТА */}
       {isOffline && (
         <div className="fixed top-0 left-0 right-0 z-[200] bg-red-500 text-white text-[12px] font-bold py-1.5 flex items-center justify-center gap-2 shadow-md">
           <WifiOff size={14} /> Нет подключения к интернету. Чат работает в оффлайн-режиме.
         </div>
       )}
 
-      {/* IN-APP УВЕДОМЛЕНИЯ (ШТОРКИ) */}
       <div className={`fixed ${isOffline ? 'top-10' : 'top-4'} left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 pointer-events-none px-4 w-full md:w-[400px]`}>
         {toasts.map(t => (
           <div key={t.id} onClick={() => { const contactToOpen = globalUsers.find(c => c.id === t.senderId); if (contactToOpen) setSelectedContact(contactToOpen); setToasts(prev => prev.filter(toast => toast.id !== t.id)); }} className="pointer-events-auto bg-white/95 dark:bg-gray-800/95 backdrop-blur-md shadow-xl rounded-2xl p-3 flex items-center gap-3 animate-fade-in w-full cursor-pointer border border-gray-100 dark:border-gray-700 hover:scale-[1.02] transition-transform">
@@ -665,7 +725,6 @@ export default function ChatsPage() {
         ))}
       </div>
 
-      {/* ЛАЙТБОКС ДЛЯ ИЗОБРАЖЕНИЙ */}
       {viewingImage && (
         <div className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setViewingImage(null)}>
           <img src={viewingImage} alt="Full screen" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />
@@ -673,17 +732,15 @@ export default function ChatsPage() {
         </div>
       )}
 
-      {/* 🌟 ИДЕАЛЬНОЕ МОДАЛЬНОЕ ОКНО ПРОФИЛЯ ПО МАКЕТУ 🌟 */}
+      {/* МОДАЛЬНОЕ ОКНО ПРОФИЛЯ */}
       {isProfileModalOpen && activeContactData && !activeContactData.isSaved && (
         <div className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm flex justify-center items-end md:items-center p-0 md:p-4 animate-fade-in" onClick={() => setIsProfileModalOpen(false)}>
           <div className="bg-white dark:bg-gray-900 w-full md:w-[420px] max-h-[90vh] overflow-y-auto custom-scrollbar rounded-t-[32px] md:rounded-3xl shadow-2xl flex flex-col transition-transform transform translate-y-0" onClick={e => e.stopPropagation()}>
             
-            {/* ГРАДИЕНТНАЯ ОБЛОЖКА */}
             <div className="relative h-32 bg-gradient-to-r from-[#A0C4FF] to-[#C4A0FF] shrink-0 rounded-t-[32px] md:rounded-t-3xl">
               <button onClick={() => setIsProfileModalOpen(false)} className="absolute top-4 right-4 w-8 h-8 bg-black/20 hover:bg-black/40 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-md"><X size={18} /></button>
             </div>
             
-            {/* ДАННЫЕ ПРОФИЛЯ */}
             <div className="px-6 pb-8 relative flex flex-col items-center -mt-12">
               <img src={activeContactData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(activeContactData.name)}`} alt={activeContactData.name} className="w-24 h-24 rounded-full object-cover border-4 border-white dark:border-gray-900 shadow-md bg-white dark:bg-gray-800 z-10" />
               
@@ -696,12 +753,10 @@ export default function ChatsPage() {
                   {getOnlineStatus(activeContactData.lastSeen)}
                 </p>
                 
-                {/* КНОПКА ВОЗВРАТА К ЧАТУ */}
                 <button onClick={() => setIsProfileModalOpen(false)} className="mt-4 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-[16px] flex items-center justify-center gap-2 shadow-sm transition-colors">
                   <MessageSquare size={18} /> Написать сообщение
                 </button>
 
-                {/* О СЕБЕ */}
                 {activeContactData.role && (
                   <div className="mt-6 text-left w-full">
                     <h3 className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider mb-2">О себе</h3>
@@ -709,11 +764,19 @@ export default function ChatsPage() {
                   </div>
                 )}
                 
-                {/* КОНТАКТЫ */}
-                {activeContactData.contacts && (activeContactData.contacts.phone || activeContactData.contacts.website) && (
+                {activeContactData.contacts && (activeContactData.contacts.phone || activeContactData.contacts.website || activeContactData.contacts.email) && (
                   <div className="mt-6 text-left w-full">
                     <h3 className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Контакты</h3>
                     <div className="flex flex-col gap-2">
+                      {activeContactData.contacts.email && (
+                        <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl transition-colors">
+                          <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center rounded-full"><Users size={18} /></div>
+                          <div className="flex flex-col">
+                            <span className="text-[15px] font-bold text-gray-900 dark:text-white">{activeContactData.contacts.email}</span>
+                            <span className="text-[12px] text-gray-500">Email (Username)</span>
+                          </div>
+                        </div>
+                      )}
                       {activeContactData.contacts.phone && (
                         <a href={`tel:${activeContactData.contacts.phone}`} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                           <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 text-green-600 flex items-center justify-center rounded-full"><Phone size={18} /></div>
@@ -736,7 +799,6 @@ export default function ChatsPage() {
                   </div>
                 )}
 
-                {/* ВИТРИНА МАГАЗИНА (Только для бизнеса) */}
                 {activeContactData.type === 'business' && (
                   <div className="mt-6 text-left w-full">
                     <div className="flex items-center justify-between mb-3">
@@ -774,7 +836,7 @@ export default function ChatsPage() {
         </div>
       )}
 
-      {/* ЛЕВАЯ ПАНЕЛЬ */}
+      {/* ЛЕВАЯ ПАНЕЛЬ С КОНТАКТАМИ */}
       <div className={`w-full md:w-[320px] lg:w-[380px] shrink-0 bg-white dark:bg-gray-900 md:border-r border-gray-200 dark:border-gray-800 flex flex-col z-10 transition-colors ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
         
         {isArchiveMode ? (
@@ -788,7 +850,7 @@ export default function ChatsPage() {
             <div className="px-3 mb-3 flex items-center gap-2">
               <div className="relative flex-1 flex items-center bg-[#F2F2F7] dark:bg-gray-800 rounded-[10px] px-3 py-1.5 focus-within:bg-gray-200/80 dark:focus-within:bg-gray-700 transition-colors">
                 <Search className="text-gray-400 dark:text-gray-500 shrink-0" size={18} />
-                <input type="text" placeholder="Поиск..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-transparent pl-2 pr-8 py-1 text-[15px] focus:outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400" />
+                <input type="text" placeholder="Поиск по имени или @email..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-transparent pl-2 pr-8 py-1 text-[15px] focus:outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400" />
                 {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={16} /></button>}
               </div>
               <button onClick={() => setSoundEnabled(!soundEnabled)} className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${soundEnabled ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
@@ -810,29 +872,37 @@ export default function ChatsPage() {
         )}
         
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-          {!isArchiveMode && archivedContacts.length > 0 && activeTab === 'all' && (
+          {!isArchiveMode && archivedContacts.length > 0 && activeTab === 'all' && !searchQuery && (
             <div onClick={() => setIsArchiveMode(true)} className="flex items-center gap-3 px-4 py-3 cursor-pointer bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors border-b border-gray-100/50 dark:border-gray-800/50">
               <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0"><Archive size={22} className="text-blue-500 dark:text-blue-400" /></div>
               <div className="flex-1 min-w-0">
                 <h4 className="font-bold text-[15px] text-gray-900 dark:text-white">Архив</h4>
-                <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400">Сохраненные чаты ({archivedContacts.length})</p>
+                <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400">Скрытые чаты ({archivedContacts.length})</p>
               </div>
             </div>
           )}
 
           {filteredContacts.map(contact => (
             <SwipeableContact 
-              key={contact.id} contact={contact} isSelected={selectedContact?.id === contact.id}
-              onClick={() => setSelectedContact(contact)} onSwipeAction={isArchiveMode ? handleUnarchive : handleArchive} onMarkRead={markChatAsRead}
-              actionIcon={isArchiveMode ? ArchiveRestore : Archive} actionBgClass={isArchiveMode ? "bg-blue-50" : "bg-orange-50"} actionColorClass={isArchiveMode ? "text-blue-500" : "text-orange-500"}
-              unreadCount={unreadCounts[contact.id] || 0} currentUserId={user?.uid}
+              key={contact.id} contact={contact} 
+              isSelected={selectedContact?.id === contact.id}
+              isPinned={pinnedChats.includes(contact.id)}
+              onClick={() => setSelectedContact(contact)} 
+              onSwipeLeft={toggleArchive} 
+              onSwipeRight={togglePin}
+              rightIcon={pinnedChats.includes(contact.id) ? PinOff : Pin} 
+              leftIcon={isArchiveMode ? ArchiveRestore : Archive} 
+              rightBgClass="bg-indigo-500" 
+              leftBgClass="bg-orange-500" 
+              unreadCount={unreadCounts[contact.id] || 0} 
+              currentUserId={user?.uid}
             />
           ))}
           
           {filteredContacts.length === 0 && (
-             <div className="flex flex-col items-center justify-center mt-10 opacity-50">
-               <ArchiveRestore size={48} className="text-gray-400 dark:text-gray-600 mb-2" />
-               <div className="text-gray-500 dark:text-gray-400 text-[14px] font-medium">{isArchiveMode ? 'В архиве пусто' : 'В этой папке пусто'}</div>
+             <div className="flex flex-col items-center justify-center mt-10 opacity-50 px-4 text-center">
+               <Search size={48} className="text-gray-400 dark:text-gray-600 mb-2" />
+               <div className="text-gray-500 dark:text-gray-400 text-[14px] font-medium">{searchQuery ? 'Пользователь не найден' : isArchiveMode ? 'В архиве пусто' : 'У вас пока нет активных диалогов. Найдите кого-нибудь через поиск.'}</div>
              </div>
           )}
         </div>

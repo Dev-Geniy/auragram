@@ -14,7 +14,7 @@ export default function ProductivityLayout() {
     {
       id: 'tasks',
       name: 'Личные задачи',
-      description: 'Простые чек-листы и канбан-доска для дел без хаоса CRM',
+      description: 'Простые чек-листы и канбан-доска без хаоса CRM',
       icon: LayoutGrid,
       color: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 dark:bg-indigo-500/20',
       hoverBorder: 'hover:border-indigo-500/50 dark:hover:border-indigo-500/40',
@@ -32,7 +32,7 @@ export default function ProductivityLayout() {
     {
       id: 'pomodoro',
       name: 'Таймер Помодоро',
-      description: 'Фоновое управление циклами фокуса и отдыха с пушами',
+      description: 'Управление циклами фокуса и отдыха с пуш-ап сообщениями',
       icon: Timer,
       color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 dark:bg-rose-500/20',
       hoverBorder: 'hover:border-rose-500/50 dark:hover:border-rose-500/40',
@@ -52,39 +52,40 @@ export default function ProductivityLayout() {
   // Если мы на главном экране Хаба Продуктивности
   if (activeTab === 'hub') {
     return (
-      <div className="h-full overflow-y-auto bg-[#F2F2F7] dark:bg-gray-950 transition-colors p-6 md:p-12 flex flex-col justify-center items-center">
-        <div className="w-full max-w-5xl">
-          {/* Заголовок Хаба */}
-          <div className="mb-10 text-center md:text-left">
-            <h1 className="text-3xl font-black text-gray-900 dark:text-white tracking-tight mb-2">
+      <div className="h-full w-full bg-[#F2F2F7] dark:bg-gray-950 transition-colors p-4 md:p-12 flex flex-col justify-center items-center overflow-hidden md:overflow-y-auto">
+        <div className="w-full max-w-5xl h-full flex flex-col justify-center md:block">
+          
+          {/* Заголовок Хаба (компактный на мобильных) */}
+          <div className="mb-4 md:mb-10 text-center md:text-left shrink-0">
+            <h1 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white tracking-tight mb-1 md:mb-2">
               Продуктивность
             </h1>
-            <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400">
-              Экосистема персональной эффективности. Всё просто, быстро и конфиденциально.
+            <p className="text-[13px] md:text-[15px] font-medium text-gray-500 dark:text-gray-400 hidden xs:block">
+              Экосистема персональной эффективности. Всё просто и конфиденциально.
             </p>
           </div>
 
-          {/* Сетка из 4 крупных квадратных блоков */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Сетка: 2х2 на мобильных, 1 ряд на ПК */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 w-full max-w-md mx-auto lg:max-w-none">
             {apps.map((app) => {
               const Icon = app.icon;
               return (
                 <button
                   key={app.id}
                   onClick={() => setActiveTab(app.id as TabType)}
-                  className={`aspect-square bg-white dark:bg-gray-900 rounded-[32px] p-6 border border-gray-200/60 dark:border-gray-800/60 flex flex-col justify-between text-left transition-all duration-300 transform hover:-translate-y-1 hover:shadow-2xl ${app.hoverBorder} ${app.shadow} group`}
+                  className={`aspect-square bg-white dark:bg-gray-900 rounded-[24px] md:rounded-[32px] p-4 md:p-6 border border-gray-200/60 dark:border-gray-800/60 flex flex-col justify-between text-left transition-all duration-300 transform active:scale-95 md:hover:-translate-y-1 md:hover:shadow-2xl ${app.hoverBorder} ${app.shadow} group`}
                 >
-                  {/* Иконка приложения */}
-                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 duration-300 ${app.color}`}>
-                    <Icon size={28} strokeWidth={2} />
+                  {/* Иконка приложения (адаптивный размер) */}
+                  <div className={`w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 duration-300 shrink-0 ${app.color}`}>
+                    <Icon className="w-5 h-5 md:w-7 md:h-7" strokeWidth={2} />
                   </div>
 
                   {/* Текстовое описание */}
-                  <div className="mt-4">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1.5 tracking-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                  <div className="mt-2 md:mt-4 overflow-hidden">
+                    <h3 className="text-sm md:text-lg font-black text-gray-900 dark:text-white mb-0.5 md:mb-1.5 tracking-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
                       {app.name}
                     </h3>
-                    <p className="text-xs font-medium text-gray-400 dark:text-gray-500 leading-normal">
+                    <p className="text-[10px] md:text-xs font-medium text-gray-400 dark:text-gray-500 leading-tight line-clamp-2 sm:line-clamp-3">
                       {app.description}
                     </p>
                   </div>
@@ -92,12 +93,13 @@ export default function ProductivityLayout() {
               );
             })}
           </div>
+
         </div>
       </div>
     );
   }
 
-  // Если открыто конкретное приложение, рендерим его с верхней навигационной панелью «Назад»
+  // Если открыто конкретное приложение
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-950 transition-colors">
       {/* Минималистичный верхний бар управления */}
@@ -110,8 +112,7 @@ export default function ProductivityLayout() {
           Панель инструментов
         </button>
         
-        {/* Компактный индикатор текущего открытого приложения */}
-        <div className="text-xs font-black tracking-wider uppercase text-gray-400 dark:text-gray-500">
+        <div className="text-xs font-black tracking-wider uppercase text-gray-400 dark:text-gray-500 max-w-[180px] truncate">
           {apps.find(a => a.id === activeTab)?.name}
         </div>
       </div>

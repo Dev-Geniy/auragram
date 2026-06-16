@@ -92,7 +92,7 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
     availableItems.push({ id: 'crm', path: '/crm', icon: <LineChart size={24} strokeWidth={2} />, label: 'Smart CRM' });
   }
 
-  // Изменено: раздел переименован в «Продуктивность» и изменен путь
+  // Раздел переименован в «Продуктивность»
   if (profile?.goals?.includes('productivity')) {
     availableItems.push({ id: 'productivity', path: '/productivity', icon: <LayoutDashboard size={24} strokeWidth={2} />, label: 'Продуктивность' });
   }
@@ -249,7 +249,7 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
           );
         })}
 
-        {{/* Кнопка "Меню" */}
+        {/* Кнопка "Меню" — Ошибка синтаксиса исправлена здесь */}
         {isMobileOverflow && (
           <button
             onClick={() => setIsMoreMenuOpen(true)}
@@ -262,7 +262,7 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
               Меню
             </span>
           </button>
-        )}}
+        )}
       </nav>
 
     </div>
@@ -318,7 +318,7 @@ export default function App() {
           <Route path="/dating" element={<RequireAuth><MainLayout><DatingPage /></MainLayout></RequireAuth>} />
           <Route path="/crm" element={<RequireAuth><MainLayout><CRMPage /></MainLayout></RequireAuth>} />
           
-          {/* Изменено: новая страница Продуктивности, интегрированная в MainLayout */}
+          {/* Новая страница Продуктивности, интегрированная в MainLayout */}
           <Route path="/productivity" element={<RequireAuth><MainLayout><ProductivityLayout /></MainLayout></RequireAuth>} />
           
           <Route path="*" element={<Navigate to="/chats" replace />} />

@@ -25,19 +25,6 @@ const DatingPage = lazy(() => import('./pages/DatingPage'));
 const CRMPage = lazy(() => import('./pages/CRMPage'));
 
 // ==========================================
-// ВРЕМЕННЫЕ ЗАГЛУШКИ ДЛЯ НОВЫХ РАЗДЕЛОВ
-// ==========================================
-const PlaceholderPage = ({ title, icon: Icon }: { title: string, icon: any }) => (
-  <div className="flex flex-col items-center justify-center h-full bg-[#F2F2F7] dark:bg-gray-950 transition-colors p-6 text-center">
-    <div className="w-20 h-20 bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-200/50 dark:border-gray-800 flex items-center justify-center mb-6">
-      <Icon size={40} className="text-blue-500" strokeWidth={1.5} />
-    </div>
-    <h1 className="text-2xl font-black text-gray-900 dark:text-white mb-2">{title}</h1>
-    <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400">Раздел находится в активной разработке.</p>
-  </div>
-);
-
-// ==========================================
 // ГЛОБАЛЬНЫЙ ЗАГРУЗЧИК
 // ==========================================
 const GlobalLoader = () => (
@@ -105,9 +92,9 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
     availableItems.push({ id: 'crm', path: '/crm', icon: <LineChart size={24} strokeWidth={2} />, label: 'Smart CRM' });
   }
 
-  // Приложения продуктивности (Blocko, Mind Map)
+  // Изменено: раздел переименован в «Продуктивность» и изменен путь
   if (profile?.goals?.includes('productivity')) {
-    availableItems.push({ id: 'apps', path: '/apps', icon: <LayoutDashboard size={24} strokeWidth={2} />, label: 'Приложения' });
+    availableItems.push({ id: 'productivity', path: '/productivity', icon: <LayoutDashboard size={24} strokeWidth={2} />, label: 'Продуктивность' });
   }
 
   // Настройки
@@ -146,7 +133,7 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
             </span>
           </div>
 
-          {/* Десктопное меню без сворачивания */}
+          {/* Десктопное меню */}
           <nav className="flex-1 px-3 space-y-1 overflow-y-auto custom-scrollbar pb-4">
             {availableItems.map((item) => {
               const isActive = location.pathname.startsWith(item.path);
@@ -262,7 +249,7 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
           );
         })}
 
-        {/* Кнопка "Меню" (если элементов больше 4) */}
+        {{/* Кнопка "Меню" */}
         {isMobileOverflow && (
           <button
             onClick={() => setIsMoreMenuOpen(true)}
@@ -275,7 +262,7 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
               Меню
             </span>
           </button>
-        )}
+        )}}
       </nav>
 
     </div>
@@ -330,8 +317,9 @@ export default function App() {
           {/* НОВЫЕ ДИНАМИЧЕСКИЕ МАРШРУТЫ */}
           <Route path="/dating" element={<RequireAuth><MainLayout><DatingPage /></MainLayout></RequireAuth>} />
           <Route path="/crm" element={<RequireAuth><MainLayout><CRMPage /></MainLayout></RequireAuth>} />
-          <Route path="/apps" element={<RequireAuth><MainLayout><PlaceholderPage title="Blocko / Приложения" icon={LayoutDashboard}/></MainLayout></RequireAuth>} />
-          <Route path="/productivity" element={<ProductivityLayout />} />
+          
+          {/* Изменено: новая страница Продуктивности, интегрированная в MainLayout */}
+          <Route path="/productivity" element={<RequireAuth><MainLayout><ProductivityLayout /></MainLayout></RequireAuth>} />
           
           <Route path="*" element={<Navigate to="/chats" replace />} />
         </Routes>

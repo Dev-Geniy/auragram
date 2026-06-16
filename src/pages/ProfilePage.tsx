@@ -64,7 +64,7 @@ const ALL_MENU_ITEMS = [
   { id: 'dating', label: 'Знакомства', icon: Heart },
   { id: 'myshop', label: 'Мой магазин', icon: ShoppingBag },
   { id: 'crm', label: 'Smart CRM', icon: LineChart },
-  { id: 'apps', label: 'Приложения', icon: LayoutDashboard },
+  { id: 'productivity', label: 'Родуктивность', icon: LayoutDashboard },
   { id: 'profile', label: 'Настройки', icon: Settings },
 ];
 

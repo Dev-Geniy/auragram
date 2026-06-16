@@ -3,6 +3,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
 import { db, auth } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
+
 import { 
   Camera, User, Briefcase, 
   Phone, Globe, Package, Plus, Trash2, Image as ImageIcon, 
@@ -38,7 +39,7 @@ const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
           if (blob) {
             resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
           } else {
-            reject(new Error('Ошибка сжатия'));
+            reject(new Error('Ошибка сжатия изображения'));
           }
         }, 'image/jpeg', 0.8);
       };
@@ -54,17 +55,16 @@ const uploadToImgBB = async (file: File): Promise<string> => {
   const res = await fetch(`https://api.imgbb.com/1/upload?key=${API_KEY}`, { method: 'POST', body: formData });
   const data = await res.json();
   if (data.success) return data.data.url;
-  throw new Error('Ошибка загрузки в ImgBB');
+  throw new Error('Ошибка загрузки на ImgBB');
 };
 
-// Все возможные пункты меню для настройки "Вид"
 const ALL_MENU_ITEMS = [
   { id: 'chats', label: 'Чаты', icon: MessageCircle },
   { id: 'market', label: 'Маркет', icon: Store },
   { id: 'dating', label: 'Знакомства', icon: Heart },
   { id: 'myshop', label: 'Мой магазин', icon: ShoppingBag },
   { id: 'crm', label: 'Smart CRM', icon: LineChart },
-  { id: 'productivity', label: 'Родуктивность', icon: LayoutDashboard },
+  { id: 'productivity', label: 'Продуктивность', icon: LayoutDashboard }, // <- ОБНОВЛЕНО ИМЯ И ID
   { id: 'profile', label: 'Настройки', icon: Settings },
 ];
 
@@ -74,13 +74,13 @@ export default function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [isDark, setIsDark] = useState(false);
+
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isUploadingProductImg, setIsUploadingProductImage] = useState(false);
-  
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const productImgInputRef = useRef<HTMLInputElement>(null);
   const editProductImgInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [newProduct, setNewProduct] = useState<Product>({ id: '', name: '', price: '', description: '', imageUrl: '' });
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -101,7 +101,7 @@ export default function ProfilePage() {
     }
   });
 
-  // DRAG AND DROP (Перетаскивание меню)
+  // DRAG AND DROP (Сортировка меню)
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
 
@@ -148,7 +148,7 @@ export default function ProfilePage() {
           }));
         }
       } catch (error) {
-        console.error('Ошибка:', error);
+        console.error('Ошибка загрузки профиля:', error);
       } finally {
         setIsLoading(false);
       }
@@ -156,19 +156,19 @@ export default function ProfilePage() {
     fetchProfile();
   }, [user]);
 
-  // Вычисляем активные пункты меню для сортировки
+  // Формируем активные пункты меню для сортировки
   const activeMenuItems = useMemo(() => {
     let items = ['chats', 'market', 'profile'];
     if (profile.goals.includes('dating')) items.push('dating');
-    if (profile.goals.includes('productivity')) items.push('apps');
+    if (profile.goals.includes('productivity')) items.push('productivity'); // <- ОБНОВЛЕН ID
     if (profile.type === 'business') {
       items.push('myshop');
       items.push('crm');
     }
     
-    // Оставляем только те, что сейчас активны
+    // Применяем сохраненный порядок
     let currentOrder = profile.menuOrder.filter(id => items.includes(id));
-    // Добавляем новые, если они появились, но их еще нет в order
+    // Добавляем новые модули, если они появились, но их нет в order
     items.forEach(id => {
       if (!currentOrder.includes(id)) currentOrder.push(id);
     });
@@ -196,7 +196,7 @@ export default function ProfilePage() {
       const url = await uploadToImgBB(compressedFile);
       setProfile(prev => ({ ...prev, avatar: url }));
     } catch (error) {
-      alert('Не удалось загрузить фото.');
+      alert('Ошибка при загрузке фото.');
     } finally {
       setIsUploadingAvatar(false);
     }
@@ -215,7 +215,7 @@ export default function ProfilePage() {
         setNewProduct(prev => ({ ...prev, imageUrl: url }));
       }
     } catch (error) {
-      alert('Не удалось загрузить фото.');
+      alert('Ошибка при загрузке фото.');
     } finally {
       setIsUploadingProductImage(false);
     }
@@ -238,7 +238,7 @@ export default function ProfilePage() {
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (error) {
-      console.error('Ошибка сохранения:', error);
+      console.error('Ошибка сохранения профиля:', error);
     } finally {
       setIsSaving(false);
     }
@@ -253,7 +253,7 @@ export default function ProfilePage() {
   };
 
   const handleRemoveProduct = (productId: string) => {
-    if (window.confirm('Точно удалить?')) {
+    if (window.confirm('Удалить этот товар?')) {
       setProfile({ ...profile, products: profile.products.filter(p => p.id !== productId) });
     }
   };
@@ -291,13 +291,13 @@ export default function ProfilePage() {
       <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-md sticky top-0 z-10 border-b border-gray-200/60 dark:border-gray-800 px-4 py-3 flex items-center justify-between transition-colors">
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Настройки</h1>
         <button onClick={handleSaveProfile} disabled={isSaving} className="text-[15px] font-bold text-blue-500 hover:text-blue-600 disabled:opacity-50 transition-colors">
-          {isSaving ? <Loader2 size={18} className="animate-spin" /> : showSuccess ? 'Сохранено' : 'Сохранить'}
+          {isSaving ? <Loader2 size={18} className="animate-spin" /> : showSuccess ? 'Сохранено!' : 'Сохранить'}
         </button>
       </div>
 
       <div className="max-w-2xl mx-auto p-4 md:p-6">
         
-        {/* Аватар */}
+        {/* АВАТАРКА */}
         <div className="flex flex-col items-center justify-center mb-8 mt-4">
           <div className="relative group cursor-pointer" onClick={() => avatarInputRef.current?.click()}>
             <img src={profile.avatar} alt="Avatar" loading="lazy" className="w-24 h-24 rounded-full object-cover shadow-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 transition-colors" />
@@ -310,13 +310,13 @@ export default function ProfilePage() {
           <button onClick={() => avatarInputRef.current?.click()} className="text-[13px] font-medium text-blue-500 mt-3">Изменить фото</button>
         </div>
 
-        {/* Тема */}
+        {/* ТЕМА */}
         <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2">Оформление</h2>
         <div className={blockClass}>
           <div className="flex items-center justify-between px-4 py-3 cursor-pointer" onClick={toggleTheme}>
             <div className="flex items-center gap-3">
               {isDark ? <Moon size={20} className="text-blue-500" /> : <Sun size={20} className="text-amber-500" />}
-              <span className="text-[15px] font-medium text-gray-900 dark:text-white">Темная тема</span>
+              <span className="text-[15px] font-medium text-gray-900 dark:text-white">Ночная тема</span>
             </div>
             <div className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${isDark ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
               <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${isDark ? 'translate-x-6' : 'translate-x-0'}`} />
@@ -324,27 +324,28 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* ЦЕЛИ И ЗАДАЧИ */}
-        <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2 mt-6 flex items-center gap-1.5"><Target size={16}/> Мои цели</h2>
+        {/* ЦЕЛИ (МОДУЛИ) */}
+        <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2 mt-6 flex items-center gap-1.5"><Target size={16}/> Дополнительные модули</h2>
         <div className={blockClass}>
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 cursor-pointer" onClick={() => toggleGoal('dating')}>
             <div className="flex items-center gap-3">
               <Heart size={20} className={profile.goals.includes('dating') ? "text-pink-500" : "text-gray-400"} />
               <div>
-                <span className="text-[15px] font-medium text-gray-900 dark:text-white block">Поиск знакомств</span>
-                <span className="text-[12px] text-gray-500 dark:text-gray-400 block mt-0.5">Включить Tinder-подобный сервис</span>
+                <span className="text-[15px] font-medium text-gray-900 dark:text-white block">Знакомства</span>
+                <span className="text-[12px] text-gray-500 dark:text-gray-400 block mt-0.5">Классическая Tinder-свайпалка</span>
               </div>
             </div>
             <div className={`w-10 h-5 rounded-full flex items-center p-1 transition-colors ${profile.goals.includes('dating') ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
               <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${profile.goals.includes('dating') ? 'translate-x-5' : 'translate-x-0'}`} />
             </div>
           </div>
+          
           <div className="flex items-center justify-between px-4 py-3 cursor-pointer" onClick={() => toggleGoal('productivity')}>
             <div className="flex items-center gap-3">
               <LayoutDashboard size={20} className={profile.goals.includes('productivity') ? "text-indigo-500" : "text-gray-400"} />
               <div>
                 <span className="text-[15px] font-medium text-gray-900 dark:text-white block">Продуктивность</span>
-                <span className="text-[12px] text-gray-500 dark:text-gray-400 block mt-0.5">Mind Map, Канбан-доски и чеклисты</span>
+                <span className="text-[12px] text-gray-500 dark:text-gray-400 block mt-0.5">Mind Map, Задачи, Таймер</span>
               </div>
             </div>
             <div className={`w-10 h-5 rounded-full flex items-center p-1 transition-colors ${profile.goals.includes('productivity') ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
@@ -353,9 +354,9 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* НАСТРОЙКА ВИДА МЕНЮ (DRAG AND DROP) */}
-        <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2 mt-6 flex items-center gap-1.5"><LayoutList size={16}/> Вид меню</h2>
-        <p className="text-[12px] text-gray-500 dark:text-gray-400 px-4 mb-3">Перетаскивайте пункты, чтобы изменить порядок отображения в меню приложения.</p>
+        {/* НАСТРОЙКА МЕНЮ (DRAG AND DROP) */}
+        <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2 mt-6 flex items-center gap-1.5"><LayoutList size={16}/> Порядок меню</h2>
+        <p className="text-[12px] text-gray-500 dark:text-gray-400 px-4 mb-3">Зажмите и потяните пункт, чтобы изменить его позицию.</p>
         <div className={`${blockClass} py-2`}>
           {activeMenuItems.map((item, index) => (
             <div 
@@ -376,39 +377,39 @@ export default function ProfilePage() {
           ))}
         </div>
 
-        {/* Личные данные */}
+        {/* ИНФОРМАЦИЯ */}
         <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2 mt-6">Личные данные</h2>
         <div className={blockClass}>
           <div className={inputRowClass}>
-            <span className={labelClass}>Имя профиля</span>
-            <input type="text" value={profile.name} onChange={(e) => setProfile({...profile, name: e.target.value})} className={inputClass} placeholder="Имя профиля" />
+            <span className={labelClass}>Имя</span>
+            <input type="text" value={profile.name} onChange={(e) => setProfile({...profile, name: e.target.value})} className={inputClass} placeholder="Иван Иванов" />
           </div>
           <div className="flex flex-col px-4 py-3">
             <span className="text-[15px] font-medium text-gray-900 dark:text-gray-100 mb-1">О себе</span>
-            <textarea value={profile.role} onChange={(e) => setProfile({...profile, role: e.target.value})} className="w-full bg-transparent text-[15px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none h-20 custom-scrollbar" placeholder="Чем вы занимаетесь..." />
+            <textarea value={profile.role} onChange={(e) => setProfile({...profile, role: e.target.value})} className="w-full bg-transparent text-[15px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none h-20 custom-scrollbar" placeholder="Напишите пару слов о себе..." />
           </div>
         </div>
 
-        {/* Тип аккаунта */}
+        {/* ТИП АККАУНТА */}
         <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2">Тип аккаунта</h2>
         <div className={blockClass}>
           <div className="flex bg-gray-100 dark:bg-gray-800 p-1 m-2 rounded-xl transition-colors">
-            <button onClick={() => setProfile({...profile, type: 'personal'})} className={`flex-1 flex justify-center items-center gap-2 py-2 rounded-lg text-[14px] font-semibold transition-all ${profile.type === 'personal' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}><User size={16} /> Личный</button>
+            <button onClick={() => setProfile({...profile, type: 'personal'})} className={`flex-1 flex justify-center items-center gap-2 py-2 rounded-lg text-[14px] font-semibold transition-all ${profile.type === 'personal' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}><User size={16} /> Обычный</button>
             <button onClick={() => setProfile({...profile, type: 'business'})} className={`flex-1 flex justify-center items-center gap-2 py-2 rounded-lg text-[14px] font-semibold transition-all ${profile.type === 'business' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}><Briefcase size={16} /> Бизнес</button>
           </div>
         </div>
 
-        {/* Бизнес-настройки */}
+        {/* БЛОК ДЛЯ БИЗНЕСА */}
         {profile.type === 'business' && (
           <div className="animate-fade-in">
             
             {/* AI Assistant */}
-            <h2 className="text-[13px] font-semibold text-indigo-500 dark:text-indigo-400 uppercase tracking-wide px-4 mb-2 mt-6 flex items-center gap-1.5"><Zap size={16}/> Smart CRM / ИИ</h2>
+            <h2 className="text-[13px] font-semibold text-indigo-500 dark:text-indigo-400 uppercase tracking-wide px-4 mb-2 mt-6 flex items-center gap-1.5"><Zap size={16}/> Smart CRM / ИИ-Автоматизация</h2>
             <div className={`${blockClass} border-indigo-100 dark:border-indigo-900/50`}>
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 cursor-pointer" onClick={() => setProfile({...profile, aiSettings: {...profile.aiSettings, isEnabled: !profile.aiSettings.isEnabled}})}>
                 <div>
-                  <span className="text-[15px] font-bold text-gray-900 dark:text-white block">ИИ-Помощник продаж</span>
-                  <span className="text-[12px] text-gray-500 dark:text-gray-400 block mt-0.5">Шаблоны ответов и нейросеть</span>
+                  <span className="text-[15px] font-bold text-gray-900 dark:text-white block">ИИ Ассистент продаж</span>
+                  <span className="text-[12px] text-gray-500 dark:text-gray-400 block mt-0.5">Включить автоматические ответы для клиентов</span>
                 </div>
                 <div className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${profile.aiSettings.isEnabled ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
                   <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${profile.aiSettings.isEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
@@ -418,21 +419,21 @@ export default function ProfilePage() {
               {profile.aiSettings.isEnabled && (
                 <>
                   <div className="flex flex-col px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                    <span className="text-[14px] font-semibold text-gray-900 dark:text-gray-100 mb-1">Базовый контекст для ИИ</span>
-                    <span className="text-[11px] text-gray-500 dark:text-gray-400 mb-2">Этот текст будет использоваться для быстрого ответа по кнопке.</span>
+                    <span className="text-[14px] font-semibold text-gray-900 dark:text-gray-100 mb-1">Промпт контекста магазина</span>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 mb-2">Опишите условия доставки, возврата, цены и гарантии. ИИ будет использовать это для ответов.</span>
                     <textarea 
                       value={profile.aiSettings.contextPrompt} 
                       onChange={(e) => setProfile({...profile, aiSettings: {...profile.aiSettings, contextPrompt: e.target.value}})} 
                       className="w-full bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/50 rounded-xl p-3 text-[14px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none h-24 custom-scrollbar" 
-                      placeholder="Например: Здравствуйте! Мы находимся по адресу ул. Ленина, 15. Доставка по городу бесплатная." 
+                      placeholder="Например: Доставка Новой Почтой, гарантия 15 дней. Мы продаем только оригинальную обувь..." 
                     />
                   </div>
                   <div className="flex items-center justify-between px-4 py-3 cursor-pointer" onClick={() => setProfile({...profile, aiSettings: {...profile.aiSettings, followUps: !profile.aiSettings.followUps}})}>
                     <div className="flex items-center gap-2">
                       <MessageSquareText size={18} className="text-gray-400" />
                       <div>
-                        <span className="text-[14px] font-semibold text-gray-900 dark:text-white block">Умные напоминания</span>
-                        <span className="text-[11px] text-gray-500 dark:text-gray-400 block mt-0.5">Кнопка авто-напоминания о заказе</span>
+                        <span className="text-[14px] font-semibold text-gray-900 dark:text-white block">Шаблоны Follow-up</span>
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400 block mt-0.5">Предлагать готовые варианты продолжения диалога</span>
                       </div>
                     </div>
                     <div className={`w-10 h-5 rounded-full flex items-center p-1 transition-colors ${profile.aiSettings.followUps ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
@@ -443,7 +444,7 @@ export default function ProfilePage() {
               )}
             </div>
 
-            <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2 mt-6">Контакты магазина</h2>
+            <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 mb-2 mt-6">Контакты бизнеса</h2>
             <div className={blockClass}>
               <div className={inputRowClass}>
                 <Phone size={18} className="text-gray-400 dark:text-gray-500" />
@@ -451,14 +452,14 @@ export default function ProfilePage() {
               </div>
               <div className={inputRowClass}>
                 <Globe size={18} className="text-gray-400 dark:text-gray-500" />
-                <input type="text" placeholder="Веб-сайт" value={profile.contacts.website} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, website: e.target.value}})} className={inputClass} />
+                <input type="text" placeholder="Сайт или ссылка" value={profile.contacts.website} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, website: e.target.value}})} className={inputClass} />
               </div>
             </div>
 
             <div className="flex items-center justify-between px-4 mb-2 mt-6">
-              <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Товары ({profile.products.length})</h2>
+              <h2 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Каталог товаров ({profile.products.length})</h2>
               <button onClick={() => { setIsAddingProduct(!isAddingProduct); setEditingProduct(null); }} className="text-[13px] font-semibold text-blue-500 flex items-center gap-1">
-                {isAddingProduct ? 'Отмена' : <><Plus size={14} /> Добавить</>}
+                {isAddingProduct ? 'Отменить' : <><Plus size={14} /> Добавить товар</>}
               </button>
             </div>
 
@@ -470,8 +471,8 @@ export default function ProfilePage() {
                     {isUploadingProductImg && <div className="absolute inset-0 bg-white/70 dark:bg-black/60 flex items-center justify-center"><Loader2 size={16} className="animate-spin text-gray-900 dark:text-white" /></div>}
                   </div>
                   <div className="flex-1 space-y-2">
-                    <input type="text" placeholder="Название (напр. Кроссовки)" value={editingProduct ? editingProduct.name : newProduct.name} onChange={e => editingProduct ? setEditingProduct({...editingProduct, name: e.target.value}) : setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-lg text-[15px] outline-none font-semibold transition-colors" />
-                    <input type="text" placeholder="Цена" value={editingProduct ? editingProduct.price : newProduct.price} onChange={e => editingProduct ? setEditingProduct({...editingProduct, price: e.target.value}) : setNewProduct({...newProduct, price: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-lg text-sm outline-none transition-colors" />
+                    <input type="text" placeholder="Название товара (обязательно)" value={editingProduct ? editingProduct.name : newProduct.name} onChange={e => editingProduct ? setEditingProduct({...editingProduct, name: e.target.value}) : setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-lg text-[15px] outline-none font-semibold transition-colors" />
+                    <input type="text" placeholder="Цена, например: 1500 ₴" value={editingProduct ? editingProduct.price : newProduct.price} onChange={e => editingProduct ? setEditingProduct({...editingProduct, price: e.target.value}) : setNewProduct({...newProduct, price: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-lg text-sm outline-none transition-colors" />
                   </div>
                 </div>
                 
@@ -484,7 +485,7 @@ export default function ProfilePage() {
                 <input type="file" ref={productImgInputRef} onChange={(e) => handleProductImageChange(e, false)} accept="image/*" className="hidden" />
                 <input type="file" ref={editProductImgInputRef} onChange={(e) => handleProductImageChange(e, true)} accept="image/*" className="hidden" />
                 <button onClick={editingProduct ? handleSaveEditProduct : handleAddProduct} disabled={!(editingProduct ? editingProduct.name : newProduct.name) || !(editingProduct ? editingProduct.price : newProduct.price)} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm disabled:opacity-50 transition-colors">
-                  {editingProduct ? 'Сохранить изменения' : 'Добавить в магазин'}
+                  {editingProduct ? 'Сохранить изменения' : 'Сохранить в каталог'}
                 </button>
               </div>
             )}
@@ -508,10 +509,11 @@ export default function ProfilePage() {
                 ))}
               </div>
             ) : (
-               <div className="text-center py-6 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200/50 dark:border-gray-800 text-gray-400 dark:text-gray-500 text-sm transition-colors">Товаров пока нет</div>
+               <div className="text-center py-6 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200/50 dark:border-gray-800 text-gray-400 dark:text-gray-500 text-sm transition-colors">У вас пока нет товаров в каталоге</div>
             )}
           </div>
         )}
+
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutGrid, Calendar, Timer, Mic } from 'lucide-react'; // LayoutBoard -> LayoutGrid
+import { LayoutGrid, Calendar, Timer, Mic } from 'lucide-react'; 
 import TasksBoard from './TasksBoard';
 import CalendarPage from './CalendarPage';
 import Pomodoro from './Pomodoro';
@@ -9,7 +9,7 @@ export default function ProductivityLayout() {
   const [activeTab, setActiveTab] = useState<'tasks' | 'calendar' | 'pomodoro' | 'notes'>('tasks');
 
   const tabs = [
-    { id: 'tasks', name: 'Задачи', icon: LayoutBoard },
+    { id: 'tasks', name: 'Задачи', icon: LayoutGrid }, // <-- Исправлено здесь: LayoutBoard заменено на LayoutGrid
     { id: 'calendar', name: 'Календарь', icon: Calendar },
     { id: 'pomodoro', name: 'Помодоро', icon: Timer },
     { id: 'notes', name: 'Заметки', icon: Mic },

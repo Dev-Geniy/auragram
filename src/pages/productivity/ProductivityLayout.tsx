@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutBoard, Calendar, Timer, Mic } from 'lucide-react';
+import { LayoutGrid, Calendar, Timer, Mic } from 'lucide-react'; // LayoutBoard -> LayoutGrid
 import TasksBoard from './TasksBoard';
 import CalendarPage from './CalendarPage';
 import Pomodoro from './Pomodoro';

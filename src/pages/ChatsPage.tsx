@@ -111,7 +111,7 @@ const playNotificationSound = () => {
 };
 
 // ==========================================
-// 3. КОМПОНЕНТЫ СО СВАЙПАМИ
+// 3. КОМПОНЕНТЫ СО СВАЙПАМИ И КОНТЕКСТОМ
 // ==========================================
 const SwipeableMessage = ({ children, onReply, onDelete, isMine }: { children: React.ReactNode, onReply: () => void, onDelete: () => void, isMine: boolean }) => {
   const [offsetX, setOffsetX] = useState(0);
@@ -149,7 +149,7 @@ const SwipeableMessage = ({ children, onReply, onDelete, isMine }: { children: R
   );
 };
 
-const SwipeableContact = ({ contact, isSelected, isPinned, onClick, onSwipeLeft, onSwipeRight, rightIcon: RightIcon, leftIcon: LeftIcon, rightBgClass, leftBgClass, unreadCount, currentUserId }: any) => {
+const SwipeableContact = ({ contact, isSelected, isPinned, onClick, onContextMenu, onSwipeLeft, onSwipeRight, rightIcon: RightIcon, leftIcon: LeftIcon, rightBgClass, leftBgClass, unreadCount, currentUserId }: any) => {
   const [offsetX, setOffsetX] = useState(0);
   const startX = useRef(0);
   const isDragging = useRef(false);
@@ -162,20 +162,20 @@ const SwipeableContact = ({ contact, isSelected, isPinned, onClick, onSwipeLeft,
   };
   const handleTouchEnd = () => { 
     isDragging.current = false; 
-    if (offsetX > 60) onSwipeRight(contact.id); // Swipe right -> Pin/Unpin
-    else if (offsetX < -60) onSwipeLeft(contact.id); // Swipe left -> Archive
+    if (offsetX > 60) onSwipeRight(contact.id); // Pin/Unpin
+    else if (offsetX < -60) onSwipeLeft(contact.id); // Archive
     setOffsetX(0); 
   };
 
   return (
-    <div className="relative w-full overflow-hidden bg-[#F2F2F7] dark:bg-gray-950 border-b border-gray-100/50 dark:border-gray-800/50">
+    <div onContextMenu={(e) => onContextMenu(e, contact.id)} className="relative w-full overflow-hidden bg-[#F2F2F7] dark:bg-gray-950 border-b border-gray-100/50 dark:border-gray-800/50">
       <div className="absolute inset-0 flex justify-between">
         <div className={`w-1/2 ${rightBgClass} flex items-center pl-4 text-white transition-opacity ${offsetX > 0 ? 'opacity-100' : 'opacity-0'}`}><RightIcon size={24} className="text-white" /></div>
         <div className={`w-1/2 flex items-center justify-end pr-4 text-white transition-opacity ${offsetX < 0 ? 'opacity-100' : 'opacity-0'} ${leftBgClass}`}><LeftIcon size={24} className="text-white" /></div>
       </div>
       <div onClick={onClick} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} style={{ transform: `translateX(${offsetX}px)` }} className={`relative z-10 flex items-center gap-3 px-4 py-3 cursor-pointer transition-all duration-200 ${isSelected ? 'bg-blue-500 text-white' : 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 dark:text-white'}`}>
         <div className="relative shrink-0">
-          {contact.isSaved ? <div className={`w-12 h-12 rounded-full flex items-center justify-center ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-500 text-white'}`}><Bookmark size={20} /></div> : <img src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} alt={contact.name} loading="lazy" className="w-12 h-12 rounded-full object-cover bg-gray-100 dark:bg-gray-800" />}
+          {contact.isSaved ? <div className={`w-12 h-12 rounded-full flex items-center justify-center ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-500 text-white'}`}><Bookmark size={20} /></div> : <img src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} alt={contact.name} loading="lazy" className="w-12 h-12 rounded-full object-cover bg-gray-100 dark:bg-gray-800 shadow-sm" />}
           {isPinned && !isSelected && <div className="absolute -bottom-1 -right-1 bg-white dark:bg-gray-900 rounded-full p-0.5 shadow-sm"><Pin size={12} className="text-blue-500 transform rotate-45" /></div>}
           {isPinned && isSelected && <div className="absolute -bottom-1 -right-1 bg-blue-600 rounded-full p-0.5 shadow-sm"><Pin size={12} className="text-white transform rotate-45" /></div>}
         </div>
@@ -216,6 +216,14 @@ export default function ChatsPage() {
   const [pinnedChats, setPinnedChats] = useState<string[]>(() => JSON.parse(localStorage.getItem(`pinned_${user?.uid}`) || '[]'));
   const [chatActivity, setChatActivity] = useState<Record<string, number>>(() => JSON.parse(localStorage.getItem(`activity_${user?.uid}`) || '{}'));
 
+  // Стейт Контекстного меню (ЭТАП 2)
+  const [contextMenu, setContextMenu] = useState<{
+    type: 'message' | 'contact' | null;
+    x: number;
+    y: number;
+    data: any;
+  }>({ type: null, x: 0, y: 0, data: null });
+
   // Стейты сообщений
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -247,6 +255,13 @@ export default function ChatsPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Закрытие контекстного меню при клике в любое место
+  useEffect(() => {
+    const handleClick = () => setContextMenu({ type: null, x: 0, y: 0, data: null });
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
 
   useEffect(() => { activeContactIdRef.current = selectedContact?.id || null; }, [selectedContact]);
   useEffect(() => { globalUsersRef.current = globalUsers; }, [globalUsers]);
@@ -316,7 +331,6 @@ export default function ChatsPage() {
         const msg = docSnap.data() as Message;
         counts[msg.senderId] = (counts[msg.senderId] || 0) + 1;
         
-        // Обновляем активность, чтобы чат поднялся наверх
         if (msg.createdAt) {
           const time = msg.createdAt.toMillis ? msg.createdAt.toMillis() : Date.now();
           setChatActivity(prev => ({ ...prev, [msg.senderId]: Math.max(prev[msg.senderId] || 0, time) }));
@@ -436,7 +450,6 @@ export default function ChatsPage() {
         } as Message);
       });
 
-      // Обновляем активность (чтобы чат всегда был актуальным в списке)
       if (latestTime > 0) {
          setChatActivity(prev => ({ ...prev, [selectedContact.id]: Math.max(prev[selectedContact.id] || 0, latestTime) }));
       }
@@ -518,7 +531,6 @@ export default function ChatsPage() {
     setReplyingTo(null);
     localStorage.removeItem(`draft_${user.uid}_${selectedContact.id}`);
 
-    // Обновляем активность локально моментально для UI
     setChatActivity(prev => ({ ...prev, [selectedContact.id]: Date.now() }));
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -607,7 +619,7 @@ export default function ChatsPage() {
   };
 
   // ==========================================
-  // ЛОГИКА АРХИВА И ЗАКРЕПЛЕНИЯ
+  // ЛОГИКА АРХИВА, ЗАКРЕПЛЕНИЯ И УДАЛЕНИЯ ЧАТА
   // ==========================================
   const toggleArchive = (contactId: string) => {
     if (archivedContacts.includes(contactId)) {
@@ -630,11 +642,48 @@ export default function ChatsPage() {
     }
   };
 
+  const handleDeleteChat = async (contactId: string) => {
+    if (!user) return;
+    if (window.confirm('Вы уверены, что хотите удалить этот чат? Вся история сообщений будет безвозвратно удалена у вас и вашего собеседника.')) {
+      const chatId = [user.uid, contactId].sort().join('_');
+      try {
+        const q = query(collection(db, 'messages'), where('chatId', '==', chatId));
+        const snap = await getDocs(q);
+        const deletePromises = snap.docs.map(docSnap => deleteDoc(docSnap.ref));
+        await Promise.all(deletePromises);
+        
+        // Очищаем локальные стейты
+        setPinnedChats(prev => prev.filter(id => id !== contactId));
+        setArchivedContacts(prev => prev.filter(id => id !== contactId));
+        setChatActivity(prev => {
+          const newActivity = { ...prev };
+          delete newActivity[contactId];
+          return newActivity;
+        });
+
+        if (selectedContact?.id === contactId) setSelectedContact(null);
+      } catch (err) {
+        console.error("Ошибка при удалении чата:", err);
+      }
+    }
+  };
+
+  // Вызов контекстного меню
+  const openContextMenu = (e: React.MouseEvent, type: 'message' | 'contact', data: any) => {
+    e.preventDefault();
+    let x = e.clientX;
+    let y = e.clientY;
+    
+    // Предотвращение выхода меню за пределы экрана
+    if (window.innerWidth - x < 220) x = window.innerWidth - 220;
+    if (window.innerHeight - y < 160) y = window.innerHeight - 160;
+
+    setContextMenu({ type, x, y, data });
+  };
+
   // ФИЛЬТРАЦИЯ И УМНЫЙ ПОИСК
   const filteredContacts = globalUsers.filter(c => {
     const q = searchQuery.toLowerCase().trim();
-    
-    // Если идет поиск - ищем глобально по имени или EMAIL
     if (q) {
       const matchName = c.name?.toLowerCase().includes(q);
       const matchEmail = c.contacts?.email?.toLowerCase().includes(q);
@@ -644,7 +693,6 @@ export default function ChatsPage() {
     if (isArchiveMode) return archivedContacts.includes(c.id);
     if (archivedContacts.includes(c.id)) return false;
 
-    // Скрываем незнакомцев, если нет поиска
     const hasActivity = chatActivity[c.id] || unreadCounts[c.id] > 0 || c.isSaved;
     const isPinned = pinnedChats.includes(c.id);
     if (!hasActivity && !isPinned) return false;
@@ -654,13 +702,11 @@ export default function ChatsPage() {
     if (activeTab === 'clients') return c.type !== 'business' && !c.isSaved;
     return true; 
   }).sort((a, b) => {
-    // 1. Сначала закрепленные
     const aPinned = pinnedChats.includes(a.id);
     const bPinned = pinnedChats.includes(b.id);
     if (aPinned && !bPinned) return -1;
     if (!aPinned && bPinned) return 1;
     
-    // 2. Затем по активности
     const aTime = chatActivity[a.id] || 0;
     const bTime = chatActivity[b.id] || 0;
     return bTime - aTime;
@@ -707,12 +753,49 @@ export default function ChatsPage() {
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-white dark:bg-gray-950 transition-colors relative">
       
+      {/* ПЛАШКА ОТСУТСТВИЯ ИНТЕРНЕТА */}
       {isOffline && (
         <div className="fixed top-0 left-0 right-0 z-[200] bg-red-500 text-white text-[12px] font-bold py-1.5 flex items-center justify-center gap-2 shadow-md">
           <WifiOff size={14} /> Нет подключения к интернету. Чат работает в оффлайн-режиме.
         </div>
       )}
 
+      {/* КАСТОМНОЕ КОНТЕКСТНОЕ МЕНЮ (ПКМ) */}
+      {contextMenu.type && (
+        <div 
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          className="fixed z-[9999] bg-white dark:bg-gray-800 shadow-[0_8px_30px_rgba(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.5)] rounded-2xl border border-gray-100 dark:border-gray-700 py-2 min-w-[200px] animate-fade-in text-[14px] font-medium transition-colors"
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {contextMenu.type === 'message' && (
+            <>
+              <button onClick={() => { setReplyingTo(contextMenu.data); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-800 dark:text-gray-200 flex items-center gap-3 transition-colors"><Reply size={18} className="text-gray-500 dark:text-gray-400"/> Ответить</button>
+              {contextMenu.data.senderId === user?.uid && (
+                <>
+                  <button onClick={() => { setEditingMessage(contextMenu.data); setNewMessage(contextMenu.data.text||''); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-800 dark:text-gray-200 flex items-center gap-3 transition-colors"><Edit2 size={18} className="text-gray-500 dark:text-gray-400"/> Редактировать</button>
+                  <div className="h-px bg-gray-100 dark:bg-gray-700 my-1 mx-2"></div>
+                  <button onClick={() => { handleDeleteMessage(contextMenu.data.id); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500 flex items-center gap-3 transition-colors"><Trash2 size={18}/> Удалить сообщение</button>
+                </>
+              )}
+            </>
+          )}
+          {contextMenu.type === 'contact' && (
+            <>
+              <button onClick={() => { togglePin(contextMenu.data); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-800 dark:text-gray-200 flex items-center gap-3 transition-colors">
+                {pinnedChats.includes(contextMenu.data) ? <><PinOff size={18} className="text-gray-500 dark:text-gray-400"/> Открепить</> : <><Pin size={18} className="text-gray-500 dark:text-gray-400"/> Закрепить чат</>}
+              </button>
+              <button onClick={() => { toggleArchive(contextMenu.data); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-800 dark:text-gray-200 flex items-center gap-3 transition-colors">
+                {archivedContacts.includes(contextMenu.data) ? <><ArchiveRestore size={18} className="text-gray-500 dark:text-gray-400"/> Вернуть из архива</> : <><Archive size={18} className="text-gray-500 dark:text-gray-400"/> Архивировать</>}
+              </button>
+              <div className="h-px bg-gray-100 dark:bg-gray-700 my-1 mx-2"></div>
+              <button onClick={() => { handleDeleteChat(contextMenu.data); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500 flex items-center gap-3 transition-colors"><Trash2 size={18}/> Удалить чат (очистить)</button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* УВЕДОМЛЕНИЯ ВНУТРИ ПРИЛОЖЕНИЯ */}
       <div className={`fixed ${isOffline ? 'top-10' : 'top-4'} left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 pointer-events-none px-4 w-full md:w-[400px]`}>
         {toasts.map(t => (
           <div key={t.id} onClick={() => { const contactToOpen = globalUsers.find(c => c.id === t.senderId); if (contactToOpen) setSelectedContact(contactToOpen); setToasts(prev => prev.filter(toast => toast.id !== t.id)); }} className="pointer-events-auto bg-white/95 dark:bg-gray-800/95 backdrop-blur-md shadow-xl rounded-2xl p-3 flex items-center gap-3 animate-fade-in w-full cursor-pointer border border-gray-100 dark:border-gray-700 hover:scale-[1.02] transition-transform">
@@ -888,6 +971,7 @@ export default function ChatsPage() {
               isSelected={selectedContact?.id === contact.id}
               isPinned={pinnedChats.includes(contact.id)}
               onClick={() => setSelectedContact(contact)} 
+              onContextMenu={(e: React.MouseEvent, id: string) => openContextMenu(e, 'contact', id)}
               onSwipeLeft={toggleArchive} 
               onSwipeRight={togglePin}
               rightIcon={pinnedChats.includes(contact.id) ? PinOff : Pin} 
@@ -1004,78 +1088,80 @@ export default function ChatsPage() {
                         <div className="bg-gray-200/80 dark:bg-gray-800/80 backdrop-blur text-gray-600 dark:text-gray-300 text-[12px] font-medium px-4 py-1.5 rounded-full shadow-sm">{msg.statusText}</div>
                       </div>
                     ) : (
-                      <SwipeableMessage onReply={() => setReplyingTo(msg)} onDelete={() => handleDeleteMessage(msg.id)} isMine={isMine}>
-                        <div className={`relative max-w-[85%] sm:max-w-[70%] flex flex-col ${
-                          isMine ? `bg-[#E3FECE] dark:bg-[#1E3A8A] text-gray-900 dark:text-white ${bubbleRadius}` 
-                                 : `bg-white dark:bg-[#202020] text-gray-900 dark:text-white border border-gray-100 dark:border-gray-800 shadow-sm ${bubbleRadius}`
-                        } ${(isCard || isReceipt) ? 'p-1.5' : 'px-3 pt-2 pb-1.5 text-[15px] leading-relaxed'} ${marginTopClass} group`}>
-                          
-                          {isMine && !isCard && !isReceipt && (
-                            <div className="absolute top-1 -left-16 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1">
-                              <button onClick={() => { setEditingMessage(msg); setNewMessage(msg.text || ''); }} className="p-1.5 bg-white dark:bg-gray-800 rounded-full shadow-sm text-gray-500 hover:text-blue-500 transition-colors"><Edit2 size={14}/></button>
-                              <button onClick={() => handleDeleteMessage(msg.id)} className="p-1.5 bg-white dark:bg-gray-800 rounded-full shadow-sm text-gray-500 hover:text-red-500 transition-colors"><Trash2 size={14}/></button>
-                            </div>
-                          )}
+                      <div onContextMenu={(e) => openContextMenu(e, 'message', msg)}>
+                        <SwipeableMessage onReply={() => setReplyingTo(msg)} onDelete={() => handleDeleteMessage(msg.id)} isMine={isMine}>
+                          <div className={`relative max-w-[85%] sm:max-w-[70%] flex flex-col ${
+                            isMine ? `bg-[#E3FECE] dark:bg-[#1E3A8A] text-gray-900 dark:text-white ${bubbleRadius}` 
+                                   : `bg-white dark:bg-[#202020] text-gray-900 dark:text-white border border-gray-100 dark:border-gray-800 shadow-sm ${bubbleRadius}`
+                          } ${(isCard || isReceipt) ? 'p-1.5' : 'px-3 pt-2 pb-1.5 text-[15px] leading-relaxed'} ${marginTopClass} group cursor-default select-text`}>
+                            
+                            {isMine && !isCard && !isReceipt && (
+                              <div className="absolute top-1 -left-16 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 hidden md:flex">
+                                <button onClick={() => { setEditingMessage(msg); setNewMessage(msg.text || ''); }} className="p-1.5 bg-white dark:bg-gray-800 rounded-full shadow-sm text-gray-500 hover:text-blue-500 transition-colors"><Edit2 size={14}/></button>
+                                <button onClick={() => handleDeleteMessage(msg.id)} className="p-1.5 bg-white dark:bg-gray-800 rounded-full shadow-sm text-gray-500 hover:text-red-500 transition-colors"><Trash2 size={14}/></button>
+                              </div>
+                            )}
 
-                          {msg.replyToText && (
-                            <div className="mb-1.5 pl-2 border-l-[3px] border-blue-500 bg-black/5 dark:bg-black/20 rounded-r-md py-1 pr-2">
-                              <span className="text-[11px] font-bold text-blue-600 dark:text-blue-300 block mb-0.5">{msg.replyToSender}</span>
-                              <span className="text-[12px] text-gray-600 dark:text-gray-300 line-clamp-2 leading-tight opacity-90">{msg.replyToText}</span>
-                            </div>
-                          )}
+                            {msg.replyToText && (
+                              <div className="mb-1.5 pl-2 border-l-[3px] border-blue-500 bg-black/5 dark:bg-black/20 rounded-r-md py-1 pr-2">
+                                <span className="text-[11px] font-bold text-blue-600 dark:text-blue-300 block mb-0.5">{msg.replyToSender}</span>
+                                <span className="text-[12px] text-gray-600 dark:text-gray-300 line-clamp-2 leading-tight opacity-90">{msg.replyToText}</span>
+                              </div>
+                            )}
 
-                          {isReceipt ? (
-                            <div className="flex flex-col min-w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-blue-200 dark:border-blue-900 shadow-sm">
-                              <div className="bg-blue-50 dark:bg-blue-900/30 p-3 border-b border-blue-100 dark:border-blue-800/50 flex items-center justify-between">
-                                <span className="font-black text-blue-600 dark:text-blue-400 flex items-center gap-1.5"><ShoppingBag size={16}/> ЗАКАЗ</span>
-                                <span className="text-[10px] font-bold uppercase text-gray-500 bg-white dark:bg-gray-700 px-2 py-0.5 rounded-md">
-                                  {msg.orderData.status === 'new' && 'Ожидает'}
-                                  {msg.orderData.status === 'processing' && 'В работе'}
-                                  {msg.orderData.status === 'shipped' && 'Отправлен'}
+                            {isReceipt ? (
+                              <div className="flex flex-col min-w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-blue-200 dark:border-blue-900 shadow-sm">
+                                <div className="bg-blue-50 dark:bg-blue-900/30 p-3 border-b border-blue-100 dark:border-blue-800/50 flex items-center justify-between">
+                                  <span className="font-black text-blue-600 dark:text-blue-400 flex items-center gap-1.5"><ShoppingBag size={16}/> ЗАКАЗ</span>
+                                  <span className="text-[10px] font-bold uppercase text-gray-500 bg-white dark:bg-gray-700 px-2 py-0.5 rounded-md">
+                                    {msg.orderData.status === 'new' && 'Ожидает'}
+                                    {msg.orderData.status === 'processing' && 'В работе'}
+                                    {msg.orderData.status === 'shipped' && 'Отправлен'}
+                                  </span>
+                                </div>
+                                <div className="p-3 text-[13px]">
+                                  <p className="whitespace-pre-wrap text-gray-600 dark:text-gray-300 font-medium mb-3">{msg.orderData.items}</p>
+                                  <div className="flex justify-between items-center pt-2 border-t border-dashed border-gray-200 dark:border-gray-700">
+                                    <span className="font-bold text-gray-400">Итого:</span>
+                                    <span className="font-black text-[15px]">{msg.orderData.total > 0 ? `${msg.orderData.total}` : 'Уточняется'}</span>
+                                  </div>
+                                </div>
+                                {!isMine && (
+                                  <div className="p-2 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 flex gap-2">
+                                    {msg.orderData.status === 'new' && <button onClick={() => handleOrderStatusUpdate(msg.id, 'processing', '🛠 Продавец взял заказ в работу')} className="flex-1 bg-amber-500 text-white py-1.5 rounded-lg text-[12px] font-bold flex items-center justify-center gap-1"><Package size={14}/> В работу</button>}
+                                    {msg.orderData.status === 'processing' && <button onClick={() => handleOrderStatusUpdate(msg.id, 'shipped', '🚚 Заказ передан в службу доставки')} className="flex-1 bg-blue-500 text-white py-1.5 rounded-lg text-[12px] font-bold flex items-center justify-center gap-1"><Truck size={14}/> Отправлено</button>}
+                                    {msg.orderData.status === 'shipped' && <div className="flex-1 py-1.5 text-center text-[12px] font-bold text-green-500 flex items-center justify-center gap-1"><CheckCircle2 size={14}/> Выполнено</div>}
+                                  </div>
+                                )}
+                              </div>
+                            ) : isCard ? (
+                              <div className="flex flex-col w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-200/50 dark:border-gray-700">
+                                <img src={msg.cardData!.imageUrl} onClick={() => setViewingImage(msg.cardData!.imageUrl)} loading="lazy" className="w-full h-36 object-cover cursor-pointer hover:opacity-90 transition-opacity" alt="card" />
+                                <div className="p-3">
+                                  <h4 className="font-semibold text-[14px] text-gray-900 dark:text-white line-clamp-1 mb-1">{msg.cardData!.title}</h4>
+                                  {msg.cardData!.price && <span className="text-[13px] font-bold text-blue-500 dark:text-blue-400">{msg.cardData!.price}</span>}
+                                  <a href={msg.cardData!.link} target="_blank" rel="noopener noreferrer" className="mt-2 flex items-center justify-center gap-1.5 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 py-1.5 rounded-lg text-[13px] font-medium">Смотреть <ExternalLink size={14} /></a>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                {msg.imageUrl && <img src={msg.imageUrl} onClick={() => setViewingImage(msg.imageUrl!)} loading="lazy" alt="attachment" className="w-full max-w-[280px] h-auto rounded-xl mb-1 object-cover cursor-pointer hover:opacity-90 transition-opacity" />}
+                                {msg.text && <span className="whitespace-pre-wrap break-words">{msg.text}</span>}
+                              </>
+                            )}
+
+                            <div className={`flex items-center justify-end gap-1 mt-0.5 ml-4 float-right ${(isCard || isReceipt) && 'px-2 pb-1'}`}>
+                              {msg.isEdited && <span className="text-[10px] text-gray-400 dark:text-gray-500 italic mr-1">изменено</span>}
+                              <span className={`text-[11px] font-medium ${isMine ? 'text-green-700/60 dark:text-blue-200/60' : 'text-gray-400 dark:text-gray-500'}`}>{formatTime(msg.createdAt)}</span>
+                              {isMine && !selectedContact.isSaved && (
+                                <span className={`${isMine ? 'text-green-600/70 dark:text-blue-300/80' : ''}`}>
+                                  {msg.isRead ? <CheckCheck size={14} /> : <Check size={14} />}
                                 </span>
-                              </div>
-                              <div className="p-3 text-[13px]">
-                                <p className="whitespace-pre-wrap text-gray-600 dark:text-gray-300 font-medium mb-3">{msg.orderData.items}</p>
-                                <div className="flex justify-between items-center pt-2 border-t border-dashed border-gray-200 dark:border-gray-700">
-                                  <span className="font-bold text-gray-400">Итого:</span>
-                                  <span className="font-black text-[15px]">{msg.orderData.total > 0 ? `${msg.orderData.total}` : 'Уточняется'}</span>
-                                </div>
-                              </div>
-                              {!isMine && (
-                                <div className="p-2 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 flex gap-2">
-                                  {msg.orderData.status === 'new' && <button onClick={() => handleOrderStatusUpdate(msg.id, 'processing', '🛠 Продавец взял заказ в работу')} className="flex-1 bg-amber-500 text-white py-1.5 rounded-lg text-[12px] font-bold flex items-center justify-center gap-1"><Package size={14}/> В работу</button>}
-                                  {msg.orderData.status === 'processing' && <button onClick={() => handleOrderStatusUpdate(msg.id, 'shipped', '🚚 Заказ передан в службу доставки')} className="flex-1 bg-blue-500 text-white py-1.5 rounded-lg text-[12px] font-bold flex items-center justify-center gap-1"><Truck size={14}/> Отправлено</button>}
-                                  {msg.orderData.status === 'shipped' && <div className="flex-1 py-1.5 text-center text-[12px] font-bold text-green-500 flex items-center justify-center gap-1"><CheckCircle2 size={14}/> Выполнено</div>}
-                                </div>
                               )}
                             </div>
-                          ) : isCard ? (
-                            <div className="flex flex-col w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-200/50 dark:border-gray-700">
-                              <img src={msg.cardData!.imageUrl} onClick={() => setViewingImage(msg.cardData!.imageUrl)} loading="lazy" className="w-full h-36 object-cover cursor-pointer hover:opacity-90 transition-opacity" alt="card" />
-                              <div className="p-3">
-                                <h4 className="font-semibold text-[14px] text-gray-900 dark:text-white line-clamp-1 mb-1">{msg.cardData!.title}</h4>
-                                {msg.cardData!.price && <span className="text-[13px] font-bold text-blue-500 dark:text-blue-400">{msg.cardData!.price}</span>}
-                                <a href={msg.cardData!.link} target="_blank" rel="noopener noreferrer" className="mt-2 flex items-center justify-center gap-1.5 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 py-1.5 rounded-lg text-[13px] font-medium">Смотреть <ExternalLink size={14} /></a>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              {msg.imageUrl && <img src={msg.imageUrl} onClick={() => setViewingImage(msg.imageUrl!)} loading="lazy" alt="attachment" className="w-full max-w-[280px] h-auto rounded-xl mb-1 object-cover cursor-pointer hover:opacity-90 transition-opacity" />}
-                              {msg.text && <span className="whitespace-pre-wrap break-words">{msg.text}</span>}
-                            </>
-                          )}
-
-                          <div className={`flex items-center justify-end gap-1 mt-0.5 ml-4 float-right ${(isCard || isReceipt) && 'px-2 pb-1'}`}>
-                            {msg.isEdited && <span className="text-[10px] text-gray-400 dark:text-gray-500 italic mr-1">изменено</span>}
-                            <span className={`text-[11px] font-medium ${isMine ? 'text-green-700/60 dark:text-blue-200/60' : 'text-gray-400 dark:text-gray-500'}`}>{formatTime(msg.createdAt)}</span>
-                            {isMine && !selectedContact.isSaved && (
-                              <span className={`${isMine ? 'text-green-600/70 dark:text-blue-300/80' : ''}`}>
-                                {msg.isRead ? <CheckCheck size={14} /> : <Check size={14} />}
-                              </span>
-                            )}
                           </div>
-                        </div>
-                      </SwipeableMessage>
+                        </SwipeableMessage>
+                      </div>
                     )}
                   </div>
                 );

@@ -11,7 +11,7 @@ import {
   ShoppingBag, Truck, CheckCircle2, Package, 
   Users, Zap, Clock, Archive, ArchiveRestore, Reply,
   Trash2, Edit2, ChevronDown, WifiOff, Volume2, VolumeX, Bell, BellOff,
-  Phone, Globe, Store, MessageSquare, Pin, PinOff
+  Phone, Globe, Store, MessageSquare, Pin, PinOff, Maximize2, Minimize2
 } from 'lucide-react';
 
 // ==========================================
@@ -224,7 +224,7 @@ export default function ChatsPage() {
     data: any;
   }>({ type: null, x: 0, y: 0, data: null });
 
-  // Стейты сообщений
+  // Стейты сообщений (ЭТАП 3 добавлен isExpanded)
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [attachedImage, setAttachedImage] = useState<string>('');
@@ -233,6 +233,7 @@ export default function ChatsPage() {
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const [messageLimit, setMessageLimit] = useState(30);
   const [showScrollButton, setShowScrollButton] = useState(false); 
+  const [isExpanded, setIsExpanded] = useState(false);
   
   // Настройки и системные стейты
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -425,7 +426,8 @@ export default function ChatsPage() {
       setMessageLimit(30);
       setReplyingTo(null); 
       setEditingMessage(null);
-      setIsProfileModalOpen(false); 
+      setIsProfileModalOpen(false);
+      setIsExpanded(false); // Сворачиваем клавиатуру при смене чата
       currentChatRef.current = chatId;
       
       const savedDraft = localStorage.getItem(`draft_${user.uid}_${selectedContact.id}`);
@@ -529,6 +531,7 @@ export default function ChatsPage() {
     setNewMessage('');
     setAttachedImage('');
     setReplyingTo(null);
+    if (isExpanded) setIsExpanded(false); // Автоматически сворачиваем после успешной отправки
     localStorage.removeItem(`draft_${user.uid}_${selectedContact.id}`);
 
     setChatActivity(prev => ({ ...prev, [selectedContact.id]: Date.now() }));
@@ -1022,7 +1025,7 @@ export default function ChatsPage() {
             </div>
             
             {showScrollButton && (
-              <button onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })} className="absolute bottom-[90px] right-6 z-30 w-11 h-11 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all animate-fade-in">
+              <button onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })} className="absolute bottom-[100px] right-6 z-30 w-11 h-11 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all animate-fade-in">
                 <ChevronDown size={24} />
                 {unreadCounts[selectedContact.id] > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-sm border-2 border-white dark:border-gray-800">{unreadCounts[selectedContact.id]}</span>}
               </button>
@@ -1192,22 +1195,77 @@ export default function ChatsPage() {
               </div>
             )}
 
-            <div className={`bg-white dark:bg-gray-900 px-3 py-2 pb-safe md:pb-3 border-t border-gray-200 dark:border-gray-800 shrink-0 transition-colors flex flex-col ${(replyingTo || editingMessage) ? 'rounded-b-none border-t-0 pt-1' : ''}`}>
+            {/* ОБНОВЛЕННАЯ НИЖНЯЯ ПАНЕЛЬ С ПОЛНОЭКРАННЫМ РЕЖИМОМ */}
+            <div className={`bg-white dark:bg-gray-900 px-3 py-2 pb-safe md:pb-3 border-t border-gray-200 dark:border-gray-800 shrink-0 transition-all duration-300 flex flex-col ${(replyingTo || editingMessage) ? 'rounded-b-none border-t-0 pt-1' : ''} ${isExpanded ? 'h-[50vh] md:h-[60vh] absolute bottom-0 left-0 right-0 z-50 shadow-[0_-20px_60px_rgba(0,0,0,0.1)]' : ''}`}>
               
-              {isTemplatesAllowed && !replyingTo && !editingMessage && (
-                <div className="flex gap-2 mb-2 w-full max-w-4xl mx-auto overflow-x-auto scrollbar-none">
-                  <button type="button" onClick={insertQuickReply} className="shrink-0 flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-colors border border-indigo-100 dark:border-indigo-500/20"><Zap size={14} /> Шаблон ответа</button>
-                  {currentUserProfile?.aiSettings?.followUps && <button type="button" onClick={insertFollowUp} className="shrink-0 flex items-center gap-1.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-500/10 dark:hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-colors border border-purple-100 dark:border-purple-500/20"><Clock size={14} /> Напоминание</button>}
-                </div>
-              )}
-
-              <form onSubmit={handleSendMessage} className="flex items-end gap-2 max-w-4xl mx-auto relative w-full">
-                <input type="file" ref={fileInputRef} onChange={handleImageAttach} accept="image/*" className="hidden" />
-                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isOffline} className="p-2 text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors shrink-0 mb-1 disabled:opacity-50"><Paperclip size={24} /></button>
-                <textarea value={newMessage} onChange={handleTyping} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }} placeholder={editingMessage ? "Отредактируйте сообщение..." : "Сообщение..."} disabled={isOffline} className="flex-1 bg-transparent text-[16px] max-h-32 min-h-[40px] py-2 outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none custom-scrollbar disabled:opacity-50" rows={1} />
-                <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isOffline} className={`p-2 shrink-0 mb-1 rounded-full transition-colors ${(newMessage.trim() || attachedImage) && !isOffline ? 'text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10' : 'text-gray-300 dark:text-gray-600 disabled:opacity-50'}`}>
-                  {editingMessage ? <Check size={24} /> : <Send size={24} />}
+              {/* ВЕРХНИЙ БАР НАД ПОЛЕМ ВВОДА */}
+              <div className="flex gap-2 mb-2 w-full max-w-4xl mx-auto overflow-x-auto scrollbar-none items-center">
+                <button 
+                  type="button" 
+                  onClick={() => setIsExpanded(!isExpanded)} 
+                  className="shrink-0 flex items-center justify-center w-8 h-8 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-lg transition-colors border border-gray-200 dark:border-gray-700"
+                  title={isExpanded ? "Свернуть" : "Полноэкранный режим"}
+                >
+                  {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                 </button>
+
+                {!replyingTo && !editingMessage && isTemplatesAllowed && (
+                  <>
+                    <button type="button" onClick={insertQuickReply} className="shrink-0 flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-colors border border-indigo-100 dark:border-indigo-500/20"><Zap size={14} /> Шаблон ответа</button>
+                    {currentUserProfile?.aiSettings?.followUps && <button type="button" onClick={insertFollowUp} className="shrink-0 flex items-center gap-1.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-500/10 dark:hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-colors border border-purple-100 dark:border-purple-500/20"><Clock size={14} /> Напоминание</button>}
+                  </>
+                )}
+              </div>
+
+              {/* ФОРМА ОТПРАВКИ */}
+              <form onSubmit={handleSendMessage} className={`flex items-end gap-2 max-w-4xl mx-auto relative w-full ${isExpanded ? 'flex-col items-stretch h-full' : ''}`}>
+                <input type="file" ref={fileInputRef} onChange={handleImageAttach} accept="image/*" className="hidden" />
+                
+                {!isExpanded ? (
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isOffline} className="p-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-xl transition-colors shrink-0 mb-0.5 disabled:opacity-50 border border-gray-200 dark:border-gray-700">
+                    <Paperclip size={20} />
+                  </button>
+                ) : (
+                  <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-800/50 px-3 py-2 rounded-t-2xl border-b border-gray-200 dark:border-gray-700">
+                    <span className="text-[12px] font-bold text-gray-500 uppercase tracking-widest">Расширенный ввод</span>
+                    <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isOffline} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-700 rounded-lg text-[13px] font-semibold text-gray-700 dark:text-gray-200 shadow-sm border border-gray-200 dark:border-gray-600 transition-colors hover:bg-gray-50 dark:hover:bg-gray-600">
+                      <Paperclip size={16} /> Прикрепить файл
+                    </button>
+                  </div>
+                )}
+
+                <textarea 
+                  value={newMessage} 
+                  onChange={handleTyping} 
+                  onKeyDown={(e) => { 
+                    if (e.key === 'Enter' && !e.shiftKey) { 
+                      if (!isExpanded) {
+                        e.preventDefault(); 
+                        handleSendMessage(); 
+                      }
+                    }
+                    if (isExpanded && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                       e.preventDefault();
+                       handleSendMessage();
+                    }
+                  }} 
+                  placeholder={editingMessage ? "Отредактируйте сообщение..." : isExpanded ? "Введите длинный текст... (Ctrl + Enter для отправки)" : "Сообщение..."} 
+                  disabled={isOffline} 
+                  className={`flex-1 bg-gray-100 dark:bg-gray-800 text-[15px] outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none custom-scrollbar disabled:opacity-50 transition-all duration-300 ${isExpanded ? 'min-h-[40vh] h-full p-4 rounded-b-2xl border border-gray-200 dark:border-gray-700 border-t-0 shadow-inner' : 'min-h-[48px] max-h-32 px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700'}`} 
+                />
+                
+                {!isExpanded ? (
+                  <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isOffline} className={`p-2.5 shrink-0 mb-0.5 rounded-xl transition-all shadow-sm ${ (newMessage.trim() || attachedImage) && !isOffline ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-800 text-gray-400 dark:text-gray-600 disabled:opacity-50'}`}>
+                    {editingMessage ? <Check size={20} /> : <Send size={20} className="ml-0.5" />}
+                  </button>
+                ) : (
+                  <div className="flex justify-end mt-2 shrink-0">
+                    <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isOffline} className={`px-6 py-3 shrink-0 rounded-xl transition-all shadow-md font-bold flex items-center gap-2 ${ (newMessage.trim() || attachedImage) && !isOffline ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-800 text-gray-400 dark:text-gray-600 disabled:opacity-50'}`}>
+                      {editingMessage ? <Check size={20} /> : <Send size={20} />}
+                      {editingMessage ? 'Сохранить' : 'Отправить'}
+                    </button>
+                  </div>
+                )}
               </form>
             </div>
           </>

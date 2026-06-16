@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 
 import GlobalNotifications from './components/GlobalNotifications';
+import ProductivityLayout from './pages/productivity/ProductivityLayout';
 
 // ==========================================
 // ЛЕНИВАЯ ЗАГРУЗКА СТРАНИЦ
@@ -330,6 +331,7 @@ export default function App() {
           <Route path="/dating" element={<RequireAuth><MainLayout><DatingPage /></MainLayout></RequireAuth>} />
           <Route path="/crm" element={<RequireAuth><MainLayout><CRMPage /></MainLayout></RequireAuth>} />
           <Route path="/apps" element={<RequireAuth><MainLayout><PlaceholderPage title="Blocko / Приложения" icon={LayoutDashboard}/></MainLayout></RequireAuth>} />
+          <Route path="/productivity" element={<ProductivityLayout />} />
           
           <Route path="*" element={<Navigate to="/chats" replace />} />
         </Routes>

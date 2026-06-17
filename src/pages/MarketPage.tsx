@@ -2,10 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { 
   Search, Package, X, ChevronRight, Loader2, 
-  ShoppingBag, Flame, MessageCircle, ShieldCheck, Store, MapPin, Sparkles
+  ShoppingBag, Flame, MessageCircle, ShieldCheck, Store, MapPin, Sparkles, Users
 } from 'lucide-react';
 
 interface Product {
@@ -25,6 +25,7 @@ interface BusinessProfile {
   products: Product[];
 }
 
+// ДОБАВЛЕНА КАТЕГОРИЯ "ДРУГОЕ"
 export const BUSINESS_CATEGORIES = [
   'Все',
   'IT & Разработка',
@@ -33,6 +34,7 @@ export const BUSINESS_CATEGORIES = [
   'Консалтинг & Услуги',
   'E-commerce & Товары',
   'Образование',
+  'Другое', 
 ];
 
 export default function MarketPage() {
@@ -197,21 +199,44 @@ export default function MarketPage() {
           
           {/* ПРОМО БАННЕРЫ (Скрываются при поиске) */}
           {!searchQuery && activeCategory === 'Все' && (
-            <div className="flex overflow-x-auto gap-3 pb-4 mb-2 scrollbar-none snap-x">
-              <div className="min-w-[280px] md:min-w-[340px] bg-gradient-to-r from-blue-600 to-indigo-600 rounded-[24px] p-5 text-white shadow-lg shadow-blue-500/20 snap-start flex flex-col justify-between relative overflow-hidden">
+            <div className="flex overflow-x-auto lg:grid lg:grid-cols-3 gap-3 sm:gap-4 pb-4 mb-2 scrollbar-none snap-x">
+              
+              {/* Баннер 1: Экосистема */}
+              <div className="min-w-[280px] sm:min-w-[320px] lg:min-w-0 flex-1 shrink-0 snap-start bg-gradient-to-br from-blue-600 to-indigo-600 rounded-[24px] p-5 text-white shadow-lg shadow-blue-500/20 flex flex-col justify-between relative overflow-hidden group">
                 <div className="relative z-10">
-                  <span className="bg-white/20 backdrop-blur-md px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider mb-2 inline-block border border-white/20">Aura Premium</span>
-                  <h3 className="text-xl font-black mb-1 leading-tight">Лучшие предложения<br/>этой недели</h3>
+                  <span className="bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest mb-2.5 inline-block border border-white/20 shadow-sm">Экосистема Aura</span>
+                  <h3 className="text-xl font-black mb-1.5 leading-tight tracking-tight">Локальный<br/>Маркет</h3>
+                  <p className="text-[12px] font-medium text-blue-100 max-w-[200px] leading-relaxed">
+                    Доступ к предложениям от частных лиц и бизнеса в вашем регионе.
+                  </p>
                 </div>
-                <Sparkles size={80} className="absolute -bottom-4 -right-4 text-white opacity-10" />
+                <Users size={90} className="absolute -bottom-4 -right-4 text-white opacity-10 group-hover:scale-110 transition-transform duration-500" />
               </div>
-              <div className="min-w-[280px] md:min-w-[340px] bg-gradient-to-r from-orange-500 to-amber-500 rounded-[24px] p-5 text-white shadow-lg shadow-amber-500/20 snap-start flex flex-col justify-between relative overflow-hidden">
+
+              {/* Баннер 2: Безопасность */}
+              <div className="min-w-[280px] sm:min-w-[320px] lg:min-w-0 flex-1 shrink-0 snap-start bg-gradient-to-br from-emerald-500 to-teal-600 rounded-[24px] p-5 text-white shadow-lg shadow-emerald-500/20 flex flex-col justify-between relative overflow-hidden group">
                 <div className="relative z-10">
-                  <span className="bg-white/20 backdrop-blur-md px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider mb-2 inline-block border border-white/20">Скидки</span>
-                  <h3 className="text-xl font-black mb-1 leading-tight">Горячие новинки<br/>электроники</h3>
+                  <span className="bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest mb-2.5 inline-block border border-white/20 shadow-sm">Доверие</span>
+                  <h3 className="text-xl font-black mb-1.5 leading-tight tracking-tight">Прямой<br/>Контакт</h3>
+                  <p className="text-[12px] font-medium text-emerald-100 max-w-[200px] leading-relaxed">
+                    Связывайтесь с продавцами напрямую через защищенные чаты.
+                  </p>
                 </div>
-                <Flame size={80} className="absolute -bottom-4 -right-4 text-white opacity-10" />
+                <ShieldCheck size={90} className="absolute -bottom-4 -right-4 text-white opacity-10 group-hover:scale-110 transition-transform duration-500" />
               </div>
+
+              {/* Баннер 3: Стать продавцом */}
+              <div className="min-w-[280px] sm:min-w-[320px] lg:min-w-0 flex-1 shrink-0 snap-start bg-gradient-to-br from-orange-500 to-amber-500 rounded-[24px] p-5 text-white shadow-lg shadow-amber-500/20 flex flex-col justify-between relative overflow-hidden group">
+                <div className="relative z-10">
+                  <span className="bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest mb-2.5 inline-block border border-white/20 shadow-sm">Бизнесу</span>
+                  <h3 className="text-xl font-black mb-1.5 leading-tight tracking-tight">Продавайте<br/>Легко</h3>
+                  <p className="text-[12px] font-medium text-orange-100 max-w-[200px] leading-relaxed">
+                    Создайте профиль магазина и находите клиентов абсолютно бесплатно.
+                  </p>
+                </div>
+                <Store size={90} className="absolute -bottom-4 -right-4 text-white opacity-10 group-hover:scale-110 transition-transform duration-500" />
+              </div>
+
             </div>
           )}
 
@@ -286,6 +311,7 @@ export default function MarketPage() {
                 ))}
               </div>
               
+              {/* Лоадер при подгрузке следующих товаров */}
               {displayLimit < filteredProducts.length && (
                 <div className="flex justify-center py-8">
                   <Loader2 className="animate-spin text-gray-400 dark:text-gray-600" size={24} />
@@ -294,7 +320,7 @@ export default function MarketPage() {
             </>
           ) : (
             // ПУСТОЕ СОСТОЯНИЕ (Задействован Package)
-            <div className="flex flex-col items-center justify-center h-[50vh] text-center px-4 animate-fade-in">
+            <div className="flex flex-col items-center justify-center h-[40vh] text-center px-4 animate-fade-in">
               <div className="w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-6">
                 <Package size={40} className="text-gray-300 dark:text-gray-600" />
               </div>

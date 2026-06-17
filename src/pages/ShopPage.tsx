@@ -5,9 +5,9 @@ import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useCartStore } from '../store/useCartStore';
 import { 
-  ArrowLeft, MessageCircle, Share2, Phone, Mail, Globe, 
+  MessageCircle, Share2, Phone, Mail,
   Package, Loader2, CheckCircle, ShoppingCart, 
-  Plus, Minus, ShieldCheck, MapPin, Sparkles, Store, LogIn, Star, Trash2, X
+  Plus, Minus, MapPin, Sparkles, LogIn, Star, Trash2, X
 } from 'lucide-react';
 
 interface Product {

@@ -9,7 +9,7 @@ import {
   Phone, Globe, Package, Plus, Trash2, Image as ImageIcon, 
   Loader2, Edit2, Moon, Sun, Zap, MessageSquareText,
   Target, LayoutList, GripVertical, Heart, Store, MessageCircle, ShoppingBag, LineChart, LayoutDashboard, Settings, Check, LogOut,
-  MapPin, Wifi, Users
+  MapPin, Wifi, Users, Link2
 } from 'lucide-react';
 
 interface Product {
@@ -113,8 +113,9 @@ export default function ProfilePage() {
     avatar: '',
     category: '', 
     location: '', 
-    gender: '', // <-- Добавлено для Dating
-    age: '' as number | string, // <-- Добавлено для Dating
+    gender: '', 
+    age: '' as number | string,
+    customUrl: '', // <--- НОВОЕ ПОЛЕ (Ссылка магазина)
     contacts: { phone: '', email: '', website: '' },
     products: [] as Product[],
     goals: [] as string[],
@@ -159,6 +160,7 @@ export default function ProfilePage() {
             location: data.location || '',
             gender: data.gender || '',
             age: data.age || '',
+            customUrl: data.customUrl || '', // Загрузка ссылки
             contacts: data.contacts || { phone: '', email: '', website: '' },
             products: data.products || [],
             goals: data.goals || [],
@@ -166,7 +168,7 @@ export default function ProfilePage() {
             aiSettings: data.aiSettings || { isEnabled: false, contextPrompt: '', followUps: true }
           };
           setProfile(loadedProfile);
-          setOriginalProfile(loadedProfile); // Запоминаем исходник
+          setOriginalProfile(loadedProfile); 
         } else {
           const fallbackProfile = {
             ...profile,
@@ -185,7 +187,6 @@ export default function ProfilePage() {
     fetchProfile();
   }, [user]);
 
-  // Вычисляем, были ли изменения
   const isDirty = useMemo(() => {
     if (!originalProfile) return false;
     return JSON.stringify(profile) !== JSON.stringify(originalProfile);
@@ -284,6 +285,18 @@ export default function ProfilePage() {
 
   const handleSaveProfile = async () => {
     if (!user || !isDirty) return;
+
+    // ВАЛИДАЦИЯ ССЫЛКИ МАГАЗИНА (Только латиница и дефис)
+    if (profile.type === 'business' && profile.customUrl) {
+      const urlRegex = /^[a-z0-9-]+$/i;
+      if (!urlRegex.test(profile.customUrl)) {
+        alert("Ссылка магазина может содержать только латинские буквы, цифры и дефис без пробелов!");
+        return;
+      }
+      // Приводим к нижнему регистру
+      profile.customUrl = profile.customUrl.toLowerCase();
+    }
+
     setIsSaving(true);
     try {
       await setDoc(doc(db, 'users', user.uid), {
@@ -296,7 +309,7 @@ export default function ProfilePage() {
         setUser({ ...auth.currentUser });
       }
 
-      setOriginalProfile(profile); // Обновляем оригинал после успешного сохранения
+      setOriginalProfile(profile); 
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (error) {
@@ -306,11 +319,8 @@ export default function ProfilePage() {
     }
   };
 
-  // ЛОГИКА НАСТРОЙКИ БИЗНЕСА (Многошаговая модалка)
   const openBusinessSetup = () => {
     setTempCategory(profile.category || BUSINESS_CATEGORIES[0]);
-    
-    // Если уже было сохранено "Онлайн-магазин", выставляем как online
     if (profile.location === 'Онлайн-магазин' || !profile.location) {
       setTempLocationType('online');
       setTempCity('');
@@ -318,7 +328,6 @@ export default function ProfilePage() {
       setTempLocationType('offline');
       setTempCity(profile.location);
     }
-    
     setBusinessSetupStep(1);
     setShowBusinessSetupModal(true);
   };
@@ -333,9 +342,8 @@ export default function ProfilePage() {
 
   const confirmBusinessSetup = () => {
     if (!tempCategory || !tempLocationType) return;
-    
     const finalLocation = tempLocationType === 'online' ? 'Онлайн-магазин' : tempCity.trim();
-    if (tempLocationType === 'offline' && !finalLocation) return; // Город обязателен для офлайна
+    if (tempLocationType === 'offline' && !finalLocation) return; 
 
     setProfile({ 
       ...profile, 
@@ -343,7 +351,6 @@ export default function ProfilePage() {
       category: tempCategory,
       location: finalLocation
     });
-    
     setShowBusinessSetupModal(false);
   };
 
@@ -379,7 +386,6 @@ export default function ProfilePage() {
     });
   };
 
-  // ЛОГИКА ВЫХОДА ИЗ АККАУНТА
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -388,21 +394,19 @@ export default function ProfilePage() {
     }
   };
 
-  const blockClass = "bg-white dark:bg-gray-900 rounded-[20px] overflow-hidden border border-gray-200/50 dark:border-gray-800 mb-6 transition-colors shadow-sm";
+  const blockClass = "bg-white dark:bg-gray-900 rounded-[24px] overflow-hidden border border-gray-200/50 dark:border-gray-800 mb-6 transition-colors shadow-sm";
   const inputRowClass = "flex items-center px-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0";
   const inputClass = "flex-1 bg-transparent text-[15px] font-medium text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none ml-3 w-full";
 
   if (isLoading) {
-    return <div className="flex-1 bg-[#F2F2F7] dark:bg-gray-950 flex justify-center items-center transition-colors"><Loader2 className="animate-spin text-gray-400" size={32} /></div>;
+    return <div className="flex-1 bg-gray-50 dark:bg-gray-950 flex justify-center items-center transition-colors"><Loader2 className="animate-spin text-gray-400" size={32} /></div>;
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#F2F2F7] dark:bg-gray-950 select-none pb-24 custom-scrollbar transition-colors relative">
+    <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950 select-none pb-[calc(env(safe-area-inset-bottom)+80px)] custom-scrollbar transition-colors relative">
       
-      <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl sticky top-0 z-10 border-b border-gray-200/60 dark:border-gray-800 px-4 py-3 flex items-center justify-between transition-colors shadow-sm">
-        <h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">Настройки</h1>
-        
-        {/* КНОПКА СОХРАНИТЬ (Анимированная) */}
+      <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl sticky top-0 z-20 border-b border-gray-200/60 dark:border-gray-800 px-4 pt-[calc(env(safe-area-inset-top)+12px)] pb-3 flex items-center justify-between transition-colors shadow-sm">
+        <h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight ml-2">Настройки</h1>
         <button 
           onClick={handleSaveProfile} 
           disabled={!isDirty || isSaving} 
@@ -418,285 +422,315 @@ export default function ProfilePage() {
         </button>
       </div>
 
-      <div className="max-w-2xl mx-auto p-4 md:p-6">
+      <div className="max-w-2xl mx-auto p-4 md:p-6 space-y-8">
         
-        {/* ИНФОРМАЦИЯ О ПРОФИЛЕ (НОВАЯ КОМПОНОВКА: АВАТАР + ДАННЫЕ) */}
-        <div className="bg-white dark:bg-gray-900 rounded-[24px] p-5 shadow-sm border border-gray-200/50 dark:border-gray-800 mb-6 flex gap-5 items-start transition-colors">
-          
-          <div className="flex flex-col items-center shrink-0 mt-1">
-            <div className="relative group cursor-pointer w-20 h-20 sm:w-24 sm:h-24" onClick={() => avatarInputRef.current?.click()}>
-              <img src={profile.avatar} alt="Avatar" loading="lazy" className="w-full h-full rounded-full object-cover shadow-sm bg-gray-100 dark:bg-gray-800 border-2 border-white dark:border-gray-800 transition-colors" />
-              <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* ИНФОРМАЦИЯ О ПРОФИЛЕ */}
+        <div className="bg-white dark:bg-gray-900 rounded-[32px] p-5 shadow-sm border border-gray-200/50 dark:border-gray-800 flex flex-col md:flex-row gap-5 items-center md:items-start transition-colors relative overflow-hidden">
+          <div className="flex flex-col items-center shrink-0 z-10">
+            <div className="relative group cursor-pointer w-24 h-24 md:w-28 md:h-28" onClick={() => avatarInputRef.current?.click()}>
+              <img src={profile.avatar} alt="Avatar" loading="lazy" className="w-full h-full rounded-[24px] object-cover shadow-sm bg-gray-100 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 transition-colors" />
+              <div className="absolute inset-0 bg-black/40 rounded-[24px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                 <Camera size={24} className="text-white" />
               </div>
-              {isUploadingAvatar && <div className="absolute inset-0 bg-white/60 dark:bg-black/60 rounded-full flex items-center justify-center"><Loader2 size={24} className="animate-spin text-gray-900 dark:text-white" /></div>}
+              {isUploadingAvatar && <div className="absolute inset-0 bg-white/60 dark:bg-black/60 rounded-[24px] flex items-center justify-center"><Loader2 size={24} className="animate-spin text-gray-900 dark:text-white" /></div>}
               <input type="file" ref={avatarInputRef} onChange={handleAvatarChange} accept="image/*" className="hidden" />
             </div>
           </div>
-
-          <div className="flex flex-col flex-1 space-y-3">
+          <div className="flex flex-col flex-1 space-y-3 w-full z-10">
             <div>
-              <span className="text-[12px] font-bold text-gray-400 uppercase tracking-widest ml-1 mb-1 block">Имя</span>
-              <input type="text" value={profile.name} onChange={(e) => setProfile({...profile, name: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded-xl text-[16px] font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:ring-2 focus:ring-blue-500/50 transition-shadow" placeholder="Ваше имя..." />
+              <span className="text-[12px] font-bold text-gray-400 uppercase tracking-widest ml-1 mb-1 block">Имя / Бренд</span>
+              <input type="text" value={profile.name} onChange={(e) => setProfile({...profile, name: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 px-4 py-3 rounded-2xl text-[16px] font-black text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500/50 transition-shadow" placeholder="Название..." />
             </div>
             <div>
-              <span className="text-[12px] font-bold text-gray-400 uppercase tracking-widest ml-1 mb-1 block">О себе</span>
-              <textarea value={profile.role} onChange={(e) => setProfile({...profile, role: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded-xl text-[14px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none h-20 custom-scrollbar focus:ring-2 focus:ring-blue-500/50 transition-shadow" placeholder="Пару слов о себе..." />
+              <span className="text-[12px] font-bold text-gray-400 uppercase tracking-widest ml-1 mb-1 block">Описание (SEO Description)</span>
+              <textarea value={profile.role} onChange={(e) => setProfile({...profile, role: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 px-4 py-3 rounded-2xl text-[14px] font-medium text-gray-900 dark:text-white placeholder-gray-400 outline-none resize-none h-20 custom-scrollbar focus:ring-2 focus:ring-blue-500/50 transition-shadow" placeholder="Расскажите о себе или своем бизнесе..." />
             </div>
           </div>
         </div>
 
-        {/* АНКЕТНЫЕ ДАННЫЕ (Для Маркета и Знакомств) */}
-        <h2 className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-2">Анкетные данные</h2>
-        <div className={blockClass}>
-          <div className={inputRowClass}>
-            <MapPin size={18} className="text-gray-400 dark:text-gray-500 shrink-0" />
-            <input type="text" placeholder="Город (например: Киев)" value={profile.location} onChange={(e) => setProfile({...profile, location: e.target.value})} className={inputClass} />
-          </div>
-          <div className="flex items-center px-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
-            <Users size={18} className="text-gray-400 dark:text-gray-500 shrink-0" />
-            <div className="flex-1 ml-3 flex gap-2">
-              <button 
-                onClick={() => setProfile({...profile, gender: 'Мужской'})} 
-                className={`flex-1 py-2 rounded-lg text-[13px] font-bold transition-all ${profile.gender === 'Мужской' ? 'bg-blue-500 text-white shadow-md shadow-blue-500/20' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
-              >
-                Мужской
-              </button>
-              <button 
-                onClick={() => setProfile({...profile, gender: 'Женский'})} 
-                className={`flex-1 py-2 rounded-lg text-[13px] font-bold transition-all ${profile.gender === 'Женский' ? 'bg-pink-500 text-white shadow-md shadow-pink-500/20' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
-              >
-                Женский
-              </button>
+        {/* АНКЕТНЫЕ ДАННЫЕ */}
+        <div>
+          <h2 className="text-[13px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-3">Анкетные данные</h2>
+          <div className={blockClass}>
+            <div className={inputRowClass}>
+              <MapPin size={18} className="text-gray-400 dark:text-gray-500 shrink-0" />
+              <input type="text" placeholder="Город (например: Киев)" value={profile.location} onChange={(e) => setProfile({...profile, location: e.target.value})} className={inputClass} />
             </div>
-          </div>
-          <div className={inputRowClass}>
-            <div className="w-[18px] text-center font-black text-gray-400 dark:text-gray-500 shrink-0 text-[12px]">18+</div>
-            <input type="number" placeholder="Ваш возраст" value={profile.age || ''} onChange={(e) => setProfile({...profile, age: e.target.value ? Number(e.target.value) : ''})} className={inputClass} />
+            <div className="flex items-center px-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
+              <Users size={18} className="text-gray-400 dark:text-gray-500 shrink-0" />
+              <div className="flex-1 ml-3 flex gap-2">
+                <button onClick={() => setProfile({...profile, gender: 'Мужской'})} className={`flex-1 py-2.5 rounded-xl text-[13px] font-bold transition-all ${profile.gender === 'Мужской' ? 'bg-blue-500 text-white shadow-md shadow-blue-500/20' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200'}`}>Мужской</button>
+                <button onClick={() => setProfile({...profile, gender: 'Женский'})} className={`flex-1 py-2.5 rounded-xl text-[13px] font-bold transition-all ${profile.gender === 'Женский' ? 'bg-pink-500 text-white shadow-md shadow-pink-500/20' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200'}`}>Женский</button>
+              </div>
+            </div>
+            <div className={inputRowClass}>
+              <div className="w-[18px] text-center font-black text-gray-400 dark:text-gray-500 shrink-0 text-[12px]">18+</div>
+              <input type="number" placeholder="Возраст" value={profile.age || ''} onChange={(e) => setProfile({...profile, age: e.target.value ? Number(e.target.value) : ''})} className={inputClass} />
+            </div>
           </div>
         </div>
 
         {/* ТИП АККАУНТА */}
-        <h2 className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-2 mt-8">Тип аккаунта</h2>
-        <div className={blockClass}>
-          <div className="flex bg-gray-100 dark:bg-gray-800 p-1 m-2 rounded-xl transition-colors">
-            <button onClick={() => handleTypeChange('personal')} className={`flex-1 flex justify-center items-center gap-2 py-2 rounded-lg text-[14px] font-bold transition-all shadow-sm ${profile.type === 'personal' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white ring-1 ring-black/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 shadow-none'}`}><User size={16} /> Обычный</button>
-            <button onClick={() => handleTypeChange('business')} className={`flex-1 flex justify-center items-center gap-2 py-2 rounded-lg text-[14px] font-bold transition-all shadow-sm ${profile.type === 'business' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white ring-1 ring-black/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 shadow-none'}`}><Briefcase size={16} /> Бизнес</button>
+        <div>
+          <h2 className="text-[13px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-3">Тип аккаунта</h2>
+          <div className={blockClass}>
+            <div className="flex bg-gray-50 dark:bg-gray-800/50 p-1.5 m-2 rounded-[16px] transition-colors">
+              <button onClick={() => handleTypeChange('personal')} className={`flex-1 flex justify-center items-center gap-2 py-2.5 rounded-xl text-[14px] font-bold transition-all shadow-sm ${profile.type === 'personal' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-200/50 dark:border-gray-600' : 'text-gray-500 dark:text-gray-400 shadow-none'}`}><User size={16} /> Обычный</button>
+              <button onClick={() => handleTypeChange('business')} className={`flex-1 flex justify-center items-center gap-2 py-2.5 rounded-xl text-[14px] font-bold transition-all shadow-sm ${profile.type === 'business' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-200/50 dark:border-gray-600' : 'text-gray-500 dark:text-gray-400 shadow-none'}`}><Briefcase size={16} /> Бизнес</button>
+            </div>
           </div>
         </div>
 
         {/* БЛОК ДЛЯ БИЗНЕСА */}
         {profile.type === 'business' && (
-          <div className="animate-fade-in">
+          <div className="animate-fade-in space-y-8">
+            
             {/* Настройка Категории и Локации бизнеса */}
-            <div className={`${blockClass} mt-4`}>
-              <div className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={openBusinessSetup}>
+            <div className={blockClass}>
+              <div className="flex items-center justify-between px-4 py-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors border-b border-gray-100 dark:border-gray-800" onClick={openBusinessSetup}>
                 <div className="flex-1 min-w-0 pr-4">
-                  <span className="text-[15px] font-bold text-gray-900 dark:text-white block truncate">Настройки магазина</span>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[12px] font-medium text-blue-500 truncate">{profile.category || 'Без категории'}</span>
-                    <span className="text-gray-300 dark:text-gray-600">•</span>
-                    <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400 truncate">{profile.location || 'Онлайн-магазин'}</span>
+                  <span className="text-[15px] font-black text-gray-900 dark:text-white block truncate">Настройки магазина</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="bg-blue-50 dark:bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded-md text-[11px] font-bold truncate">{profile.category || 'Без категории'}</span>
+                    <span className="bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-md text-[11px] font-bold truncate">{profile.location || 'Онлайн-магазин'}</span>
                   </div>
                 </div>
-                <Edit2 size={16} className="text-gray-400 shrink-0" />
+                <Edit2 size={18} className="text-gray-400 shrink-0" />
+              </div>
+              
+              {/* НАСТРОЙКА УНИКАЛЬНОЙ ССЫЛКИ (URL) */}
+              <div className="px-4 py-4">
+                <span className="text-[12px] font-bold text-gray-400 uppercase tracking-widest block mb-2">Ссылка на ваш магазин</span>
+                <div className="flex items-center bg-gray-50 dark:bg-gray-800 rounded-xl px-3 py-2 border border-gray-200 dark:border-gray-700 focus-within:ring-2 focus-within:ring-blue-500/50">
+                  <Link2 size={16} className="text-gray-400 mr-2 shrink-0" />
+                  <span className="text-[13px] font-medium text-gray-500 shrink-0">auragram.com/#/shop/</span>
+                  <input 
+                    type="text" 
+                    placeholder="mysuperstore" 
+                    value={profile.customUrl} 
+                    onChange={(e) => setProfile({...profile, customUrl: e.target.value.replace(/[^a-zA-Z0-9-]/g, '')})} 
+                    className="flex-1 bg-transparent border-none outline-none text-[14px] font-bold text-blue-500 placeholder-gray-300 dark:placeholder-gray-600 min-w-[100px]" 
+                  />
+                </div>
+                <p className="text-[11px] text-gray-400 mt-2">Придумайте красивую ссылку (только латиница и дефис). Оставьте пустым, чтобы использовать системный ID.</p>
               </div>
             </div>
             
             {/* AI Assistant */}
-            <h2 className="text-[13px] font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-widest px-4 mb-2 mt-8 flex items-center gap-1.5"><Zap size={16}/> Smart CRM / ИИ-Автоматизация</h2>
-            <div className={`${blockClass} border-indigo-100 dark:border-indigo-900/50`}>
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={() => setProfile({...profile, aiSettings: {...profile.aiSettings, isEnabled: !profile.aiSettings.isEnabled}})}>
-                <div>
-                  <span className="text-[15px] font-bold text-gray-900 dark:text-white block">ИИ Ассистент продаж</span>
-                  <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400 block mt-0.5">Включить автоматические ответы для клиентов</span>
-                </div>
-                <div className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${profile.aiSettings.isEnabled ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                  <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${profile.aiSettings.isEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
-                </div>
-              </div>
-              
-              {profile.aiSettings.isEnabled && (
-                <>
-                  <div className="flex flex-col px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                    <span className="text-[14px] font-bold text-gray-900 dark:text-gray-100 mb-1">Промпт контекста магазина</span>
-                    <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-2">Опишите условия доставки, возврата, цены и гарантии. ИИ будет использовать это для ответов.</span>
-                    <textarea 
-                      value={profile.aiSettings.contextPrompt} 
-                      onChange={(e) => setProfile({...profile, aiSettings: {...profile.aiSettings, contextPrompt: e.target.value}})} 
-                      className="w-full bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/50 rounded-[16px] p-3 text-[14px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none h-24 custom-scrollbar focus:ring-2 focus:ring-indigo-500/50 transition-shadow" 
-                      placeholder="Например: Доставка Новой Почтой, гарантия 15 дней. Мы продаем только оригинальную обувь..." 
-                    />
+            <div>
+              <h2 className="text-[13px] font-black text-indigo-500 dark:text-indigo-400 uppercase tracking-widest px-4 mb-3 flex items-center gap-1.5"><Zap size={16}/> ИИ-Автоматизация</h2>
+              <div className={`${blockClass} border-indigo-100 dark:border-indigo-900/50`}>
+                <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100 dark:border-gray-800 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={() => setProfile({...profile, aiSettings: {...profile.aiSettings, isEnabled: !profile.aiSettings.isEnabled}})}>
+                  <div>
+                    <span className="text-[15px] font-bold text-gray-900 dark:text-white block">ИИ Ассистент продаж</span>
+                    <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400 block mt-0.5">Включить автоматические ответы для клиентов</span>
                   </div>
-                  <div className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={() => setProfile({...profile, aiSettings: {...profile.aiSettings, followUps: !profile.aiSettings.followUps}})}>
-                    <div className="flex items-center gap-2">
-                      <MessageSquareText size={18} className="text-gray-400" />
-                      <div>
-                        <span className="text-[14px] font-bold text-gray-900 dark:text-white block">Шаблоны Follow-up</span>
-                        <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 block mt-0.5">Предлагать готовые варианты продолжения диалога</span>
-                      </div>
-                    </div>
-                    <div className={`w-10 h-5 rounded-full flex items-center p-1 transition-colors ${profile.aiSettings.followUps ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                      <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${profile.aiSettings.followUps ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            <h2 className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-2 mt-8">Контакты бизнеса</h2>
-            <div className={blockClass}>
-              <div className={inputRowClass}>
-                <Phone size={18} className="text-gray-400 dark:text-gray-500 shrink-0" />
-                <input type="text" placeholder="Телефон" value={profile.contacts.phone} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, phone: e.target.value}})} className={inputClass} />
-              </div>
-              <div className={inputRowClass}>
-                <Globe size={18} className="text-gray-400 dark:text-gray-500 shrink-0" />
-                <input type="text" placeholder="Сайт или ссылка" value={profile.contacts.website} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, website: e.target.value}})} className={inputClass} />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between px-4 mb-3 mt-8">
-              <h2 className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Каталог товаров ({profile.products.length})</h2>
-              <button onClick={() => { setIsAddingProduct(!isAddingProduct); setEditingProduct(null); }} className="text-[13px] font-bold text-blue-500 flex items-center gap-1 hover:text-blue-600 transition-colors">
-                {isAddingProduct ? 'Отменить' : <><Plus size={14} /> Добавить товар</>}
-              </button>
-            </div>
-
-            {(isAddingProduct || editingProduct) && (
-              <div className="bg-white dark:bg-gray-900 rounded-[24px] p-4 border border-blue-200 dark:border-blue-900 shadow-md mb-6 transition-colors animate-slide-up">
-                <div className="flex items-center gap-4 mb-4">
-                  <div onClick={() => (editingProduct ? editProductImgInputRef : productImgInputRef).current?.click()} className="w-16 h-16 bg-gray-50 dark:bg-gray-800 rounded-2xl flex items-center justify-center cursor-pointer border border-gray-200 dark:border-gray-700 shrink-0 overflow-hidden relative hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                    {(editingProduct ? editingProduct.imageUrl : newProduct.imageUrl) ? <img src={editingProduct ? editingProduct.imageUrl : newProduct.imageUrl} loading="lazy" className="w-full h-full object-cover" /> : <ImageIcon size={20} className="text-gray-400 dark:text-gray-500" />}
-                    {isUploadingProductImg && <div className="absolute inset-0 bg-white/70 dark:bg-black/60 flex items-center justify-center"><Loader2 size={16} className="animate-spin text-gray-900 dark:text-white" /></div>}
-                  </div>
-                  <div className="flex-1 space-y-2">
-                    <input type="text" placeholder="Название товара (обязательно)" value={editingProduct ? editingProduct.name : newProduct.name} onChange={e => editingProduct ? setEditingProduct({...editingProduct, name: e.target.value}) : setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-xl text-[15px] outline-none font-semibold transition-colors focus:ring-2 focus:ring-blue-500/50" />
-                    <input type="text" placeholder="Цена, например: 1500 ₴" value={editingProduct ? editingProduct.price : newProduct.price} onChange={e => editingProduct ? setEditingProduct({...editingProduct, price: e.target.value}) : setNewProduct({...newProduct, price: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 rounded-xl text-sm outline-none transition-colors focus:ring-2 focus:ring-blue-500/50" />
+                  <div className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${profile.aiSettings.isEnabled ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                    <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${profile.aiSettings.isEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
                   </div>
                 </div>
                 
-                <textarea 
-                  placeholder="Описание товара..." 
-                  value={editingProduct ? editingProduct.description : newProduct.description} 
-                  onChange={e => editingProduct ? setEditingProduct({...editingProduct, description: e.target.value}) : setNewProduct({...newProduct, description: e.target.value})} 
-                  className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-4 py-3 rounded-xl text-sm outline-none resize-none h-24 custom-scrollbar transition-colors mb-4 focus:ring-2 focus:ring-blue-500/50" 
-                />
-                <input type="file" ref={productImgInputRef} onChange={(e) => handleProductImageChange(e, false)} accept="image/*" className="hidden" />
-                <input type="file" ref={editProductImgInputRef} onChange={(e) => handleProductImageChange(e, true)} accept="image/*" className="hidden" />
-                <button onClick={editingProduct ? handleSaveEditProduct : handleAddProduct} disabled={!(editingProduct ? editingProduct.name : newProduct.name) || !(editingProduct ? editingProduct.price : newProduct.price)} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl font-bold text-[15px] disabled:opacity-50 transition-all active:scale-[0.98] shadow-md shadow-blue-500/25">
-                  {editingProduct ? 'Сохранить изменения' : 'Добавить в каталог'}
-                </button>
-              </div>
-            )}
-
-            {profile.products.length > 0 ? (
-              <div className="grid grid-cols-2 gap-3">
-                {profile.products.map(product => (
-                  <div key={product.id} className="bg-white dark:bg-gray-900 border border-gray-200/50 dark:border-gray-800 rounded-[20px] overflow-hidden shadow-sm flex flex-col relative group transition-colors">
-                    <div className="h-32 bg-gray-50 dark:bg-gray-800 relative">
-                      {product.imageUrl ? <img src={product.imageUrl} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" /> : <Package className="absolute inset-0 m-auto text-gray-300 dark:text-gray-600" size={32} />}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                        <button onClick={() => { setEditingProduct(product); setIsAddingProduct(false); }} className="w-8 h-8 bg-white/90 dark:bg-gray-800/90 backdrop-blur rounded-full flex items-center justify-center text-gray-600 dark:text-gray-300 shadow-sm hover:scale-110 transition-transform"><Edit2 size={14} /></button>
-                        <button onClick={() => handleRemoveProduct(product.id)} className="w-8 h-8 bg-white/90 dark:bg-gray-800/90 backdrop-blur rounded-full flex items-center justify-center text-red-500 shadow-sm hover:scale-110 transition-transform"><Trash2 size={14} /></button>
+                {profile.aiSettings.isEnabled && (
+                  <>
+                    <div className="flex flex-col px-4 py-4 border-b border-gray-100 dark:border-gray-800">
+                      <span className="text-[13px] font-bold text-gray-900 dark:text-gray-100 mb-1">Промпт контекста магазина</span>
+                      <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-3">Опишите условия доставки, возврата, цены и гарантии. ИИ будет использовать это для ответов.</span>
+                      <textarea 
+                        value={profile.aiSettings.contextPrompt} 
+                        onChange={(e) => setProfile({...profile, aiSettings: {...profile.aiSettings, contextPrompt: e.target.value}})} 
+                        className="w-full bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/50 rounded-2xl p-4 text-[14px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none h-24 custom-scrollbar focus:ring-2 focus:ring-indigo-500/50 transition-shadow" 
+                        placeholder="Например: Доставка Новой Почтой, гарантия 15 дней. Мы продаем только оригинальную обувь..." 
+                      />
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={() => setProfile({...profile, aiSettings: {...profile.aiSettings, followUps: !profile.aiSettings.followUps}})}>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center text-indigo-500 shrink-0"><MessageSquareText size={16} /></div>
+                        <div>
+                          <span className="text-[14px] font-bold text-gray-900 dark:text-white block">Шаблоны Follow-up</span>
+                          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 block mt-0.5">Предлагать готовые варианты продолжения диалога</span>
+                        </div>
+                      </div>
+                      <div className={`w-10 h-5 rounded-full flex items-center p-1 transition-colors ${profile.aiSettings.followUps ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                        <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${profile.aiSettings.followUps ? 'translate-x-5' : 'translate-x-0'}`} />
                       </div>
                     </div>
-                    <div className="p-3">
-                      <p className="font-bold text-gray-900 dark:text-white text-[13px] truncate mb-0.5">{product.name}</p>
-                      <p className="text-[13px] font-black text-blue-500 tracking-tight">{product.price}</p>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <h2 className="text-[13px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-3">Контакты бизнеса</h2>
+              <div className={blockClass}>
+                <div className={inputRowClass}>
+                  <Phone size={18} className="text-gray-400 dark:text-gray-500 shrink-0" />
+                  <input type="text" placeholder="Телефон" value={profile.contacts.phone} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, phone: e.target.value}})} className={inputClass} />
+                </div>
+                <div className={inputRowClass}>
+                  <Globe size={18} className="text-gray-400 dark:text-gray-500 shrink-0" />
+                  <input type="text" placeholder="Сайт или ссылка" value={profile.contacts.website} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, website: e.target.value}})} className={inputClass} />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between px-4 mb-3">
+                <h2 className="text-[13px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">Витрина ({profile.products.length})</h2>
+                <button onClick={() => { setIsAddingProduct(!isAddingProduct); setEditingProduct(null); }} className="text-[13px] font-bold text-blue-500 flex items-center gap-1 hover:text-blue-600 transition-colors bg-blue-50 dark:bg-blue-500/10 px-3 py-1.5 rounded-lg shadow-sm">
+                  {isAddingProduct ? 'Отменить' : <><Plus size={14} /> Товар</>}
+                </button>
+              </div>
+
+              {(isAddingProduct || editingProduct) && (
+                <div className="bg-white dark:bg-gray-900 rounded-[32px] p-5 border border-gray-200 dark:border-gray-800 shadow-lg mb-6 transition-colors animate-slide-up">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div onClick={() => (editingProduct ? editProductImgInputRef : productImgInputRef).current?.click()} className="w-20 h-20 bg-gray-50 dark:bg-gray-800 rounded-2xl flex items-center justify-center cursor-pointer border border-dashed border-gray-300 dark:border-gray-700 shrink-0 overflow-hidden relative hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                      {(editingProduct ? editingProduct.imageUrl : newProduct.imageUrl) ? <img src={editingProduct ? editingProduct.imageUrl : newProduct.imageUrl} loading="lazy" className="w-full h-full object-cover" /> : <ImageIcon size={24} className="text-gray-400 dark:text-gray-500" />}
+                      {isUploadingProductImg && <div className="absolute inset-0 bg-white/70 dark:bg-black/60 flex items-center justify-center"><Loader2 size={18} className="animate-spin text-gray-900 dark:text-white" /></div>}
+                    </div>
+                    <div className="flex-1 space-y-2">
+                      <input type="text" placeholder="Название товара" value={editingProduct ? editingProduct.name : newProduct.name} onChange={e => editingProduct ? setEditingProduct({...editingProduct, name: e.target.value}) : setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 px-4 py-2.5 rounded-xl text-[15px] outline-none font-bold transition-colors focus:ring-2 focus:ring-blue-500/50" />
+                      <input type="text" placeholder="Цена (напр: 1500 ₴)" value={editingProduct ? editingProduct.price : newProduct.price} onChange={e => editingProduct ? setEditingProduct({...editingProduct, price: e.target.value}) : setNewProduct({...newProduct, price: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 px-4 py-2.5 rounded-xl text-[14px] font-bold outline-none transition-colors focus:ring-2 focus:ring-blue-500/50" />
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-               <div className="text-center py-8 bg-white dark:bg-gray-900 rounded-[20px] border border-gray-200/50 dark:border-gray-800 border-dashed text-gray-400 dark:text-gray-500 text-sm font-medium transition-colors">
-                 У вас пока нет товаров
-               </div>
-            )}
+                  
+                  <textarea 
+                    placeholder="Описание товара..." 
+                    value={editingProduct ? editingProduct.description : newProduct.description} 
+                    onChange={e => editingProduct ? setEditingProduct({...editingProduct, description: e.target.value}) : setNewProduct({...newProduct, description: e.target.value})} 
+                    className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 px-4 py-3 rounded-2xl text-[14px] font-medium outline-none resize-none h-24 custom-scrollbar transition-colors mb-4 focus:ring-2 focus:ring-blue-500/50" 
+                  />
+                  <input type="file" ref={productImgInputRef} onChange={(e) => handleProductImageChange(e, false)} accept="image/*" className="hidden" />
+                  <input type="file" ref={editProductImgInputRef} onChange={(e) => handleProductImageChange(e, true)} accept="image/*" className="hidden" />
+                  <button onClick={editingProduct ? handleSaveEditProduct : handleAddProduct} disabled={!(editingProduct ? editingProduct.name : newProduct.name) || !(editingProduct ? editingProduct.price : newProduct.price)} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3.5 rounded-2xl font-black text-[15px] disabled:opacity-50 transition-all active:scale-[0.98] shadow-md shadow-blue-500/25">
+                    {editingProduct ? 'Сохранить изменения' : 'Добавить в каталог'}
+                  </button>
+                </div>
+              )}
+
+              {profile.products.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {profile.products.map(product => (
+                    <div key={product.id} className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-[24px] overflow-hidden shadow-sm flex flex-col relative group transition-colors hover:shadow-md">
+                      <div className="relative w-full aspect-square bg-gray-50 dark:bg-gray-800 overflow-hidden shrink-0">
+                        {product.imageUrl ? <img src={product.imageUrl} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" /> : <Package className="absolute inset-0 m-auto text-gray-300 dark:text-gray-600" size={32} />}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                          <button onClick={() => { setEditingProduct(product); setIsAddingProduct(false); }} className="w-8 h-8 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md rounded-full flex items-center justify-center text-gray-700 dark:text-gray-300 shadow-sm hover:scale-110 hover:text-blue-500 transition-all"><Edit2 size={14} /></button>
+                          <button onClick={() => handleRemoveProduct(product.id)} className="w-8 h-8 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md rounded-full flex items-center justify-center text-rose-500 shadow-sm hover:scale-110 transition-all"><Trash2 size={14} /></button>
+                        </div>
+                      </div>
+                      <div className="p-3">
+                        <p className="font-bold text-gray-900 dark:text-white text-[13px] truncate mb-1">{product.name}</p>
+                        <p className="text-[14px] font-black text-blue-500 tracking-tight">{product.price}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                 <div className="text-center py-10 bg-white dark:bg-gray-900 rounded-[24px] border border-gray-200/50 dark:border-gray-800 border-dashed text-gray-400 dark:text-gray-500 transition-colors shadow-sm">
+                   <Package size={32} className="mx-auto mb-3 opacity-50" />
+                   <p className="text-[14px] font-bold">У вас пока нет товаров</p>
+                 </div>
+              )}
+            </div>
           </div>
         )}
 
         {/* ТЕМА */}
-        <h2 className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-2 mt-8">Оформление</h2>
-        <div className={blockClass}>
-          <div className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={toggleTheme}>
-            <div className="flex items-center gap-3">
-              {isDark ? <Moon size={20} className="text-blue-500" /> : <Sun size={20} className="text-amber-500" />}
-              <span className="text-[15px] font-semibold text-gray-900 dark:text-white">Ночная тема</span>
-            </div>
-            <div className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${isDark ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-              <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${isDark ? 'translate-x-6' : 'translate-x-0'}`} />
+        <div>
+          <h2 className="text-[13px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-3 mt-8">Оформление</h2>
+          <div className={blockClass}>
+            <div className="flex items-center justify-between px-4 py-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={toggleTheme}>
+              <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isDark ? 'bg-blue-500/10 text-blue-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                  {isDark ? <Moon size={18} /> : <Sun size={18} />}
+                </div>
+                <span className="text-[15px] font-bold text-gray-900 dark:text-white">Ночная тема</span>
+              </div>
+              <div className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${isDark ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${isDark ? 'translate-x-6' : 'translate-x-0'}`} />
+              </div>
             </div>
           </div>
         </div>
 
         {/* ЦЕЛИ (МОДУЛИ) */}
-        <h2 className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-2 mt-8 flex items-center gap-1.5"><Target size={16}/> Дополнительные модули</h2>
-        <div className={blockClass}>
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={() => toggleGoal('dating')}>
-            <div className="flex items-center gap-3">
-              <Heart size={20} className={profile.goals.includes('dating') ? "text-pink-500" : "text-gray-400"} />
-              <div>
-                <span className="text-[15px] font-semibold text-gray-900 dark:text-white block">Знакомства</span>
-                <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400 block mt-0.5">Классическая Tinder-свайпалка</span>
+        <div>
+          <h2 className="text-[13px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-3 mt-8 flex items-center gap-1.5"><Target size={16}/> Модули системы</h2>
+          <div className={blockClass}>
+            <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100 dark:border-gray-800 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={() => toggleGoal('dating')}>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${profile.goals.includes('dating') ? 'bg-pink-500/10 text-pink-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
+                  <Heart size={20} className={profile.goals.includes('dating') ? "fill-pink-500/20" : ""} />
+                </div>
+                <div>
+                  <span className="text-[15px] font-bold text-gray-900 dark:text-white block">Знакомства</span>
+                  <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400 block mt-0.5">Классическая Tinder-свайпалка</span>
+                </div>
+              </div>
+              <div className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${profile.goals.includes('dating') ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${profile.goals.includes('dating') ? 'translate-x-6' : 'translate-x-0'}`} />
               </div>
             </div>
-            <div className={`w-10 h-5 rounded-full flex items-center p-1 transition-colors ${profile.goals.includes('dating') ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-              <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${profile.goals.includes('dating') ? 'translate-x-5' : 'translate-x-0'}`} />
-            </div>
-          </div>
-          
-          <div className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={() => toggleGoal('productivity')}>
-            <div className="flex items-center gap-3">
-              <LayoutDashboard size={20} className={profile.goals.includes('productivity') ? "text-indigo-500" : "text-gray-400"} />
-              <div>
-                <span className="text-[15px] font-semibold text-gray-900 dark:text-white block">Продуктивность</span>
-                <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400 block mt-0.5">Mind Map, Задачи, Таймер</span>
+            
+            <div className="flex items-center justify-between px-4 py-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={() => toggleGoal('productivity')}>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${profile.goals.includes('productivity') ? 'bg-indigo-500/10 text-indigo-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
+                  <LayoutDashboard size={20} />
+                </div>
+                <div>
+                  <span className="text-[15px] font-bold text-gray-900 dark:text-white block">Продуктивность</span>
+                  <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400 block mt-0.5">Mind Map, Задачи, Таймер</span>
+                </div>
               </div>
-            </div>
-            <div className={`w-10 h-5 rounded-full flex items-center p-1 transition-colors ${profile.goals.includes('productivity') ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-              <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${profile.goals.includes('productivity') ? 'translate-x-5' : 'translate-x-0'}`} />
+              <div className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${profile.goals.includes('productivity') ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${profile.goals.includes('productivity') ? 'translate-x-6' : 'translate-x-0'}`} />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* НАСТРОЙКА МЕНЮ (DRAG AND DROP + TOUCH) */}
-        <h2 className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-2 mt-8 flex items-center gap-1.5"><LayoutList size={16}/> Порядок меню</h2>
-        <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 px-4 mb-3">Зажмите и потяните пункт, чтобы изменить его позицию.</p>
-        <div className={`${blockClass} py-2`}>
-          {activeMenuItems.map((item, index) => (
-            <div 
-              key={item.id}
-              data-sort-index={index}
-              draggable
-              onDragStart={() => { dragItem.current = index; setDraggedIndex(index); }}
-              onDragEnter={() => { dragOverItem.current = index; swapItems(); }}
-              onDragEnd={handleDragEnd}
-              onDragOver={(e) => e.preventDefault()}
-              onTouchStart={() => handleTouchStart(index)}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleDragEnd}
-              className={`flex items-center justify-between px-4 py-2 transition-colors cursor-grab active:cursor-grabbing border-b border-gray-100 dark:border-gray-800 last:border-0 select-none ${
-                draggedIndex === index ? 'bg-blue-50/50 dark:bg-blue-900/20 opacity-70' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
-              }`}
-            >
-              <div className="flex items-center gap-3 pointer-events-none">
-                <item.icon size={20} className="text-gray-400 dark:text-gray-500" />
-                <span className="text-[15px] font-semibold text-gray-900 dark:text-white">{item.label}</span>
+        {/* НАСТРОЙКА МЕНЮ (DRAG AND DROP) */}
+        <div>
+          <h2 className="text-[13px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-2 mt-8 flex items-center gap-1.5"><LayoutList size={16}/> Навигация</h2>
+          <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 px-4 mb-4">Зажмите и потяните пункт, чтобы изменить порядок меню в приложении.</p>
+          <div className={`${blockClass} py-2`}>
+            {activeMenuItems.map((item, index) => (
+              <div 
+                key={item.id}
+                data-sort-index={index}
+                draggable
+                onDragStart={() => { dragItem.current = index; setDraggedIndex(index); }}
+                onDragEnter={() => { dragOverItem.current = index; swapItems(); }}
+                onDragEnd={handleDragEnd}
+                onDragOver={(e) => e.preventDefault()}
+                onTouchStart={() => handleTouchStart(index)}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleDragEnd}
+                className={`flex items-center justify-between px-4 py-3 transition-colors cursor-grab active:cursor-grabbing border-b border-gray-100 dark:border-gray-800 last:border-0 select-none ${
+                  draggedIndex === index ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                }`}
+              >
+                <div className="flex items-center gap-3 pointer-events-none">
+                  <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                    <item.icon size={16} className="text-gray-500 dark:text-gray-400" />
+                  </div>
+                  <span className="text-[15px] font-bold text-gray-900 dark:text-white">{item.label}</span>
+                </div>
+                <GripVertical size={20} className="text-gray-300 dark:text-gray-600" />
               </div>
-              <GripVertical size={20} className="text-gray-300 dark:text-gray-600 cursor-grab active:cursor-grabbing" />
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
         {/* ВЫХОД ИЗ АККАУНТА */}
         <div className="mt-10 mb-6">
           <button 
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 py-4 bg-white dark:bg-gray-900 border border-red-100 dark:border-red-900/30 hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500 rounded-[20px] font-bold transition-all active:scale-[0.98] shadow-sm"
+            className="w-full flex items-center justify-center gap-2 py-4 bg-white dark:bg-gray-900 border border-rose-100 dark:border-rose-900/30 hover:bg-rose-50 dark:hover:bg-rose-500/10 text-rose-500 rounded-[24px] font-black transition-all active:scale-[0.98] shadow-sm text-[15px]"
           >
-            <LogOut size={20} /> Выйти из приложения
+            <LogOut size={20} /> Выйти из аккаунта
           </button>
         </div>
 
@@ -730,7 +764,7 @@ export default function ProfilePage() {
                   <button
                     key={cat}
                     onClick={() => setTempCategory(cat)}
-                    className={`w-full text-left px-4 py-3.5 rounded-xl font-bold text-[14px] transition-all flex items-center justify-between ${
+                    className={`w-full text-left px-5 py-3.5 rounded-[16px] font-bold text-[14px] transition-all flex items-center justify-between ${
                       tempCategory === cat 
                         ? 'bg-blue-500 text-white shadow-md' 
                         : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
@@ -782,7 +816,7 @@ export default function ProfilePage() {
                       value={tempCity}
                       onChange={(e) => setTempCity(e.target.value)}
                       placeholder="Например: г. Киев"
-                      className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-4 py-3.5 rounded-xl text-[15px] font-semibold text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500/50 transition-shadow"
+                      className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-4 py-3.5 rounded-xl text-[15px] font-bold text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500/50 transition-shadow"
                     />
                   </div>
                 )}

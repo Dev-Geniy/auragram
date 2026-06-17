@@ -5,9 +5,9 @@ import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useCartStore } from '../store/useCartStore';
 import { 
-  MessageCircle, Share2, Phone, Mail, Globe, 
+  MessageCircle, Share2, Phone, Mail, 
   Package, Loader2, CheckCircle, ShoppingCart, 
-  Plus, Minus, ShieldCheck, MapPin, Sparkles, Store, LogIn
+  Plus, Minus, MapPin, Sparkles, LogIn, Link2
 } from 'lucide-react';
 
 interface Product {
@@ -95,17 +95,14 @@ export default function ShopPage() {
   // ==========================================
   // 3. ФУНКЦИИ И ДЕЙСТВИЯ
   // ==========================================
-  const handleShare = async (item?: Product) => {
+  const handleShare = async () => {
     const baseUrl = window.location.origin;
     const shopLink = shop?.customUrl || shop?.id; 
-    
-    const link = item 
-      ? `${baseUrl}/#/shop/${shopLink}?product=${item.id}` 
-      : `${baseUrl}/#/shop/${shopLink}`;
+    const link = `${baseUrl}/#/shop/${shopLink}`;
     
     const shareData = {
-      title: item ? item.name : shop?.name,
-      text: item ? item.description : `Посетите магазин ${shop?.name}!`,
+      title: shop?.name,
+      text: `Посетите интернет-магазин ${shop?.name}!`,
       url: link,
     };
 
@@ -125,7 +122,6 @@ export default function ShopPage() {
   // УМНАЯ КНОПКА: Если гость — на логин, если свой — в чат
   const handleRequireAuthAction = (action: () => void) => {
     if (!user) {
-      // Отправляем на логин и запоминаем, куда вернуться
       navigate('/login', { state: { from: location.pathname } });
     } else {
       action();
@@ -182,97 +178,87 @@ export default function ShopPage() {
   return (
     <div className="flex-1 overflow-y-auto bg-[#F5F5F7] dark:bg-[#0A0A0B] pb-[calc(env(safe-area-inset-bottom)+100px)] select-none custom-scrollbar relative transition-colors min-h-[100dvh]">
       
-      {/* МИНИМАЛИСТИЧНЫЙ HEADER (БЕЗ СТРЕЛКИ НАЗАД) */}
-      <div className="sticky top-0 z-40 bg-[#F5F5F7]/80 dark:bg-[#0A0A0B]/80 backdrop-blur-xl px-4 py-3 pt-[calc(env(safe-area-inset-top)+12px)] flex items-center justify-between transition-colors">
-        <div className="w-10 h-10 flex items-center justify-center">
-          {/* Spacer для идеального центрирования текста */}
+      {/* ИНТЕРНЕТ-МАГАЗИН: ТОНКИЙ HEADER */}
+      <div className="sticky top-0 z-40 bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl px-4 py-2.5 pt-[calc(env(safe-area-inset-top)+8px)] flex items-center justify-between border-b border-gray-200/60 dark:border-gray-800 transition-colors shadow-sm">
+        
+        {/* Левая часть: Логотип и Название */}
+        <div className="flex items-center gap-3 min-w-0 pr-2">
+          <img 
+            src={shop.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(shop.name)}&background=random`} 
+            alt={shop.name} 
+            loading="lazy"
+            className="w-10 h-10 rounded-[12px] object-cover border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 shrink-0 shadow-sm" 
+          />
+          <h1 className="text-[16px] md:text-[18px] font-black text-gray-900 dark:text-white truncate">
+            {shop.name}
+          </h1>
         </div>
-        <h2 className="text-[17px] font-black text-gray-900 dark:text-white tracking-tight flex-1 text-center truncate">
-          {shop.name}
-        </h2>
-        <button 
-          onClick={() => handleShare()}
-          className="w-10 h-10 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full flex items-center justify-center transition-all shadow-sm border border-gray-200/50 dark:border-gray-700/50"
-        >
-          {isCopied ? <CheckCircle size={20} className="text-green-500" /> : <Share2 size={20} />}
-        </button>
+
+        {/* Правая часть: Контакты и Действия */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          
+          {/* Телефон (если указан) */}
+          {shop.contacts?.phone && (
+            <a href={`tel:${shop.contacts.phone}`} className="w-9 h-9 flex items-center justify-center bg-gray-100 hover:bg-green-50 dark:bg-gray-800 dark:hover:bg-green-500/20 text-gray-600 hover:text-green-500 dark:text-gray-300 dark:hover:text-green-400 rounded-full transition-colors">
+              <Phone size={16} />
+            </a>
+          )}
+          
+          {/* Почта (если указана) */}
+          {shop.contacts?.email && (
+            <a href={`mailto:${shop.contacts.email}`} className="hidden sm:flex w-9 h-9 items-center justify-center bg-gray-100 hover:bg-orange-50 dark:bg-gray-800 dark:hover:bg-orange-500/20 text-gray-600 hover:text-orange-500 dark:text-gray-300 dark:hover:text-orange-400 rounded-full transition-colors">
+              <Mail size={16} />
+            </a>
+          )}
+
+          {/* Написать (Если это не наш собственный магазин) */}
+          {!isMyOwnShop && (
+            <button 
+              onClick={handleContactSeller}
+              className="w-9 h-9 flex items-center justify-center bg-blue-50 hover:bg-blue-100 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 text-blue-500 rounded-full transition-colors"
+              title={user ? "Написать" : "Войти, чтобы написать"}
+            >
+              {user ? <MessageCircle size={18} className="fill-current" /> : <LogIn size={18} />}
+            </button>
+          )}
+
+          {/* Поделиться (Копировать ссылку) */}
+          <button 
+            onClick={handleShare}
+            className="w-9 h-9 flex items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full transition-colors ml-1"
+          >
+            {isCopied ? <CheckCircle size={18} className="text-green-500" /> : <Link2 size={18} />}
+          </button>
+        </div>
       </div>
 
-      {/* HERO SECTION (ОБЛОЖКА И ИНФО) */}
-      <div className="w-full relative flex flex-col items-center mb-8">
-        {/* Баннер-обложка (на всю ширину) */}
-        <div className="w-full h-[180px] md:h-[220px] bg-gradient-to-br from-indigo-500 via-blue-500 to-purple-600 rounded-b-[40px] absolute top-0 left-0 z-0 opacity-90" />
-
-        {/* Блок информации */}
-        <div className="relative z-10 w-full max-w-3xl px-4 mt-20 md:mt-28">
-          <div className="bg-white dark:bg-[#151518] rounded-[32px] p-6 md:p-8 shadow-2xl shadow-black/5 dark:shadow-black/40 border border-gray-100 dark:border-gray-800 flex flex-col items-center text-center">
-            
-            {/* Квадратный аватар (Логотип) */}
-            <div className="relative -mt-20 mb-5">
-              <img 
-                src={shop.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(shop.name)}&background=random`} 
-                alt={shop.name} 
-                loading="lazy"
-                className="w-28 h-28 md:w-32 md:h-32 rounded-[28px] object-cover border-4 border-white dark:border-[#151518] bg-gray-100 dark:bg-gray-800 shadow-xl" 
-              />
-              <div className="absolute -bottom-1 -right-1 bg-green-500 text-white p-1.5 rounded-full border-[3px] border-white dark:border-[#151518] shadow-sm">
-                <ShieldCheck size={18} />
-              </div>
-            </div>
-
-            <h1 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white leading-tight tracking-tight mb-3">
-              {shop.name}
-            </h1>
-
-            {/* Теги */}
-            <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
-              <span className="bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[12px] font-bold px-3.5 py-1.5 rounded-xl border border-blue-100/50 dark:border-blue-900/30 flex items-center gap-1.5">
-                <Sparkles size={14} /> {shop.category || 'Без категории'}
-              </span>
-              <span className="bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 text-[12px] font-bold px-3.5 py-1.5 rounded-xl border border-gray-200/50 dark:border-gray-700/50 flex items-center gap-1.5">
-                <MapPin size={14} /> {shop.location || 'Онлайн-магазин'}
-              </span>
-            </div>
-
-            <p className="text-[15px] text-gray-600 dark:text-gray-400 leading-relaxed font-medium bg-gray-50/50 dark:bg-gray-900/30 p-4 rounded-[20px] mb-6 max-w-lg w-full">
-              {shop.role || 'Добро пожаловать в наш магазин! Ознакомьтесь с нашими товарами ниже.'}
-            </p>
-
-            {/* Кнопки связи (CTA) */}
-            <div className="flex items-center justify-center gap-2.5 w-full">
-              {!isMyOwnShop ? (
-                <button 
-                  onClick={handleContactSeller}
-                  className="flex-1 max-w-[240px] bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:opacity-90 py-4 px-6 rounded-[20px] font-black text-[15px] flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-lg"
-                >
-                  {user ? <MessageCircle size={20} className="fill-current" /> : <LogIn size={20} />} 
-                  {user ? 'Связаться' : 'Войти, чтобы написать'}
-                </button>
-              ) : (
-                <div className="flex-1 max-w-[240px] bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 py-4 px-6 rounded-[20px] font-bold text-[15px] flex items-center justify-center gap-2 border border-gray-200 dark:border-gray-700 cursor-not-allowed">
-                  <Store size={20} /> Ваш магазин
-                </div>
+      <div className="max-w-5xl mx-auto px-4 w-full mt-4">
+        
+        {/* ИНФОРМАЦИЯ О МАГАЗИНЕ (ОПЦИОНАЛЬНО) */}
+        {(shop.role || shop.category || shop.location) && (
+          <div className="mb-6 flex flex-col items-center text-center">
+            <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
+              {shop.category && (
+                <span className="bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[12px] font-bold px-3 py-1 rounded-lg border border-blue-100/50 dark:border-blue-900/30 flex items-center gap-1.5">
+                  <Sparkles size={12} /> {shop.category}
+                </span>
               )}
-              
-              {/* Контакты (Иконки) */}
-              {shop.contacts?.phone && (
-                <a href={`tel:${shop.contacts.phone}`} className="w-14 h-14 bg-gray-100 dark:bg-gray-800/80 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-[20px] flex items-center justify-center transition-all active:scale-95">
-                  <Phone size={20} />
-                </a>
-              )}
-              {shop.contacts?.website && (
-                <a href={shop.contacts.website.startsWith('http') ? shop.contacts.website : `https://${shop.contacts.website}`} target="_blank" rel="noopener noreferrer" className="w-14 h-14 bg-gray-100 dark:bg-gray-800/80 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-[20px] flex items-center justify-center transition-all active:scale-95">
-                  <Globe size={20} />
-                </a>
+              {shop.location && (
+                <span className="bg-gray-100 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 text-[12px] font-bold px-3 py-1 rounded-lg border border-gray-200/50 dark:border-gray-700/50 flex items-center gap-1.5">
+                  <MapPin size={12} /> {shop.location}
+                </span>
               )}
             </div>
+            {shop.role && (
+              <p className="text-[14px] text-gray-500 dark:text-gray-400 max-w-2xl px-2 leading-relaxed">
+                {shop.role}
+              </p>
+            )}
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* ВИТРИНА ТОВАРОВ */}
-      <div className="max-w-4xl mx-auto px-4 w-full">
-        <div className="flex items-center justify-between mb-5 mt-2">
+        {/* ВИТРИНА ТОВАРОВ */}
+        <div className="flex items-center justify-between mb-4 mt-2 px-1">
           <h2 className="text-[16px] font-black text-gray-900 dark:text-white tracking-widest uppercase">
             Витрина товаров
           </h2>
@@ -297,14 +283,6 @@ export default function ShopPage() {
                     ) : (
                       <Package className="absolute inset-0 m-auto text-gray-300 dark:text-gray-700" size={32} />
                     )}
-                    
-                    {/* Кнопка Поделиться на фото */}
-                    <button 
-                      onClick={(e) => { e.preventDefault(); handleShare(product); }}
-                      className="absolute top-2 right-2 z-10 w-8 h-8 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md rounded-full flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 shadow-sm transition-transform active:scale-95"
-                    >
-                      <Share2 size={14} />
-                    </button>
                     <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
                   </div>
                   

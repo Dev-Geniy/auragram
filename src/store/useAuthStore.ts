@@ -11,7 +11,8 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 interface AuthState {
   user: User | null;
-  loading: boolean;
+  isLoading: boolean;
+  setLoading: (loading: boolean) => void;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: User | null) => void;
@@ -40,20 +41,19 @@ export const useAuthStore = create<AuthState>((set) => {
         await setDoc(userRef, { lastSeen: serverTimestamp() }, { merge: true });
       }
     }
-    set({ user: currentUser, loading: false });
+    set({ user: currentUser, isLoading: false });
   });
 
   return {
     user: null,
-    loading: true,
+    isLoading: true,
+    setLoading: (loading) => set({ isLoading: loading }),
     setUser: (user) => set({ user }),
     
     loginWithGoogle: async () => {
       const provider = new GoogleAuthProvider();
       try {
         await signInWithPopup(auth, provider);
-        // Firebase Auth automatically triggers onAuthStateChanged
-        // The page redirect logic is handled inside components (e.g., ShopPage)
       } catch (error) {
         console.error("Ошибка входа через Google:", error);
       }

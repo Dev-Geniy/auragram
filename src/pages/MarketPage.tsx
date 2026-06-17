@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Search, Package, X, ChevronRight, Loader2, 
   ShoppingBag, Flame, MessageCircle, ShieldCheck, Store, MapPin, Sparkles, Users, Star
@@ -22,7 +22,7 @@ interface BusinessProfile {
   avatar: string;
   category?: string;
   location?: string;
-  rating?: string; // Добавлен рейтинг
+  rating?: string; 
   products: Product[];
 }
 
@@ -42,6 +42,7 @@ export const BUSINESS_CATEGORIES = [
 export default function MarketPage() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
   
   const [businesses, setBusinesses] = useState<BusinessProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -148,28 +149,53 @@ export default function MarketPage() {
     }
   };
 
+  // ФУНКЦИЯ "ЗАКАЗАТЬ В 1 КЛИК" (Передает товар прямо в чат)
+  const handleDirectOrder = () => {
+    if (!selectedProduct) return;
+    
+    if (!user) {
+      navigate('/login', { state: { from: location.pathname } });
+      return;
+    }
+
+    // Имитируем корзину с 1 товаром для передачи в ChatsPage
+    const singleItemCart = [{
+      id: selectedProduct.id,
+      name: selectedProduct.name,
+      price: selectedProduct.price,
+      quantity: 1
+    }];
+
+    navigate('/chats', { 
+      state: { 
+        selectedUserId: selectedProduct.shopId, 
+        checkoutCart: singleItemCart 
+      } 
+    });
+  };
+
   return (
-    <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden select-none font-sans relative transition-colors">
+    <div className="flex-1 flex flex-col bg-[#F5F5F7] dark:bg-[#0A0A0B] overflow-hidden select-none font-sans relative transition-colors min-h-[100dvh]">
       
       {/* СОВРЕМЕННЫЙ УЛЬТРА-МИНИМАЛИСТИЧНЫЙ HEADER */}
-      <div className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl sticky top-0 z-20 pt-3 pb-2 px-4 border-b border-gray-100 dark:border-gray-800 shrink-0 shadow-sm transition-colors">
+      <div className="bg-[#F5F5F7]/80 dark:bg-[#0A0A0B]/80 backdrop-blur-xl sticky top-0 z-20 pt-[calc(env(safe-area-inset-top)+12px)] pb-3 px-4 border-b border-gray-200/60 dark:border-gray-800 shrink-0 shadow-sm transition-colors">
         <div className="max-w-5xl mx-auto flex items-center gap-3">
           
           <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-[14px] flex items-center justify-center shadow-[0_4px_12px_rgba(59,130,246,0.3)] shrink-0 transition-transform hover:scale-105 cursor-default">
             <ShoppingBag size={20} className="text-white" strokeWidth={2.5} />
           </div>
           
-          <div className="relative flex-1 flex items-center bg-gray-100/80 dark:bg-gray-800/80 rounded-2xl px-3 py-2 transition-all focus-within:ring-2 ring-blue-500/50">
+          <div className="relative flex-1 flex items-center bg-white dark:bg-[#151518] rounded-[16px] px-3 py-2.5 transition-all shadow-sm border border-gray-200/50 dark:border-gray-800/50 focus-within:border-blue-500/50 focus-within:ring-2 focus-within:ring-blue-500/20">
             <Search className="text-gray-400 dark:text-gray-500 shrink-0" size={18} />
             <input 
               type="text" 
               placeholder="Поиск по товарам и услугам..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-transparent pl-3 pr-8 py-0.5 text-[15px] font-medium focus:outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+              className="w-full bg-transparent pl-3 pr-8 py-0.5 text-[15px] font-bold focus:outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600"
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-3 w-6 h-6 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+              <button onClick={() => setSearchQuery('')} className="absolute right-3 w-6 h-6 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
                 <X size={14} />
               </button>
             )}
@@ -177,15 +203,15 @@ export default function MarketPage() {
 
         </div>
 
-        <div className="max-w-5xl mx-auto flex overflow-x-auto gap-2 mt-3 pb-1 scrollbar-none">
+        <div className="max-w-5xl mx-auto flex overflow-x-auto gap-2 mt-4 pb-1 scrollbar-none">
           {BUSINESS_CATEGORIES.map(category => (
             <button
               key={category}
               onClick={() => setActiveCategory(category)}
-              className={`px-4 py-1.5 rounded-full text-[13px] font-bold whitespace-nowrap transition-all shadow-sm ${
+              className={`px-4 py-2 rounded-xl text-[13px] font-bold whitespace-nowrap transition-all shadow-sm ${
                 activeCategory === category 
                   ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900' 
-                  : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  : 'bg-white dark:bg-[#151518] text-gray-600 dark:text-gray-300 border border-gray-200/50 dark:border-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800'
               }`}
             >
               {category === 'Популярное' ? <span className="flex items-center gap-1"><Flame size={14} className="text-orange-500" /> {category}</span> : category}
@@ -198,42 +224,42 @@ export default function MarketPage() {
         className="flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+80px)] custom-scrollbar"
         onScroll={handleScroll}
       >
-        <div className="max-w-5xl mx-auto p-3 sm:p-4">
+        <div className="max-w-5xl mx-auto p-3 md:p-4">
           
           {!searchQuery && activeCategory === 'Все' && (
-            <div className="flex overflow-x-auto lg:grid lg:grid-cols-3 gap-3 sm:gap-4 pb-4 mb-2 scrollbar-none snap-x">
+            <div className="flex overflow-x-auto lg:grid lg:grid-cols-3 gap-3 md:gap-4 pb-4 mb-2 scrollbar-none snap-x">
               
-              <div className="min-w-[280px] sm:min-w-[320px] lg:min-w-0 flex-1 shrink-0 snap-start bg-gradient-to-br from-blue-600 to-indigo-600 rounded-[24px] p-5 text-white shadow-lg shadow-blue-500/20 flex flex-col justify-between relative overflow-hidden group">
+              <div className="min-w-[280px] sm:min-w-[320px] lg:min-w-0 flex-1 shrink-0 snap-start bg-gradient-to-br from-blue-600 to-indigo-600 rounded-[24px] p-6 text-white shadow-lg shadow-blue-500/20 flex flex-col justify-between relative overflow-hidden group">
                 <div className="relative z-10">
-                  <span className="bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest mb-2.5 inline-block border border-white/20 shadow-sm">Торговая площадка</span>
+                  <span className="bg-white/20 backdrop-blur-md px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest mb-3 inline-block border border-white/20 shadow-sm">Торговая площадка</span>
                   <h3 className="text-[18px] md:text-xl font-black mb-1.5 leading-tight tracking-tight">Экосистема Aura</h3>
-                  <p className="text-[12px] font-medium text-blue-100 max-w-[220px] leading-relaxed">
-                    Доступ к предложениям от частных лиц и бизнеса. Все товары вашего региона в одном месте.
+                  <p className="text-[13px] font-medium text-blue-100 max-w-[220px] leading-relaxed">
+                    Доступ к предложениям от частных лиц и бизнеса. Все товары в одном месте.
                   </p>
                 </div>
-                <Users size={90} className="absolute -bottom-4 -right-4 text-white opacity-10 group-hover:scale-110 transition-transform duration-500" />
+                <Users size={100} className="absolute -bottom-4 -right-4 text-white opacity-10 group-hover:scale-110 transition-transform duration-500" />
               </div>
 
-              <div className="min-w-[280px] sm:min-w-[320px] lg:min-w-0 flex-1 shrink-0 snap-start bg-gradient-to-br from-emerald-500 to-teal-600 rounded-[24px] p-5 text-white shadow-lg shadow-emerald-500/20 flex flex-col justify-between relative overflow-hidden group">
+              <div className="min-w-[280px] sm:min-w-[320px] lg:min-w-0 flex-1 shrink-0 snap-start bg-gradient-to-br from-emerald-500 to-teal-600 rounded-[24px] p-6 text-white shadow-lg shadow-emerald-500/20 flex flex-col justify-between relative overflow-hidden group">
                 <div className="relative z-10">
-                  <span className="bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest mb-2.5 inline-block border border-white/20 shadow-sm">Безопасность</span>
+                  <span className="bg-white/20 backdrop-blur-md px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest mb-3 inline-block border border-white/20 shadow-sm">Безопасность</span>
                   <h3 className="text-[18px] md:text-xl font-black mb-1.5 leading-tight tracking-tight">Прямой Контакт</h3>
-                  <p className="text-[12px] font-medium text-emerald-100 max-w-[220px] leading-relaxed">
-                    Без посредников и комиссий. Связывайтесь с продавцами напрямую через защищенные чаты.
+                  <p className="text-[13px] font-medium text-emerald-100 max-w-[220px] leading-relaxed">
+                    Связывайтесь с продавцами напрямую через защищенные чаты и покупайте в 1 клик.
                   </p>
                 </div>
-                <ShieldCheck size={90} className="absolute -bottom-4 -right-4 text-white opacity-10 group-hover:scale-110 transition-transform duration-500" />
+                <ShieldCheck size={100} className="absolute -bottom-4 -right-4 text-white opacity-10 group-hover:scale-110 transition-transform duration-500" />
               </div>
 
-              <div className="min-w-[280px] sm:min-w-[320px] lg:min-w-0 flex-1 shrink-0 snap-start bg-gradient-to-br from-orange-500 to-amber-500 rounded-[24px] p-5 text-white shadow-lg shadow-amber-500/20 flex flex-col justify-between relative overflow-hidden group">
+              <div className="min-w-[280px] sm:min-w-[320px] lg:min-w-0 flex-1 shrink-0 snap-start bg-gradient-to-br from-orange-500 to-amber-500 rounded-[24px] p-6 text-white shadow-lg shadow-amber-500/20 flex flex-col justify-between relative overflow-hidden group">
                 <div className="relative z-10">
-                  <span className="bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest mb-2.5 inline-block border border-white/20 shadow-sm">Бизнесу</span>
-                  <h3 className="text-[18px] md:text-xl font-black mb-1.5 leading-tight tracking-tight">Продавайте Легко</h3>
-                  <p className="text-[12px] font-medium text-orange-100 max-w-[220px] leading-relaxed">
-                    Откройте магазин в настройках профиля, добавляйте товары и находите клиентов бесплатно.
+                  <span className="bg-white/20 backdrop-blur-md px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest mb-3 inline-block border border-white/20 shadow-sm">Бизнесу</span>
+                  <h3 className="text-[18px] md:text-xl font-black mb-1.5 leading-tight tracking-tight">Откройте Магазин</h3>
+                  <p className="text-[13px] font-medium text-orange-100 max-w-[220px] leading-relaxed">
+                    Создайте красивую витрину в настройках профиля и находите клиентов бесплатно.
                   </p>
                 </div>
-                <Store size={90} className="absolute -bottom-4 -right-4 text-white opacity-10 group-hover:scale-110 transition-transform duration-500" />
+                <Store size={100} className="absolute -bottom-4 -right-4 text-white opacity-10 group-hover:scale-110 transition-transform duration-500" />
               </div>
 
             </div>
@@ -242,17 +268,16 @@ export default function MarketPage() {
           {isLoading ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
               {[...Array(8)].map((_, i) => (
-                <div key={i} className="bg-white dark:bg-gray-900 rounded-[24px] p-2 flex flex-col gap-2 animate-pulse border border-gray-100 dark:border-gray-800 shadow-sm">
-                  <div className="w-full aspect-square bg-gray-200 dark:bg-gray-800 rounded-[16px]"></div>
-                  <div className="px-1 py-1">
-                    <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded-md w-3/4 mb-2"></div>
+                <div key={i} className="bg-white dark:bg-[#151518] rounded-[24px] p-2 flex flex-col gap-2 animate-pulse border border-gray-100 dark:border-gray-800 shadow-sm">
+                  <div className="w-full aspect-square bg-gray-200 dark:bg-gray-800/50 rounded-[16px]"></div>
+                  <div className="px-2 py-1">
+                    <div className="h-4 bg-gray-200 dark:bg-gray-800/50 rounded-md w-3/4 mb-3"></div>
                     <div className="flex items-center gap-2 mb-3">
-                      <div className="w-5 h-5 bg-gray-200 dark:bg-gray-800 rounded-full"></div>
-                      <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded-md w-1/2"></div>
+                      <div className="w-5 h-5 bg-gray-200 dark:bg-gray-800/50 rounded-full"></div>
+                      <div className="h-3 bg-gray-200 dark:bg-gray-800/50 rounded-md w-1/2"></div>
                     </div>
-                    <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-800">
-                      <div className="h-5 bg-gray-200 dark:bg-gray-800 rounded-md w-16"></div>
-                      <div className="w-8 h-8 bg-gray-200 dark:bg-gray-800 rounded-full"></div>
+                    <div className="pt-2 border-t border-gray-100 dark:border-gray-800/50">
+                      <div className="h-5 bg-gray-200 dark:bg-gray-800/50 rounded-md w-16"></div>
                     </div>
                   </div>
                 </div>
@@ -260,51 +285,52 @@ export default function MarketPage() {
             </div>
           ) : displayedProducts.length > 0 ? (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
                 {displayedProducts.map(product => (
                   <div 
                     key={product.id} 
                     onClick={() => setSelectedProduct(product)}
-                    className="bg-white dark:bg-gray-900 rounded-[24px] p-2 flex flex-col border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] active:scale-[0.98] transition-all cursor-pointer group"
+                    className="bg-white dark:bg-[#151518] rounded-[24px] p-2 flex flex-col border border-gray-100 dark:border-gray-800/50 shadow-sm hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] active:scale-[0.98] transition-all cursor-pointer group overflow-hidden"
                   >
-                    <div className="relative w-full aspect-square bg-gray-50 dark:bg-gray-800 rounded-[16px] overflow-hidden mb-2">
+                    <div className="relative w-full aspect-square bg-gray-50 dark:bg-gray-900/50 rounded-[16px] overflow-hidden mb-3">
                       {product.imageUrl ? (
                         <img 
                           src={product.imageUrl} 
                           alt={product.name} 
                           loading="lazy"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-300 dark:text-gray-600">
+                        <div className="w-full h-full flex items-center justify-center text-gray-300 dark:text-gray-700">
                           <ShoppingBag size={32} />
                         </div>
                       )}
-                      <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
+                      <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
                     </div>
                     
-                    <div className="px-1 flex flex-col flex-1">
-                      <h3 className="text-[14px] font-bold text-gray-900 dark:text-white line-clamp-2 leading-snug mb-1 group-hover:text-blue-500 transition-colors">
+                    {/* Информация в карточке (НИКАКИХ КНОПОК) */}
+                    <div className="px-2 flex flex-col flex-1 pb-1">
+                      <h3 className="font-bold text-gray-900 dark:text-white text-[13px] sm:text-[14px] leading-snug line-clamp-2 mb-2 group-hover:text-blue-500 transition-colors">
                         {product.name}
                       </h3>
-                      <div className="flex items-center gap-1.5 mt-1 pb-2">
-                        <img src={product.shopAvatar} className="w-4 h-4 sm:w-5 sm:h-5 rounded-full object-cover shrink-0 border border-gray-200 dark:border-gray-700" />
+                      
+                      <div className="flex items-center gap-1.5 mb-3">
+                        <img src={product.shopAvatar} className="w-4 h-4 sm:w-5 sm:h-5 rounded-full object-cover shrink-0 border border-gray-200 dark:border-gray-700 bg-gray-100" />
                         <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 truncate">
                           {product.shopName}
                         </span>
                         {product.shopRating !== '0' && (
-                          <span className="text-[10px] font-bold text-amber-500 flex items-center gap-0.5 ml-auto">
+                          <span className="text-[10px] font-bold text-amber-500 flex items-center gap-0.5 ml-auto bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded-md">
                             <Star size={10} className="fill-amber-500" /> {product.shopRating}
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-100 dark:border-gray-800">
-                        <span className="text-[15px] sm:text-[16px] font-black text-gray-900 dark:text-white tracking-tight">
+
+                      <div className="mt-auto pt-2.5 border-t border-gray-100 dark:border-gray-800/50 flex items-center justify-between">
+                        <span className="text-[15px] sm:text-[17px] font-black text-gray-900 dark:text-white tracking-tight">
                           {product.price}
                         </span>
-                        <div className="w-8 h-8 bg-blue-50 hover:bg-blue-500 text-blue-600 hover:text-white dark:bg-blue-500/10 dark:hover:bg-blue-500 rounded-full flex items-center justify-center transition-colors shadow-sm">
-                          <ShoppingBag size={14} />
-                        </div>
+                        <ChevronRight size={16} className="text-gray-300 dark:text-gray-600 group-hover:text-blue-500 transition-colors group-hover:translate-x-1" />
                       </div>
                     </div>
                   </div>
@@ -319,15 +345,15 @@ export default function MarketPage() {
             </>
           ) : (
             <div className="flex flex-col items-center justify-center h-[40vh] text-center px-4 animate-fade-in">
-              <div className="w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-6 border border-gray-200/50 dark:border-gray-700/50 shadow-inner">
-                <Package size={40} className="text-gray-400 dark:text-gray-500" />
+              <div className="w-24 h-24 bg-white dark:bg-[#151518] rounded-[32px] flex items-center justify-center mb-6 border border-gray-200/50 dark:border-gray-700/50 shadow-sm">
+                <Package size={40} className="text-gray-400 dark:text-gray-600" />
               </div>
               <h2 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white mb-2 tracking-tight">Ничего не найдено</h2>
               <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 max-w-[280px]">
                 В этой категории пока нет товаров или ваш запрос не дал результатов.
               </p>
               {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="mt-6 px-6 py-3 bg-blue-500 text-white font-bold rounded-2xl active:scale-95 transition-transform shadow-lg shadow-blue-500/30">
+                <button onClick={() => setSearchQuery('')} className="mt-6 px-6 py-3.5 bg-blue-500 text-white font-bold rounded-2xl active:scale-95 transition-transform shadow-lg shadow-blue-500/30">
                   Очистить поиск
                 </button>
               )}
@@ -336,28 +362,33 @@ export default function MarketPage() {
         </div>
       </div>
 
+      {/* ========================================== */}
+      {/* МОДАЛКА: ПРОСМОТР ТОВАРА */}
+      {/* ========================================== */}
       {selectedProduct && (
         <div 
           className="fixed inset-0 z-[150] bg-gray-950/80 backdrop-blur-sm flex justify-center items-end md:items-center p-0 md:p-4 animate-fade-in"
           onClick={() => setSelectedProduct(null)}
         >
           <div 
-            className="bg-white dark:bg-gray-900 w-full md:w-[480px] max-h-[95vh] overflow-y-auto custom-scrollbar rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col relative animate-slide-up transition-colors"
+            className="bg-white dark:bg-[#0A0A0B] w-full md:w-[480px] max-h-[95vh] overflow-y-auto custom-scrollbar rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col relative animate-slide-up transition-colors"
             onClick={e => e.stopPropagation()}
           >
-            <div className="relative w-full h-[40vh] md:h-[45vh] bg-gray-100 dark:bg-gray-800 shrink-0 md:rounded-t-[32px] overflow-hidden">
+            {/* Картинка товара */}
+            <div className="relative w-full h-[40vh] md:h-[45vh] bg-gray-50 dark:bg-gray-900/50 shrink-0 md:rounded-t-[32px] overflow-hidden">
               {selectedProduct.imageUrl ? (
                 <img src={selectedProduct.imageUrl} className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-gray-300 dark:text-gray-600"><ShoppingBag size={64}/></div>
+                <div className="w-full h-full flex items-center justify-center text-gray-300 dark:text-gray-700"><ShoppingBag size={64}/></div>
               )}
-              <div className="absolute inset-0 bg-gradient-to-t from-gray-950/80 via-transparent to-black/30 pointer-events-none" />
-              <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 w-10 h-10 bg-black/30 hover:bg-black/50 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-md z-10">
+              <div className="absolute inset-0 bg-gradient-to-t from-gray-950/80 via-transparent to-black/20 pointer-events-none" />
+              
+              <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 w-10 h-10 bg-black/40 hover:bg-black/60 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-md z-10 shadow-sm">
                 <X size={20} />
               </button>
 
               <div className="absolute bottom-4 left-4">
-                <span className="bg-white/20 backdrop-blur-md text-white text-[11px] font-bold px-3 py-1.5 rounded-lg border border-white/20 shadow-sm flex items-center gap-1.5">
+                <span className="bg-white/20 backdrop-blur-md text-white text-[11px] font-bold px-3 py-1.5 rounded-xl border border-white/20 shadow-sm flex items-center gap-1.5">
                   <Sparkles size={12} /> {selectedProduct.shopCategory}
                 </span>
               </div>
@@ -365,31 +396,29 @@ export default function MarketPage() {
             
             <div className="p-6 relative flex flex-col flex-1">
               <div className="flex items-start justify-between gap-4 mb-6">
-                <h2 className="text-2xl font-black text-gray-900 dark:text-white leading-tight">
+                <h2 className="text-2xl font-black text-gray-900 dark:text-white leading-tight tracking-tight">
                   {selectedProduct.name}
                 </h2>
-                <div className="bg-gradient-to-tr from-blue-500 to-indigo-500 px-4 py-2 rounded-xl shadow-md shrink-0">
+                <div className="bg-gradient-to-tr from-blue-500 to-indigo-500 px-4 py-2 rounded-2xl shadow-lg shadow-blue-500/20 shrink-0">
                   <span className="text-lg font-black text-white tracking-tight">{selectedProduct.price}</span>
                 </div>
               </div>
 
-              <div 
-                onClick={() => navigate(`/shop/${selectedProduct.shopId}`)}
-                className="flex flex-col p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-100 dark:border-gray-700/50 transition-colors mb-6 group"
-              >
+              {/* Карточка продавца */}
+              <div className="flex flex-col p-4 bg-gray-50 dark:bg-[#151518] rounded-[24px] border border-gray-100 dark:border-gray-800/50 mb-6 group">
                 <div className="flex items-center gap-4">
-                  <img src={selectedProduct.shopAvatar} className="w-14 h-14 rounded-full object-cover shadow-sm border border-gray-200 dark:border-gray-700" />
+                  <img src={selectedProduct.shopAvatar} className="w-14 h-14 rounded-full object-cover shadow-sm border border-gray-200 dark:border-gray-700 bg-white" />
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-[16px] font-bold text-gray-900 dark:text-white flex items-center gap-1.5 truncate group-hover:text-blue-500 transition-colors">
-                      <Store size={18} className="text-gray-400" /> {selectedProduct.shopName}
+                    <h4 className="text-[16px] font-black text-gray-900 dark:text-white flex items-center gap-1.5 truncate">
+                      {selectedProduct.shopName}
                     </h4>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <p className="text-[12px] text-gray-500 dark:text-gray-400 truncate flex items-center gap-1">
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 truncate flex items-center gap-1">
                         <ShieldCheck size={14} className="text-green-500" /> Проверен
                       </p>
                       {selectedProduct.shopRating !== '0' && (
                         <>
-                          <span className="text-gray-300 dark:text-gray-600">•</span>
+                          <span className="text-gray-300 dark:text-gray-700">•</span>
                           <span className="flex items-center gap-1 text-[12px] font-bold text-amber-500">
                             <Star size={12} className="fill-amber-500" /> {selectedProduct.shopRating}
                           </span>
@@ -397,36 +426,41 @@ export default function MarketPage() {
                       )}
                     </div>
                   </div>
-                  <ChevronRight size={20} className="text-gray-400 group-hover:translate-x-1 transition-transform" />
                 </div>
                 
-                <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700/50 flex items-center gap-1.5 text-[13px] font-medium text-gray-500 dark:text-gray-400">
+                <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-800/50 flex items-center gap-1.5 text-[13px] font-medium text-gray-500 dark:text-gray-400">
                   <MapPin size={14} className="text-blue-500" /> {selectedProduct.shopLocation}
                 </div>
               </div>
 
+              {/* Описание */}
               <div className="mb-6">
-                <h3 className="text-[13px] font-bold text-gray-400 uppercase tracking-widest mb-3">Описание товара</h3>
-                <p className="text-[15px] text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap bg-gray-50 dark:bg-gray-800/30 p-4 rounded-[20px] border border-gray-100 dark:border-gray-800">
+                <h3 className="text-[13px] font-black text-gray-400 uppercase tracking-widest mb-3">Описание</h3>
+                <p className="text-[15px] text-gray-800 dark:text-gray-300 leading-relaxed whitespace-pre-wrap bg-gray-50 dark:bg-[#151518] p-5 rounded-[24px] border border-gray-100 dark:border-gray-800/50">
                   {selectedProduct.description || 'Продавец не добавил описание для этого товара.'}
                 </p>
               </div>
 
-              <div className="mt-auto sticky bottom-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-t border-gray-100 dark:border-gray-800 pt-4 pb-[calc(env(safe-area-inset-bottom)+16px)] flex gap-3 z-20 transition-colors">
+              {/* УПРОЩЕННЫЕ КНОПКИ ДЕЙСТВИЙ */}
+              <div className="mt-auto sticky bottom-0 bg-white/95 dark:bg-[#0A0A0B]/95 backdrop-blur-xl border-t border-gray-100 dark:border-gray-800/80 pt-4 pb-[calc(env(safe-area-inset-bottom)+16px)] flex gap-3 z-20">
+                <button 
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    navigate(`/shop/${selectedProduct.shopId}`);
+                  }}
+                  className="flex-1 py-4 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-white rounded-[20px] font-bold flex justify-center items-center gap-2 transition-colors border border-transparent dark:border-gray-700"
+                >
+                  <Store size={20} /> Магазин
+                </button>
+
                 {selectedProduct.shopId !== user?.uid && (
                   <button 
-                    onClick={() => navigate('/chats', { state: { selectedUserId: selectedProduct.shopId } })}
-                    className="flex-1 py-4 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-2xl font-bold flex justify-center items-center gap-2 transition-colors border border-blue-100 dark:border-blue-800/50"
+                    onClick={handleDirectOrder}
+                    className="flex-[1.5] py-4 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white rounded-[20px] font-black flex justify-center items-center gap-2 transition-transform active:scale-95 shadow-lg shadow-blue-500/25"
                   >
-                    <MessageCircle size={20} /> Спросить
+                    <MessageCircle size={20} className="fill-white" /> Заказать
                   </button>
                 )}
-                <button 
-                  onClick={() => navigate(`/shop/${selectedProduct.shopId}`)}
-                  className="flex-[1.5] py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl font-black flex justify-center items-center gap-2 transition-transform active:scale-95 shadow-lg shadow-blue-500/25"
-                >
-                  <ShoppingBag size={20} /> В магазин
-                </button>
               </div>
             </div>
           </div>

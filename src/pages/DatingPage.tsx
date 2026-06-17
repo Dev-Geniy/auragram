@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Heart, X, RefreshCw, MessageCircle, Star, 
   MapPin, Flame, Sparkles, ChevronDown, ChevronLeft, ChevronRight, Zap,
-  SlidersHorizontal, Globe, Users
+  SlidersHorizontal, Globe, Users, Info, Check
 } from 'lucide-react';
 
 interface DatingUser {

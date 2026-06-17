@@ -211,12 +211,12 @@ export default function ChatsPage() {
   const [isArchiveMode, setIsArchiveMode] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   
-  // Локальные стейты для сортировки и фильтрации (ЭТАП 1)
+  // Локальные стейты для сортировки и фильтрации
   const [archivedContacts, setArchivedContacts] = useState<string[]>(() => JSON.parse(localStorage.getItem(`archive_${user?.uid}`) || '[]'));
   const [pinnedChats, setPinnedChats] = useState<string[]>(() => JSON.parse(localStorage.getItem(`pinned_${user?.uid}`) || '[]'));
   const [chatActivity, setChatActivity] = useState<Record<string, number>>(() => JSON.parse(localStorage.getItem(`activity_${user?.uid}`) || '{}'));
 
-  // Стейт Контекстного меню (ЭТАП 2)
+  // Стейт Контекстного меню
   const [contextMenu, setContextMenu] = useState<{
     type: 'message' | 'contact' | null;
     x: number;
@@ -224,7 +224,7 @@ export default function ChatsPage() {
     data: any;
   }>({ type: null, x: 0, y: 0, data: null });
 
-  // Стейты сообщений (ЭТАП 3 добавлен isExpanded)
+  // Стейты сообщений
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [attachedImage, setAttachedImage] = useState<string>('');
@@ -531,7 +531,7 @@ export default function ChatsPage() {
     setNewMessage('');
     setAttachedImage('');
     setReplyingTo(null);
-    if (isExpanded) setIsExpanded(false); // Автоматически сворачиваем после успешной отправки
+    if (isExpanded) setIsExpanded(false);
     localStorage.removeItem(`draft_${user.uid}_${selectedContact.id}`);
 
     setChatActivity(prev => ({ ...prev, [selectedContact.id]: Date.now() }));
@@ -820,10 +820,10 @@ export default function ChatsPage() {
 
       {/* МОДАЛЬНОЕ ОКНО ПРОФИЛЯ */}
       {isProfileModalOpen && activeContactData && !activeContactData.isSaved && (
-        <div className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm flex justify-center items-end md:items-center p-0 md:p-4 animate-fade-in" onClick={() => setIsProfileModalOpen(false)}>
-          <div className="bg-white dark:bg-gray-900 w-full md:w-[420px] max-h-[90vh] overflow-y-auto custom-scrollbar rounded-t-[32px] md:rounded-3xl shadow-2xl flex flex-col transition-transform transform translate-y-0" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex justify-center items-center p-4 animate-fade-in" onClick={() => setIsProfileModalOpen(false)}>
+          <div className="bg-white dark:bg-gray-900 w-full md:w-[420px] max-h-[85vh] overflow-y-auto custom-scrollbar rounded-[32px] shadow-2xl flex flex-col transform transition-all scale-100" onClick={e => e.stopPropagation()}>
             
-            <div className="relative h-32 bg-gradient-to-r from-[#A0C4FF] to-[#C4A0FF] shrink-0 rounded-t-[32px] md:rounded-t-3xl">
+            <div className="relative h-32 bg-gradient-to-r from-[#A0C4FF] to-[#C4A0FF] shrink-0 rounded-t-[32px]">
               <button onClick={() => setIsProfileModalOpen(false)} className="absolute top-4 right-4 w-8 h-8 bg-black/20 hover:bg-black/40 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-md"><X size={18} /></button>
             </div>
             
@@ -1000,6 +1000,7 @@ export default function ChatsPage() {
         
         {selectedContact && activeContactData ? (
           <>
+            {/* ШАПКА ЧАТА */}
             <div className={`h-[60px] bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200/60 dark:border-gray-800 flex items-center justify-between px-4 shrink-0 shadow-sm z-10 transition-colors ${isOffline ? 'mt-6' : ''}`}>
               <div className="flex items-center gap-3">
                 <button onClick={() => setSelectedContact(null)} className="md:hidden text-blue-500 dark:text-blue-400 p-1"><ArrowLeft size={24} /></button>
@@ -1024,156 +1025,161 @@ export default function ChatsPage() {
               <button onClick={() => setSelectedContact(null)} className="hidden md:flex items-center gap-1.5 text-[13px] font-bold text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors">Закрыть чат <X size={16} /></button>
             </div>
             
-            {showScrollButton && (
-              <button onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })} className="absolute bottom-[100px] right-6 z-30 w-11 h-11 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all animate-fade-in">
-                <ChevronDown size={24} />
-                {unreadCounts[selectedContact.id] > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-sm border-2 border-white dark:border-gray-800">{unreadCounts[selectedContact.id]}</span>}
-              </button>
-            )}
-
-            <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col">
-              {messages.length === 0 && (
-                <div className="flex-1 flex flex-col items-center justify-center opacity-50">
-                  <ShieldCheck size={48} className="text-gray-400 dark:text-gray-600 mb-2" />
-                  <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 bg-gray-200/50 dark:bg-gray-800/50 px-4 py-1.5 rounded-full">Здесь пока нет сообщений</p>
-                </div>
+            {/* КОНТЕЙНЕР СООБЩЕНИЙ */}
+            <div className="flex-1 relative flex flex-col overflow-hidden">
+              
+              {showScrollButton && (
+                <button onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })} className="absolute bottom-4 right-4 z-30 w-11 h-11 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all animate-fade-in">
+                  <ChevronDown size={24} />
+                  {unreadCounts[selectedContact.id] > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-sm border-2 border-white dark:border-gray-800">{unreadCounts[selectedContact.id]}</span>}
+                </button>
               )}
 
-              {messages.length >= messageLimit && <div className="flex justify-center py-2 mb-2"><Loader2 size={20} className="animate-spin text-gray-400 dark:text-gray-600" /></div>}
+              <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 pb-6 custom-scrollbar flex flex-col">
+                {messages.length === 0 && (
+                  <div className="flex-1 flex flex-col items-center justify-center opacity-50">
+                    <ShieldCheck size={48} className="text-gray-400 dark:text-gray-600 mb-2" />
+                    <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 bg-gray-200/50 dark:bg-gray-800/50 px-4 py-1.5 rounded-full">Здесь пока нет сообщений</p>
+                  </div>
+                )}
 
-              {messages.map((msg, index) => {
-                const isMine = msg.senderId === user?.uid;
-                
-                const prevMsg = index > 0 ? messages[index - 1] : null;
-                const nextMsg = index < messages.length - 1 ? messages[index + 1] : null;
+                {messages.length >= messageLimit && <div className="flex justify-center py-2 mb-2"><Loader2 size={20} className="animate-spin text-gray-400 dark:text-gray-600" /></div>}
 
-                const currentMsgDateStr = msg.createdAt ? (msg.createdAt.toDate ? msg.createdAt.toDate() : new Date(msg.createdAt)).toDateString() : new Date().toDateString();
-                const prevMsgDateStr = prevMsg?.createdAt ? (prevMsg.createdAt.toDate ? prevMsg.createdAt.toDate() : new Date(prevMsg.createdAt)).toDateString() : null;
-                const nextMsgDateStr = nextMsg?.createdAt ? (nextMsg.createdAt.toDate ? nextMsg.createdAt.toDate() : new Date(nextMsg.createdAt)).toDateString() : null;
+                {messages.map((msg, index) => {
+                  const isMine = msg.senderId === user?.uid;
+                  
+                  const prevMsg = index > 0 ? messages[index - 1] : null;
+                  const nextMsg = index < messages.length - 1 ? messages[index + 1] : null;
 
-                const showDateDivider = index === 0 || currentMsgDateStr !== prevMsgDateStr;
-                const isPrevMine = prevMsg?.senderId === msg.senderId && currentMsgDateStr === prevMsgDateStr;
-                const isNextMine = nextMsg?.senderId === msg.senderId && currentMsgDateStr === nextMsgDateStr;
+                  const currentMsgDateStr = msg.createdAt ? (msg.createdAt.toDate ? msg.createdAt.toDate() : new Date(msg.createdAt)).toDateString() : new Date().toDateString();
+                  const prevMsgDateStr = prevMsg?.createdAt ? (prevMsg.createdAt.toDate ? prevMsg.createdAt.toDate() : new Date(prevMsg.createdAt)).toDateString() : null;
+                  const nextMsgDateStr = nextMsg?.createdAt ? (nextMsg.createdAt.toDate ? nextMsg.createdAt.toDate() : new Date(nextMsg.createdAt)).toDateString() : null;
 
-                const isFirstInGroup = !isPrevMine;
-                const isLastInGroup = !isNextMine;
-                const marginTopClass = isFirstInGroup && !showDateDivider ? 'mt-3' : 'mt-0.5';
+                  const showDateDivider = index === 0 || currentMsgDateStr !== prevMsgDateStr;
+                  const isPrevMine = prevMsg?.senderId === msg.senderId && currentMsgDateStr === prevMsgDateStr;
+                  const isNextMine = nextMsg?.senderId === msg.senderId && currentMsgDateStr === nextMsgDateStr;
 
-                let bubbleRadius = isMine ? 'rounded-2xl rounded-tr-sm' : 'rounded-2xl rounded-tl-sm';
-                if (isMine) {
-                  if (isFirstInGroup && isLastInGroup) bubbleRadius = 'rounded-2xl rounded-br-sm'; 
-                  else if (isFirstInGroup) bubbleRadius = 'rounded-2xl rounded-br-sm'; 
-                  else if (isLastInGroup) bubbleRadius = 'rounded-2xl rounded-tr-sm';  
-                  else bubbleRadius = 'rounded-2xl rounded-r-sm'; 
-                } else {
-                  if (isFirstInGroup && isLastInGroup) bubbleRadius = 'rounded-2xl rounded-bl-sm';
-                  else if (isFirstInGroup) bubbleRadius = 'rounded-2xl rounded-bl-sm';
-                  else if (isLastInGroup) bubbleRadius = 'rounded-2xl rounded-tl-sm';
-                  else bubbleRadius = 'rounded-2xl rounded-l-sm';
-                }
+                  const isFirstInGroup = !isPrevMine;
+                  const isLastInGroup = !isNextMine;
+                  const marginTopClass = isFirstInGroup && !showDateDivider ? 'mt-3' : 'mt-0.5';
 
-                const isCard = msg.type === 'share_card' && msg.cardData;
-                const isReceipt = msg.type === 'order_receipt' && msg.orderData;
-                const isSystem = msg.type === 'system_status';
+                  let bubbleRadius = isMine ? 'rounded-2xl rounded-tr-sm' : 'rounded-2xl rounded-tl-sm';
+                  if (isMine) {
+                    if (isFirstInGroup && isLastInGroup) bubbleRadius = 'rounded-2xl rounded-br-sm'; 
+                    else if (isFirstInGroup) bubbleRadius = 'rounded-2xl rounded-br-sm'; 
+                    else if (isLastInGroup) bubbleRadius = 'rounded-2xl rounded-tr-sm';  
+                    else bubbleRadius = 'rounded-2xl rounded-r-sm'; 
+                  } else {
+                    if (isFirstInGroup && isLastInGroup) bubbleRadius = 'rounded-2xl rounded-bl-sm';
+                    else if (isFirstInGroup) bubbleRadius = 'rounded-2xl rounded-bl-sm';
+                    else if (isLastInGroup) bubbleRadius = 'rounded-2xl rounded-tl-sm';
+                    else bubbleRadius = 'rounded-2xl rounded-l-sm';
+                  }
 
-                return (
-                  <div key={msg.id}>
-                    {showDateDivider && (
-                      <div className="flex justify-center my-4">
-                        <span className="bg-black/10 dark:bg-white/10 backdrop-blur-sm text-gray-600 dark:text-gray-300 text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-                          {formatDateDivider(msg.createdAt)}
-                        </span>
-                      </div>
-                    )}
+                  const isCard = msg.type === 'share_card' && msg.cardData;
+                  const isReceipt = msg.type === 'order_receipt' && msg.orderData;
+                  const isSystem = msg.type === 'system_status';
 
-                    {isSystem ? (
-                      <div className="flex justify-center my-3">
-                        <div className="bg-gray-200/80 dark:bg-gray-800/80 backdrop-blur text-gray-600 dark:text-gray-300 text-[12px] font-medium px-4 py-1.5 rounded-full shadow-sm">{msg.statusText}</div>
-                      </div>
-                    ) : (
-                      <div onContextMenu={(e) => openContextMenu(e, 'message', msg)}>
-                        <SwipeableMessage onReply={() => setReplyingTo(msg)} onDelete={() => handleDeleteMessage(msg.id)} isMine={isMine}>
-                          <div className={`relative max-w-[85%] sm:max-w-[70%] flex flex-col ${
-                            isMine ? `bg-[#E3FECE] dark:bg-[#1E3A8A] text-gray-900 dark:text-white ${bubbleRadius}` 
-                                   : `bg-white dark:bg-[#202020] text-gray-900 dark:text-white border border-gray-100 dark:border-gray-800 shadow-sm ${bubbleRadius}`
-                          } ${(isCard || isReceipt) ? 'p-1.5' : 'px-3 pt-2 pb-1.5 text-[15px] leading-relaxed'} ${marginTopClass} group cursor-default select-text`}>
-                            
-                            {isMine && !isCard && !isReceipt && (
-                              <div className="absolute top-1 -left-16 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 hidden md:flex">
-                                <button onClick={() => { setEditingMessage(msg); setNewMessage(msg.text || ''); }} className="p-1.5 bg-white dark:bg-gray-800 rounded-full shadow-sm text-gray-500 hover:text-blue-500 transition-colors"><Edit2 size={14}/></button>
-                                <button onClick={() => handleDeleteMessage(msg.id)} className="p-1.5 bg-white dark:bg-gray-800 rounded-full shadow-sm text-gray-500 hover:text-red-500 transition-colors"><Trash2 size={14}/></button>
-                              </div>
-                            )}
+                  return (
+                    <div key={msg.id}>
+                      {showDateDivider && (
+                        <div className="flex justify-center my-4">
+                          <span className="bg-black/10 dark:bg-white/10 backdrop-blur-sm text-gray-600 dark:text-gray-300 text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                            {formatDateDivider(msg.createdAt)}
+                          </span>
+                        </div>
+                      )}
 
-                            {msg.replyToText && (
-                              <div className="mb-1.5 pl-2 border-l-[3px] border-blue-500 bg-black/5 dark:bg-black/20 rounded-r-md py-1 pr-2">
-                                <span className="text-[11px] font-bold text-blue-600 dark:text-blue-300 block mb-0.5">{msg.replyToSender}</span>
-                                <span className="text-[12px] text-gray-600 dark:text-gray-300 line-clamp-2 leading-tight opacity-90">{msg.replyToText}</span>
-                              </div>
-                            )}
+                      {isSystem ? (
+                        <div className="flex justify-center my-3">
+                          <div className="bg-gray-200/80 dark:bg-gray-800/80 backdrop-blur text-gray-600 dark:text-gray-300 text-[12px] font-medium px-4 py-1.5 rounded-full shadow-sm">{msg.statusText}</div>
+                        </div>
+                      ) : (
+                        <div onContextMenu={(e) => openContextMenu(e, 'message', msg)}>
+                          <SwipeableMessage onReply={() => setReplyingTo(msg)} onDelete={() => handleDeleteMessage(msg.id)} isMine={isMine}>
+                            <div className={`relative max-w-[85%] sm:max-w-[70%] flex flex-col ${
+                              isMine ? `bg-[#E3FECE] dark:bg-[#1E3A8A] text-gray-900 dark:text-white ${bubbleRadius}` 
+                                     : `bg-white dark:bg-[#202020] text-gray-900 dark:text-white border border-gray-100 dark:border-gray-800 shadow-sm ${bubbleRadius}`
+                            } ${(isCard || isReceipt) ? 'p-1.5' : 'px-3 pt-2 pb-1.5 text-[15px] leading-relaxed'} ${marginTopClass} group cursor-default select-text`}>
+                              
+                              {isMine && !isCard && !isReceipt && (
+                                <div className="absolute top-1 -left-16 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 hidden md:flex">
+                                  <button onClick={() => { setEditingMessage(msg); setNewMessage(msg.text || ''); }} className="p-1.5 bg-white dark:bg-gray-800 rounded-full shadow-sm text-gray-500 hover:text-blue-500 transition-colors"><Edit2 size={14}/></button>
+                                  <button onClick={() => handleDeleteMessage(msg.id)} className="p-1.5 bg-white dark:bg-gray-800 rounded-full shadow-sm text-gray-500 hover:text-red-500 transition-colors"><Trash2 size={14}/></button>
+                                </div>
+                              )}
 
-                            {isReceipt ? (
-                              <div className="flex flex-col min-w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-blue-200 dark:border-blue-900 shadow-sm">
-                                <div className="bg-blue-50 dark:bg-blue-900/30 p-3 border-b border-blue-100 dark:border-blue-800/50 flex items-center justify-between">
-                                  <span className="font-black text-blue-600 dark:text-blue-400 flex items-center gap-1.5"><ShoppingBag size={16}/> ЗАКАЗ</span>
-                                  <span className="text-[10px] font-bold uppercase text-gray-500 bg-white dark:bg-gray-700 px-2 py-0.5 rounded-md">
-                                    {msg.orderData.status === 'new' && 'Ожидает'}
-                                    {msg.orderData.status === 'processing' && 'В работе'}
-                                    {msg.orderData.status === 'shipped' && 'Отправлен'}
+                              {msg.replyToText && (
+                                <div className="mb-1.5 pl-2 border-l-[3px] border-blue-500 bg-black/5 dark:bg-black/20 rounded-r-md py-1 pr-2">
+                                  <span className="text-[11px] font-bold text-blue-600 dark:text-blue-300 block mb-0.5">{msg.replyToSender}</span>
+                                  <span className="text-[12px] text-gray-600 dark:text-gray-300 line-clamp-2 leading-tight opacity-90">{msg.replyToText}</span>
+                                </div>
+                              )}
+
+                              {isReceipt ? (
+                                <div className="flex flex-col min-w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-blue-200 dark:border-blue-900 shadow-sm">
+                                  <div className="bg-blue-50 dark:bg-blue-900/30 p-3 border-b border-blue-100 dark:border-blue-800/50 flex items-center justify-between">
+                                    <span className="font-black text-blue-600 dark:text-blue-400 flex items-center gap-1.5"><ShoppingBag size={16}/> ЗАКАЗ</span>
+                                    <span className="text-[10px] font-bold uppercase text-gray-500 bg-white dark:bg-gray-700 px-2 py-0.5 rounded-md">
+                                      {msg.orderData.status === 'new' && 'Ожидает'}
+                                      {msg.orderData.status === 'processing' && 'В работе'}
+                                      {msg.orderData.status === 'shipped' && 'Отправлен'}
+                                    </span>
+                                  </div>
+                                  <div className="p-3 text-[13px]">
+                                    <p className="whitespace-pre-wrap text-gray-600 dark:text-gray-300 font-medium mb-3">{msg.orderData.items}</p>
+                                    <div className="flex justify-between items-center pt-2 border-t border-dashed border-gray-200 dark:border-gray-700">
+                                      <span className="font-bold text-gray-400">Итого:</span>
+                                      <span className="font-black text-[15px]">{msg.orderData.total > 0 ? `${msg.orderData.total}` : 'Уточняется'}</span>
+                                    </div>
+                                  </div>
+                                  {!isMine && (
+                                    <div className="p-2 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 flex gap-2">
+                                      {msg.orderData.status === 'new' && <button onClick={() => handleOrderStatusUpdate(msg.id, 'processing', '🛠 Продавец взял заказ в работу')} className="flex-1 bg-amber-500 text-white py-1.5 rounded-lg text-[12px] font-bold flex items-center justify-center gap-1"><Package size={14}/> В работу</button>}
+                                      {msg.orderData.status === 'processing' && <button onClick={() => handleOrderStatusUpdate(msg.id, 'shipped', '🚚 Заказ передан в службу доставки')} className="flex-1 bg-blue-500 text-white py-1.5 rounded-lg text-[12px] font-bold flex items-center justify-center gap-1"><Truck size={14}/> Отправлено</button>}
+                                      {msg.orderData.status === 'shipped' && <div className="flex-1 py-1.5 text-center text-[12px] font-bold text-green-500 flex items-center justify-center gap-1"><CheckCircle2 size={14}/> Выполнено</div>}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : isCard ? (
+                                <div className="flex flex-col w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-200/50 dark:border-gray-700">
+                                  <img src={msg.cardData!.imageUrl} onClick={() => setViewingImage(msg.cardData!.imageUrl)} loading="lazy" className="w-full h-36 object-cover cursor-pointer hover:opacity-90 transition-opacity" alt="card" />
+                                  <div className="p-3">
+                                    <h4 className="font-semibold text-[14px] text-gray-900 dark:text-white line-clamp-1 mb-1">{msg.cardData!.title}</h4>
+                                    {msg.cardData!.price && <span className="text-[13px] font-bold text-blue-500 dark:text-blue-400">{msg.cardData!.price}</span>}
+                                    <a href={msg.cardData!.link} target="_blank" rel="noopener noreferrer" className="mt-2 flex items-center justify-center gap-1.5 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 py-1.5 rounded-lg text-[13px] font-medium">Смотреть <ExternalLink size={14} /></a>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  {msg.imageUrl && <img src={msg.imageUrl} onClick={() => setViewingImage(msg.imageUrl!)} loading="lazy" alt="attachment" className="w-full max-w-[280px] h-auto rounded-xl mb-1 object-cover cursor-pointer hover:opacity-90 transition-opacity" />}
+                                  {msg.text && <span className="whitespace-pre-wrap break-words">{msg.text}</span>}
+                                </>
+                              )}
+
+                              <div className={`flex items-center justify-end gap-1 mt-0.5 ml-4 float-right ${(isCard || isReceipt) && 'px-2 pb-1'}`}>
+                                {msg.isEdited && <span className="text-[10px] text-gray-400 dark:text-gray-500 italic mr-1">изменено</span>}
+                                <span className={`text-[11px] font-medium ${isMine ? 'text-green-700/60 dark:text-blue-200/60' : 'text-gray-400 dark:text-gray-500'}`}>{formatTime(msg.createdAt)}</span>
+                                {isMine && !selectedContact.isSaved && (
+                                  <span className={`${isMine ? 'text-green-600/70 dark:text-blue-300/80' : ''}`}>
+                                    {msg.isRead ? <CheckCheck size={14} /> : <Check size={14} />}
                                   </span>
-                                </div>
-                                <div className="p-3 text-[13px]">
-                                  <p className="whitespace-pre-wrap text-gray-600 dark:text-gray-300 font-medium mb-3">{msg.orderData.items}</p>
-                                  <div className="flex justify-between items-center pt-2 border-t border-dashed border-gray-200 dark:border-gray-700">
-                                    <span className="font-bold text-gray-400">Итого:</span>
-                                    <span className="font-black text-[15px]">{msg.orderData.total > 0 ? `${msg.orderData.total}` : 'Уточняется'}</span>
-                                  </div>
-                                </div>
-                                {!isMine && (
-                                  <div className="p-2 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 flex gap-2">
-                                    {msg.orderData.status === 'new' && <button onClick={() => handleOrderStatusUpdate(msg.id, 'processing', '🛠 Продавец взял заказ в работу')} className="flex-1 bg-amber-500 text-white py-1.5 rounded-lg text-[12px] font-bold flex items-center justify-center gap-1"><Package size={14}/> В работу</button>}
-                                    {msg.orderData.status === 'processing' && <button onClick={() => handleOrderStatusUpdate(msg.id, 'shipped', '🚚 Заказ передан в службу доставки')} className="flex-1 bg-blue-500 text-white py-1.5 rounded-lg text-[12px] font-bold flex items-center justify-center gap-1"><Truck size={14}/> Отправлено</button>}
-                                    {msg.orderData.status === 'shipped' && <div className="flex-1 py-1.5 text-center text-[12px] font-bold text-green-500 flex items-center justify-center gap-1"><CheckCircle2 size={14}/> Выполнено</div>}
-                                  </div>
                                 )}
                               </div>
-                            ) : isCard ? (
-                              <div className="flex flex-col w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-200/50 dark:border-gray-700">
-                                <img src={msg.cardData!.imageUrl} onClick={() => setViewingImage(msg.cardData!.imageUrl)} loading="lazy" className="w-full h-36 object-cover cursor-pointer hover:opacity-90 transition-opacity" alt="card" />
-                                <div className="p-3">
-                                  <h4 className="font-semibold text-[14px] text-gray-900 dark:text-white line-clamp-1 mb-1">{msg.cardData!.title}</h4>
-                                  {msg.cardData!.price && <span className="text-[13px] font-bold text-blue-500 dark:text-blue-400">{msg.cardData!.price}</span>}
-                                  <a href={msg.cardData!.link} target="_blank" rel="noopener noreferrer" className="mt-2 flex items-center justify-center gap-1.5 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 py-1.5 rounded-lg text-[13px] font-medium">Смотреть <ExternalLink size={14} /></a>
-                                </div>
-                              </div>
-                            ) : (
-                              <>
-                                {msg.imageUrl && <img src={msg.imageUrl} onClick={() => setViewingImage(msg.imageUrl!)} loading="lazy" alt="attachment" className="w-full max-w-[280px] h-auto rounded-xl mb-1 object-cover cursor-pointer hover:opacity-90 transition-opacity" />}
-                                {msg.text && <span className="whitespace-pre-wrap break-words">{msg.text}</span>}
-                              </>
-                            )}
-
-                            <div className={`flex items-center justify-end gap-1 mt-0.5 ml-4 float-right ${(isCard || isReceipt) && 'px-2 pb-1'}`}>
-                              {msg.isEdited && <span className="text-[10px] text-gray-400 dark:text-gray-500 italic mr-1">изменено</span>}
-                              <span className={`text-[11px] font-medium ${isMine ? 'text-green-700/60 dark:text-blue-200/60' : 'text-gray-400 dark:text-gray-500'}`}>{formatTime(msg.createdAt)}</span>
-                              {isMine && !selectedContact.isSaved && (
-                                <span className={`${isMine ? 'text-green-600/70 dark:text-blue-300/80' : ''}`}>
-                                  {msg.isRead ? <CheckCheck size={14} /> : <Check size={14} />}
-                                </span>
-                              )}
                             </div>
-                          </div>
-                        </SwipeableMessage>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              <div ref={messagesEndRef} className="h-2 shrink-0" />
+                          </SwipeableMessage>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <div ref={messagesEndRef} className="h-2 shrink-0" />
+              </div>
             </div>
             
+            {/* ОТОБРАЖЕНИЕ ОТВЕТА И РЕДАКТИРОВАНИЯ */}
             {(replyingTo || editingMessage) && (
-              <div className="mx-3 mt-1 bg-gray-100 dark:bg-gray-800 rounded-t-xl border-l-[3px] border-blue-500 flex items-center justify-between px-3 py-2 animate-fade-in shadow-sm">
+              <div className="mx-3 mt-1 bg-gray-100 dark:bg-gray-800 rounded-t-2xl border-l-[3px] border-blue-500 flex items-center justify-between px-4 py-2 animate-fade-in shadow-sm">
                 <div className="flex flex-col min-w-0 pr-4">
                   <span className="text-[12px] font-bold text-blue-500 dark:text-blue-400">
                     {editingMessage ? 'Редактирование' : (replyingTo?.senderId === user?.uid ? 'Ответ себе' : `Ответ ${selectedContact.name}`)}
@@ -1182,12 +1188,12 @@ export default function ChatsPage() {
                     {editingMessage ? editingMessage.text : (replyingTo?.text || (replyingTo?.imageUrl ? 'Фотография' : 'Вложение'))}
                   </span>
                 </div>
-                <button onClick={() => { setReplyingTo(null); setEditingMessage(null); setNewMessage(''); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-1"><X size={18}/></button>
+                <button onClick={() => { setReplyingTo(null); setEditingMessage(null); setNewMessage(''); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"><X size={18}/></button>
               </div>
             )}
 
             {attachedImage && (
-              <div className="absolute bottom-[90px] left-4 z-20">
+              <div className="absolute bottom-[90px] left-4 z-30">
                 <div className="relative w-16 h-16 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-1">
                   <img src={attachedImage} alt="preview" className="w-full h-full object-cover rounded-lg" />
                   <button onClick={() => setAttachedImage('')} className="absolute -top-2 -right-2 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 w-5 h-5 rounded-full flex items-center justify-center"><X size={12} /></button>
@@ -1195,7 +1201,7 @@ export default function ChatsPage() {
               </div>
             )}
 
-{/* ОБНОВЛЕННАЯ НИЖНЯЯ ПАНЕЛЬ (ЭТАП 3) */}
+            {/* ОБНОВЛЕННАЯ НИЖНЯЯ ПАНЕЛЬ С ПОЛНОЭКРАННЫМ РЕЖИМОМ */}
             <div className={`bg-white dark:bg-gray-900 px-2 sm:px-4 py-2 pb-[calc(env(safe-area-inset-bottom)+8px)] md:pb-4 border-t border-gray-100 dark:border-gray-800 shrink-0 transition-all duration-300 flex flex-col relative z-20 ${(replyingTo || editingMessage) ? 'pt-2' : ''}`}>
               
               {/* ШАБЛОНЫ ОТВЕТОВ */}

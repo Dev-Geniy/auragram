@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { updateProfile } from 'firebase/auth';
+import { updateProfile, signOut } from 'firebase/auth'; // <-- Добавили signOut
 import { db, auth } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 
@@ -8,8 +8,8 @@ import {
   Camera, User, Briefcase, 
   Phone, Globe, Package, Plus, Trash2, Image as ImageIcon, 
   Loader2, Edit2, Moon, Sun, Zap, MessageSquareText,
-  Target, LayoutList, GripVertical, Heart, Store, MessageCircle, ShoppingBag, LineChart, LayoutDashboard, Settings, Check
-} from 'lucide-react';
+  Target, LayoutList, GripVertical, Heart, Store, MessageCircle, ShoppingBag, LineChart, LayoutDashboard, Settings, X, Check, LogOut
+} from 'lucide-react'; // <-- Добавили LogOut
 
 interface Product {
   id: string;
@@ -46,8 +46,11 @@ const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
         canvas.toBlob((blob) => {
-          if (blob) resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
-          else reject(new Error('Ошибка сжатия изображения'));
+          if (blob) {
+            resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
+          } else {
+            reject(new Error('Ошибка сжатия изображения'));
+          }
         }, 'image/jpeg', 0.8);
       };
     };
@@ -337,6 +340,15 @@ export default function ProfilePage() {
     });
   };
 
+  // ЛОГИКА ВЫХОДА ИЗ АККАУНТА
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error('Ошибка при выходе:', error);
+    }
+  };
+
   const blockClass = "bg-white dark:bg-gray-900 rounded-[20px] overflow-hidden border border-gray-200/50 dark:border-gray-800 mb-6 transition-colors shadow-sm";
 
   if (isLoading) {
@@ -346,7 +358,7 @@ export default function ProfilePage() {
   return (
     <div className="flex-1 overflow-y-auto bg-[#F2F2F7] dark:bg-gray-950 select-none pb-24 custom-scrollbar transition-colors relative">
       
-      <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl sticky top-0 z-20 border-b border-gray-200/60 dark:border-gray-800 px-4 py-3 flex items-center justify-between transition-colors shadow-sm">
+      <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl sticky top-0 z-10 border-b border-gray-200/60 dark:border-gray-800 px-4 py-3 flex items-center justify-between transition-colors shadow-sm">
         <h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">Настройки</h1>
         
         {/* КНОПКА СОХРАНИТЬ (Анимированная) */}
@@ -601,6 +613,16 @@ export default function ProfilePage() {
               <GripVertical size={20} className="text-gray-300 dark:text-gray-600 cursor-grab active:cursor-grabbing" />
             </div>
           ))}
+        </div>
+
+        {/* ВЫХОД ИЗ АККАУНТА */}
+        <div className="mt-10 mb-6">
+          <button 
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 py-4 bg-white dark:bg-gray-900 border border-red-100 dark:border-red-900/30 hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500 rounded-[20px] font-bold transition-all active:scale-[0.98] shadow-sm"
+          >
+            <LogOut size={20} /> Выйти из приложения
+          </button>
         </div>
 
       </div>

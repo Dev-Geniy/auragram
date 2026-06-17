@@ -5,7 +5,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
 import { 
   Heart, X, RefreshCw, MessageCircle, Star, 
-  MapPin, Flame, Sparkles, ChevronDown, ChevronLeft, ChevronRight, Zap
+  MapPin, Flame, Info, Sparkles, ChevronDown, ChevronLeft, ChevronRight, Zap
 } from 'lucide-react';
 
 interface DatingUser {
@@ -30,7 +30,7 @@ export default function DatingPage() {
   const [photoIndex, setPhotoIndex] = useState(0);
   
   const [incomingLikes, setIncomingLikes] = useState<Set<string>>(new Set());
-  const [likedProfilesData, setLikedProfilesData] = useState<DatingUser[]>([]); // Данные тех, кто лайкнул меня
+  const [likedProfilesData, setLikedProfilesData] = useState<DatingUser[]>([]); 
   
   // Стейты физики свайпа
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -53,28 +53,22 @@ export default function DatingPage() {
     setIsLoading(true);
 
     try {
-      // 1. Все пользователи, ищущие знакомства
       const usersQuery = query(collection(db, 'users'), where('goals', 'array-contains', 'dating'));
       const usersSnap = await getDocs(usersQuery);
       
-      // 2. История наших свайпов
       const mySwipesQuery = query(collection(db, 'dating_swipes'), where('from', '==', user.uid));
       const mySwipesSnap = await getDocs(mySwipesQuery);
       const myLikedIds = new Set();
-      const myPassedIds = new Set();
       mySwipesSnap.docs.forEach(d => {
         if (d.data().action === 'like') myLikedIds.add(d.data().to);
-        // Мы НЕ добавляем 'pass' в исключения, чтобы ленту можно было крутить бесконечно
       });
 
-      // 3. Кто лайкнул НАС
       const likesMeQuery = query(collection(db, 'dating_swipes'), where('to', '==', user.uid), where('action', '==', 'like'));
       const likesMeSnap = await getDocs(likesMeQuery);
       const likesMeIds = new Set<string>();
       likesMeSnap.docs.forEach(d => likesMeIds.add(d.data().from));
       setIncomingLikes(likesMeIds);
 
-      // Собираем профили
       const loadedProfiles: DatingUser[] = [];
       const incomingLikesData: DatingUser[] = [];
 
@@ -94,12 +88,10 @@ export default function DatingPage() {
             lastSeen: data.lastSeen?.toMillis?.() || 0
           };
 
-          // Добавляем в верхнюю панель симпатий тех, кто лайкнул нас (и кого мы еще не лайкнули)
           if (likesMeIds.has(doc.id) && !myLikedIds.has(doc.id)) {
             incomingLikesData.push(profileData);
           }
 
-          // Показываем в ленте тех, кого мы ЕЩЕ НЕ ЛАЙКАЛИ
           if (!myLikedIds.has(doc.id)) {
             loadedProfiles.push(profileData);
           }
@@ -108,10 +100,8 @@ export default function DatingPage() {
 
       setLikedProfilesData(incomingLikesData);
 
-      // Умная сортировка ленты
       const now = Date.now();
       loadedProfiles.sort((a, b) => {
-        // Те, кто нас лайкнул - в приоритете!
         if (likesMeIds.has(a.id) && !likesMeIds.has(b.id)) return -1;
         if (!likesMeIds.has(a.id) && likesMeIds.has(b.id)) return 1;
 
@@ -153,7 +143,7 @@ export default function DatingPage() {
 
     if (pan.x > threshold) processSwipe('like');
     else if (pan.x < -threshold) processSwipe('pass');
-    else setPan({ x: 0, y: 0 }); // Отскок в центр
+    else setPan({ x: 0, y: 0 }); 
   };
 
   // ==========================================
@@ -165,7 +155,6 @@ export default function DatingPage() {
 
     const isMainCard = !customProfile || customProfile.id === profiles[currentIndex]?.id;
 
-    // Анимация вылета только для карточек из основной ленты
     if (isMainCard) {
       setLeaveX(action === 'like' ? 1000 : -1000);
       setTimeout(() => {
@@ -175,7 +164,6 @@ export default function DatingPage() {
         setLeaveX(0);
       }, 300);
     } else {
-      // Если мы свайпнули из модалки профиля
       if (action === 'like') {
         setProfiles(prev => prev.filter(p => p.id !== swipedUser.id));
       }
@@ -189,7 +177,6 @@ export default function DatingPage() {
         createdAt: serverTimestamp()
       });
 
-      // Удаляем из списка входящих лайков, если мы приняли решение
       setLikedProfilesData(prev => prev.filter(p => p.id !== swipedUser.id));
 
       if (action === 'like' && incomingLikes.has(swipedUser.id)) {
@@ -202,7 +189,7 @@ export default function DatingPage() {
         setDetailedProfile(null);
         setShowLikesModal(false);
       } else if (action === 'pass' && customProfile) {
-         setDetailedProfile(null); // Закрываем профиль, если скипнули из модалки
+         setDetailedProfile(null); 
       }
     } catch (error) { console.error("Ошибка сохранения свайпа:", error); }
   };
@@ -415,7 +402,7 @@ export default function DatingPage() {
                     onClick={(e) => { e.stopPropagation(); setDetailedProfile(activeProfile); }}
                     className="w-12 h-12 rounded-full bg-white/10 border border-white/20 backdrop-blur-lg flex items-center justify-center text-white pointer-events-auto hover:bg-white/20 hover:scale-105 transition-all shadow-xl"
                   >
-                    <ChevronDown size={24} className="transform rotate-180" />
+                    <Info size={24} />
                   </button>
                 </div>
                 
@@ -508,10 +495,10 @@ export default function DatingPage() {
                   {/* Кнопка "Написать" (Прямой переход в диалог) */}
                   <button 
                     onClick={() => navigate('/chats', { state: { selectedUserId: detailedProfile.id } })}
-                    className="w-12 h-12 bg-blue-50 hover:bg-blue-100 dark:bg-blue-500/10 dark:hover:bg-blue-500/20 text-blue-500 rounded-full flex items-center justify-center transition-transform active:scale-95 shrink-0"
+                    className="w-12 h-12 bg-blue-500 hover:bg-blue-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-500/30 transition-transform active:scale-95 shrink-0"
                     title="Написать сообщение"
                   >
-                    <MessageCircle size={22} className="fill-current" />
+                    <MessageCircle size={22} className="fill-white" />
                   </button>
                 </div>
 

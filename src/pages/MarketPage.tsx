@@ -5,7 +5,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
 import { 
   Search, Package, X, ChevronRight, Loader2, 
-  ShoppingBag, Flame, MessageCircle, ShieldCheck, Store, MapPin, Sparkles, Users
+  ShoppingBag, Flame, MessageCircle, ShieldCheck, Store, MapPin, Sparkles, Users, Star
 } from 'lucide-react';
 
 interface Product {
@@ -22,10 +22,10 @@ interface BusinessProfile {
   avatar: string;
   category?: string;
   location?: string;
+  rating?: string; // Добавлен рейтинг
   products: Product[];
 }
 
-// СИНХРОНИЗИРОВАННЫЕ КАТЕГОРИИ С ПРОФИЛЕМ
 export const BUSINESS_CATEGORIES = [
   'Все',
   'IT & Разработка',
@@ -49,11 +49,9 @@ export default function MarketPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('Все');
 
-  // Лимит отображаемых товаров (Пагинация)
   const [displayLimit, setDisplayLimit] = useState(20);
   
-  // Стейт для модалки детального просмотра товара
-  const [selectedProduct, setSelectedProduct] = useState<(Product & { shopId: string; shopName: string; shopAvatar: string; shopCategory: string; shopLocation: string }) | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<(Product & { shopId: string; shopName: string; shopAvatar: string; shopCategory: string; shopLocation: string; shopRating: string }) | null>(null);
 
   useEffect(() => {
     const fetchMarketData = async () => {
@@ -63,18 +61,34 @@ export default function MarketPage() {
         const querySnapshot = await getDocs(q);
         const loadedBusinesses: BusinessProfile[] = [];
         
-        querySnapshot.forEach((doc) => {
-          if (doc.id !== user?.uid) {
-            const data = doc.data();
+        for (const document of querySnapshot.docs) {
+          if (document.id !== user?.uid) {
+            const data = document.data();
+            
+            // Получаем рейтинг магазина
+            let avgRating = '0';
+            try {
+              const reviewsQ = query(collection(db, 'shop_reviews'), where('shopId', '==', document.id));
+              const reviewsSnap = await getDocs(reviewsQ);
+              if (!reviewsSnap.empty) {
+                let totalScore = 0;
+                reviewsSnap.forEach(r => totalScore += r.data().rating);
+                avgRating = (totalScore / reviewsSnap.size).toFixed(1);
+              }
+            } catch (e) {
+              console.error("Ошибка загрузки рейтинга", e);
+            }
+
             loadedBusinesses.push({ 
-              id: doc.id, 
+              id: document.id, 
               ...data,
               products: data.products || [],
               category: data.category || 'Другое',
-              location: data.location || 'Онлайн-магазин'
+              location: data.location || 'Онлайн-магазин',
+              rating: avgRating
             } as BusinessProfile);
           }
-        });
+        }
         
         setBusinesses(loadedBusinesses);
       } catch (error) {
@@ -88,7 +102,7 @@ export default function MarketPage() {
   }, [user]);
 
   const allProducts = useMemo(() => {
-    const productsList: (Product & { shopId: string; shopName: string; shopAvatar: string; shopCategory: string; shopLocation: string })[] = [];
+    const productsList: (Product & { shopId: string; shopName: string; shopAvatar: string; shopCategory: string; shopLocation: string; shopRating: string })[] = [];
     
     businesses.forEach(shop => {
       if (shop.products && shop.products.length > 0) {
@@ -99,13 +113,13 @@ export default function MarketPage() {
             shopName: shop.name || 'Без названия',
             shopAvatar: shop.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(shop.name || 'M')}&background=random`,
             shopCategory: shop.category || 'Другое',
-            shopLocation: shop.location || 'Онлайн-магазин'
+            shopLocation: shop.location || 'Онлайн-магазин',
+            shopRating: shop.rating || '0'
           });
         });
       }
     });
 
-    // Перемешиваем или сортируем (сейчас по убыванию ID для "свежести")
     return productsList.sort((a, b) => Number(b.id) - Number(a.id));
   }, [businesses]);
 
@@ -121,14 +135,10 @@ export default function MarketPage() {
     });
   }, [allProducts, activeCategory, searchQuery]);
 
-  // Сбрасываем лимит пагинации при смене категории или поиске
   useEffect(() => {
     setDisplayLimit(20);
   }, [searchQuery, activeCategory]);
 
-  const displayedProducts = filteredProducts.slice(0, displayLimit);
-
-  // Обработчик скролла (Infinite Scroll)
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, clientHeight, scrollHeight } = e.currentTarget;
     if (scrollHeight - scrollTop <= clientHeight + 100) {
@@ -145,12 +155,10 @@ export default function MarketPage() {
       <div className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl sticky top-0 z-20 pt-3 pb-2 px-4 border-b border-gray-100 dark:border-gray-800 shrink-0 shadow-sm transition-colors">
         <div className="max-w-5xl mx-auto flex items-center gap-3">
           
-          {/* Иконка-логотип раздела (без текстового заголовка) */}
           <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-[14px] flex items-center justify-center shadow-[0_4px_12px_rgba(59,130,246,0.3)] shrink-0 transition-transform hover:scale-105 cursor-default">
             <ShoppingBag size={20} className="text-white" strokeWidth={2.5} />
           </div>
           
-          {/* Строка поиска на всю ширину */}
           <div className="relative flex-1 flex items-center bg-gray-100/80 dark:bg-gray-800/80 rounded-2xl px-3 py-2 transition-all focus-within:ring-2 ring-blue-500/50">
             <Search className="text-gray-400 dark:text-gray-500 shrink-0" size={18} />
             <input 
@@ -169,7 +177,6 @@ export default function MarketPage() {
 
         </div>
 
-        {/* КАТЕГОРИИ (Горизонтальный скролл) */}
         <div className="max-w-5xl mx-auto flex overflow-x-auto gap-2 mt-3 pb-1 scrollbar-none">
           {BUSINESS_CATEGORIES.map(category => (
             <button
@@ -187,18 +194,15 @@ export default function MarketPage() {
         </div>
       </div>
 
-      {/* ПРОКРУЧИВАЕМАЯ ЗОНА ТОВАРОВ */}
       <div 
         className="flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+80px)] custom-scrollbar"
         onScroll={handleScroll}
       >
         <div className="max-w-5xl mx-auto p-3 sm:p-4">
           
-          {/* ПРОМО БАННЕРЫ (Скрываются при поиске или фильтрации) */}
           {!searchQuery && activeCategory === 'Все' && (
             <div className="flex overflow-x-auto lg:grid lg:grid-cols-3 gap-3 sm:gap-4 pb-4 mb-2 scrollbar-none snap-x">
               
-              {/* Баннер 1: Экосистема */}
               <div className="min-w-[280px] sm:min-w-[320px] lg:min-w-0 flex-1 shrink-0 snap-start bg-gradient-to-br from-blue-600 to-indigo-600 rounded-[24px] p-5 text-white shadow-lg shadow-blue-500/20 flex flex-col justify-between relative overflow-hidden group">
                 <div className="relative z-10">
                   <span className="bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest mb-2.5 inline-block border border-white/20 shadow-sm">Торговая площадка</span>
@@ -210,7 +214,6 @@ export default function MarketPage() {
                 <Users size={90} className="absolute -bottom-4 -right-4 text-white opacity-10 group-hover:scale-110 transition-transform duration-500" />
               </div>
 
-              {/* Баннер 2: Безопасность */}
               <div className="min-w-[280px] sm:min-w-[320px] lg:min-w-0 flex-1 shrink-0 snap-start bg-gradient-to-br from-emerald-500 to-teal-600 rounded-[24px] p-5 text-white shadow-lg shadow-emerald-500/20 flex flex-col justify-between relative overflow-hidden group">
                 <div className="relative z-10">
                   <span className="bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest mb-2.5 inline-block border border-white/20 shadow-sm">Безопасность</span>
@@ -222,7 +225,6 @@ export default function MarketPage() {
                 <ShieldCheck size={90} className="absolute -bottom-4 -right-4 text-white opacity-10 group-hover:scale-110 transition-transform duration-500" />
               </div>
 
-              {/* Баннер 3: Стать продавцом */}
               <div className="min-w-[280px] sm:min-w-[320px] lg:min-w-0 flex-1 shrink-0 snap-start bg-gradient-to-br from-orange-500 to-amber-500 rounded-[24px] p-5 text-white shadow-lg shadow-amber-500/20 flex flex-col justify-between relative overflow-hidden group">
                 <div className="relative z-10">
                   <span className="bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest mb-2.5 inline-block border border-white/20 shadow-sm">Бизнесу</span>
@@ -238,7 +240,6 @@ export default function MarketPage() {
           )}
 
           {isLoading ? (
-            // СКЕЛЕТОН ЗАГРУЗКИ
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
               {[...Array(8)].map((_, i) => (
                 <div key={i} className="bg-white dark:bg-gray-900 rounded-[24px] p-2 flex flex-col gap-2 animate-pulse border border-gray-100 dark:border-gray-800 shadow-sm">
@@ -258,7 +259,6 @@ export default function MarketPage() {
               ))}
             </div>
           ) : displayedProducts.length > 0 ? (
-            // СПИСОК ТОВАРОВ
             <>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
                 {displayedProducts.map(product => (
@@ -267,7 +267,6 @@ export default function MarketPage() {
                     onClick={() => setSelectedProduct(product)}
                     className="bg-white dark:bg-gray-900 rounded-[24px] p-2 flex flex-col border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] active:scale-[0.98] transition-all cursor-pointer group"
                   >
-                    {/* Изображение товара */}
                     <div className="relative w-full aspect-square bg-gray-50 dark:bg-gray-800 rounded-[16px] overflow-hidden mb-2">
                       {product.imageUrl ? (
                         <img 
@@ -284,7 +283,6 @@ export default function MarketPage() {
                       <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
                     </div>
                     
-                    {/* Данные товара */}
                     <div className="px-1 flex flex-col flex-1">
                       <h3 className="text-[14px] font-bold text-gray-900 dark:text-white line-clamp-2 leading-snug mb-1 group-hover:text-blue-500 transition-colors">
                         {product.name}
@@ -294,6 +292,11 @@ export default function MarketPage() {
                         <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 truncate">
                           {product.shopName}
                         </span>
+                        {product.shopRating !== '0' && (
+                          <span className="text-[10px] font-bold text-amber-500 flex items-center gap-0.5 ml-auto">
+                            <Star size={10} className="fill-amber-500" /> {product.shopRating}
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-100 dark:border-gray-800">
                         <span className="text-[15px] sm:text-[16px] font-black text-gray-900 dark:text-white tracking-tight">
@@ -308,7 +311,6 @@ export default function MarketPage() {
                 ))}
               </div>
               
-              {/* Лоадер при подгрузке следующих товаров */}
               {displayLimit < filteredProducts.length && (
                 <div className="flex justify-center py-8">
                   <Loader2 className="animate-spin text-gray-400 dark:text-gray-600" size={24} />
@@ -316,7 +318,6 @@ export default function MarketPage() {
               )}
             </>
           ) : (
-            // ПУСТОЕ СОСТОЯНИЕ (Ничего не найдено)
             <div className="flex flex-col items-center justify-center h-[40vh] text-center px-4 animate-fade-in">
               <div className="w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-6 border border-gray-200/50 dark:border-gray-700/50 shadow-inner">
                 <Package size={40} className="text-gray-400 dark:text-gray-500" />
@@ -335,9 +336,6 @@ export default function MarketPage() {
         </div>
       </div>
 
-      {/* ========================================== */}
-      {/* МОДАЛКА: ПРОСМОТР ТОВАРА */}
-      {/* ========================================== */}
       {selectedProduct && (
         <div 
           className="fixed inset-0 z-[150] bg-gray-950/80 backdrop-blur-sm flex justify-center items-end md:items-center p-0 md:p-4 animate-fade-in"
@@ -347,7 +345,6 @@ export default function MarketPage() {
             className="bg-white dark:bg-gray-900 w-full md:w-[480px] max-h-[95vh] overflow-y-auto custom-scrollbar rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col relative animate-slide-up transition-colors"
             onClick={e => e.stopPropagation()}
           >
-            {/* Картинка товара */}
             <div className="relative w-full h-[40vh] md:h-[45vh] bg-gray-100 dark:bg-gray-800 shrink-0 md:rounded-t-[32px] overflow-hidden">
               {selectedProduct.imageUrl ? (
                 <img src={selectedProduct.imageUrl} className="w-full h-full object-cover" />
@@ -359,7 +356,6 @@ export default function MarketPage() {
                 <X size={20} />
               </button>
 
-              {/* Тег категории на фото */}
               <div className="absolute bottom-4 left-4">
                 <span className="bg-white/20 backdrop-blur-md text-white text-[11px] font-bold px-3 py-1.5 rounded-lg border border-white/20 shadow-sm flex items-center gap-1.5">
                   <Sparkles size={12} /> {selectedProduct.shopCategory}
@@ -367,7 +363,6 @@ export default function MarketPage() {
               </div>
             </div>
             
-            {/* Контент */}
             <div className="p-6 relative flex flex-col flex-1">
               <div className="flex items-start justify-between gap-4 mb-6">
                 <h2 className="text-2xl font-black text-gray-900 dark:text-white leading-tight">
@@ -378,7 +373,6 @@ export default function MarketPage() {
                 </div>
               </div>
 
-              {/* Карточка продавца (Кликабельная -> Ведет в Магазин) */}
               <div 
                 onClick={() => navigate(`/shop/${selectedProduct.shopId}`)}
                 className="flex flex-col p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-100 dark:border-gray-700/50 transition-colors mb-6 group"
@@ -389,20 +383,28 @@ export default function MarketPage() {
                     <h4 className="text-[16px] font-bold text-gray-900 dark:text-white flex items-center gap-1.5 truncate group-hover:text-blue-500 transition-colors">
                       <Store size={18} className="text-gray-400" /> {selectedProduct.shopName}
                     </h4>
-                    <p className="text-[12px] text-gray-500 dark:text-gray-400 truncate flex items-center gap-1 mt-0.5">
-                      <ShieldCheck size={14} className="text-green-500" /> Проверенный продавец
-                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <p className="text-[12px] text-gray-500 dark:text-gray-400 truncate flex items-center gap-1">
+                        <ShieldCheck size={14} className="text-green-500" /> Проверен
+                      </p>
+                      {selectedProduct.shopRating !== '0' && (
+                        <>
+                          <span className="text-gray-300 dark:text-gray-600">•</span>
+                          <span className="flex items-center gap-1 text-[12px] font-bold text-amber-500">
+                            <Star size={12} className="fill-amber-500" /> {selectedProduct.shopRating}
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
                   <ChevronRight size={20} className="text-gray-400 group-hover:translate-x-1 transition-transform" />
                 </div>
                 
-                {/* Локация */}
                 <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700/50 flex items-center gap-1.5 text-[13px] font-medium text-gray-500 dark:text-gray-400">
                   <MapPin size={14} className="text-blue-500" /> {selectedProduct.shopLocation}
                 </div>
               </div>
 
-              {/* Описание */}
               <div className="mb-6">
                 <h3 className="text-[13px] font-bold text-gray-400 uppercase tracking-widest mb-3">Описание товара</h3>
                 <p className="text-[15px] text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap bg-gray-50 dark:bg-gray-800/30 p-4 rounded-[20px] border border-gray-100 dark:border-gray-800">
@@ -410,7 +412,6 @@ export default function MarketPage() {
                 </p>
               </div>
 
-              {/* Кнопки действий (Sticky bottom) */}
               <div className="mt-auto sticky bottom-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-t border-gray-100 dark:border-gray-800 pt-4 pb-[calc(env(safe-area-inset-bottom)+16px)] flex gap-3 z-20 transition-colors">
                 {selectedProduct.shopId !== user?.uid && (
                   <button 

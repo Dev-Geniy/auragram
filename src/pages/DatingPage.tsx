@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Heart, X, RefreshCw, MessageCircle, Star, 
   MapPin, Flame, Sparkles, ChevronDown, ChevronLeft, ChevronRight, Zap,
-  SlidersHorizontal, Check, Users, Info, Globe
+  SlidersHorizontal, Globe, Users
 } from 'lucide-react';
 
 interface DatingUser {
@@ -45,9 +45,17 @@ export default function DatingPage() {
   const [detailedProfile, setDetailedProfile] = useState<DatingUser | null>(null); 
   const [matchData, setMatchData] = useState<DatingUser | null>(null);
   
-  // Фильтры
+  // Фильтры с сохранением в localStorage
   const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({ lookingFor: 'Любой', city: 'Весь мир' });
+  const [filters, setFilters] = useState(() => {
+    const saved = localStorage.getItem('dating_filters');
+    return saved ? JSON.parse(saved) : { lookingFor: 'Любой', city: 'Весь мир' };
+  });
+
+  // Сохраняем фильтры при изменении
+  useEffect(() => {
+    localStorage.setItem('dating_filters', JSON.stringify(filters));
+  }, [filters]);
   
   // Стейты физики свайпа
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -137,8 +145,13 @@ export default function DatingPage() {
   // ==========================================
   const feedProfiles = useMemo(() => {
     let feed = allProfiles.filter(p => {
+      // Исключаем тех, кого мы уже лайкнули (на всякий случай)
+      const alreadyLiked = myLikesProfiles.some(liked => liked.id === p.id);
+      if (alreadyLiked) return false;
+
       // Фильтр по полу
       if (filters.lookingFor !== 'Любой' && p.gender !== filters.lookingFor) return false;
+      
       // Фильтр по городу
       if (filters.city !== 'Весь мир') {
         if (!p.location || !p.location.toLowerCase().includes(filters.city.toLowerCase())) return false;
@@ -162,7 +175,7 @@ export default function DatingPage() {
     });
 
     return feed;
-  }, [allProfiles, filters, incomingLikes]);
+  }, [allProfiles, filters, incomingLikes, myLikesProfiles]);
 
   // Сброс индекса при смене фильтров
   useEffect(() => {
@@ -197,7 +210,7 @@ export default function DatingPage() {
   // ==========================================
   const processSwipe = async (action: 'like' | 'pass', customProfile?: DatingUser) => {
     const swipedUser = customProfile || feedProfiles[currentIndex];
-    if (!swipedUser || !user) return;
+    if (!swipedUser || !user || leaveX !== 0) return; // Защита от двойного клика
 
     const isMainCard = !customProfile || customProfile.id === feedProfiles[currentIndex]?.id;
 
@@ -210,8 +223,8 @@ export default function DatingPage() {
         setLeaveX(0);
       }, 300);
     } else {
+      // Свайп из модалки
       if (action === 'like' || action === 'pass') {
-        // Убираем из списка входящих если приняли решение
         setLikedMeProfiles(prev => prev.filter(p => p.id !== swipedUser.id));
         setAllProfiles(prev => prev.filter(p => p.id !== swipedUser.id));
       }
@@ -268,8 +281,8 @@ export default function DatingPage() {
 
   if (isLoading) {
     return (
-      <div className="flex-1 bg-[#F2F2F7] dark:bg-gray-950 flex justify-center items-center transition-colors">
-        <div className="animate-bounce bg-pink-100 dark:bg-pink-500/20 p-4 rounded-full">
+      <div className="flex-1 bg-[#1A1A1D] flex justify-center items-center transition-colors">
+        <div className="animate-bounce bg-pink-500/20 p-4 rounded-full">
           <Heart size={32} className="text-pink-500 animate-pulse fill-pink-500" />
         </div>
       </div>
@@ -278,31 +291,33 @@ export default function DatingPage() {
 
   const activeProfile = feedProfiles[currentIndex];
   const nextProfile = feedProfiles[currentIndex + 1];
-
   const activeSidebarData = sidebarTab === 'likedMe' ? likedMeProfiles : myLikesProfiles;
 
   return (
-    <div className="flex h-[100dvh] w-full bg-gray-50 dark:bg-gray-950 overflow-hidden font-sans transition-colors relative">
+    <div className="flex h-[100dvh] w-full bg-[#1A1A1D] overflow-hidden font-sans transition-colors relative">
       
       {/* ========================================== */}
       {/* 💻 ЛЕВАЯ КОЛОНКА (ПК) - СИМПАТИИ */}
       {/* ========================================== */}
-      <div className="hidden lg:flex w-[380px] bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex-col z-10 transition-colors">
-        <div className="p-6 pb-2 border-b border-gray-100 dark:border-gray-800">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-rose-500 rounded-2xl flex items-center justify-center shadow-lg shadow-pink-500/30 shrink-0">
-                <Flame size={20} className="text-white" strokeWidth={2.5} />
-              </div>
-              <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Dating</h1>
+      <div className="hidden lg:flex w-[380px] bg-gray-900 border-r border-gray-800 flex-col z-10 transition-colors">
+        
+        {/* Шапка Сайдбара (Минимализм) */}
+        <div className="p-6 pb-4 border-b border-gray-800">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-rose-500 rounded-[14px] flex items-center justify-center shadow-[0_4px_12px_rgba(236,72,153,0.3)] shrink-0">
+              <Flame size={20} className="text-white" strokeWidth={2.5} />
             </div>
+            {/* Без названия раздела, просто красивый бейдж */}
+            <span className="bg-gray-800 text-white text-[12px] font-bold px-3 py-1.5 rounded-full uppercase tracking-widest border border-gray-700">
+              Premium
+            </span>
           </div>
 
-          <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl mb-4">
-            <button onClick={() => setSidebarTab('likedMe')} className={`flex-1 py-2 text-[13px] font-bold rounded-lg transition-all ${sidebarTab === 'likedMe' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
+          <div className="flex bg-gray-800 p-1 rounded-xl">
+            <button onClick={() => setSidebarTab('likedMe')} className={`flex-1 py-2 text-[13px] font-bold rounded-lg transition-all ${sidebarTab === 'likedMe' ? 'bg-gray-700 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}>
               Кому я нравлюсь {likedMeProfiles.length > 0 && <span className="ml-1 text-pink-500">{likedMeProfiles.length}</span>}
             </button>
-            <button onClick={() => setSidebarTab('myLikes')} className={`flex-1 py-2 text-[13px] font-bold rounded-lg transition-all ${sidebarTab === 'myLikes' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
+            <button onClick={() => setSidebarTab('myLikes')} className={`flex-1 py-2 text-[13px] font-bold rounded-lg transition-all ${sidebarTab === 'myLikes' ? 'bg-gray-700 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}>
               Мои симпатии
             </button>
           </div>
@@ -311,7 +326,7 @@ export default function DatingPage() {
         <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
           <div className="grid grid-cols-2 gap-3">
             {activeSidebarData.map(p => (
-              <div key={p.id} onClick={() => setDetailedProfile(p)} className="bg-gray-50 dark:bg-gray-800 rounded-2xl overflow-hidden cursor-pointer group hover:shadow-md transition-all border border-gray-100 dark:border-gray-700">
+              <div key={p.id} onClick={() => setDetailedProfile(p)} className="bg-gray-800 rounded-2xl overflow-hidden cursor-pointer group hover:shadow-md transition-all border border-gray-700">
                 <div className="relative h-40">
                   <img src={p.gallery[0] || p.avatar} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   <div className="absolute inset-0 bg-gradient-to-t from-gray-950/80 via-transparent to-transparent" />
@@ -319,7 +334,7 @@ export default function DatingPage() {
                     <h4 className="text-white font-bold text-[13px] truncate">{p.name}</h4>
                   </div>
                   {sidebarTab === 'likedMe' && (
-                    <div className="absolute top-2 right-2 w-6 h-6 bg-pink-500 rounded-full flex items-center justify-center border-2 border-white dark:border-gray-800 shadow-sm">
+                    <div className="absolute top-2 right-2 w-6 h-6 bg-pink-500 rounded-full flex items-center justify-center border-2 border-gray-800 shadow-sm">
                       <Heart size={10} className="text-white fill-white" />
                     </div>
                   )}
@@ -328,7 +343,7 @@ export default function DatingPage() {
             ))}
           </div>
           {activeSidebarData.length === 0 && (
-            <div className="h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-600 opacity-50 py-10 text-center">
+            <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50 py-10 text-center">
               <Users size={48} className="mb-3" />
               <p className="text-[14px] font-bold px-4">{sidebarTab === 'likedMe' ? 'У вас пока нет новых симпатий' : 'Вы еще никого не лайкнули'}</p>
             </div>
@@ -339,21 +354,25 @@ export default function DatingPage() {
       {/* ========================================== */}
       {/* 📱 ЦЕНТРАЛЬНАЯ ЧАСТЬ (Лента) */}
       {/* ========================================== */}
-      <div className="flex-1 flex flex-col relative overflow-hidden bg-gray-950">
+      <div className="flex-1 flex flex-col relative overflow-hidden bg-[#1A1A1D]">
         
-        {/* МИНИМАЛИСТИЧНЫЙ HEADER (АБСОЛЮТНЫЙ ПОВЕРХ КАРТОЧЕК) */}
+        {/* МИНИМАЛИСТИЧНЫЙ ПЛАВАЮЩИЙ HEADER */}
         <div className="absolute top-0 left-0 right-0 z-20 pt-[env(safe-area-inset-top)] px-4 py-4 flex items-center justify-between pointer-events-none">
-          <div className="lg:hidden w-10 h-10 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-lg border border-white/20 pointer-events-auto">
-            <Flame size={20} className="text-white" strokeWidth={2.5} />
+          {/* На мобилках логотип показываем */}
+          <div className="lg:hidden w-10 h-10 bg-white/10 backdrop-blur-md rounded-[14px] flex items-center justify-center shadow-lg border border-white/10 pointer-events-auto">
+            <Flame size={20} className="text-pink-500" strokeWidth={2.5} />
           </div>
           <div className="hidden lg:block"></div> {/* Spacer for PC */}
 
           <div className="flex gap-2 pointer-events-auto">
-            <button onClick={fetchDatingData} className="w-10 h-10 bg-white/20 backdrop-blur-md hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors border border-white/20 shadow-lg">
+            <button onClick={fetchDatingData} className="w-10 h-10 bg-white/10 backdrop-blur-md hover:bg-white/20 rounded-full flex items-center justify-center text-white transition-colors border border-white/10 shadow-lg active:scale-95">
               <RefreshCw size={18} />
             </button>
-            <button onClick={() => setShowFilters(true)} className="w-10 h-10 bg-white/20 backdrop-blur-md hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors border border-white/20 shadow-lg">
+            <button onClick={() => setShowFilters(true)} className="w-10 h-10 bg-white/10 backdrop-blur-md hover:bg-white/20 rounded-full flex items-center justify-center text-white transition-colors border border-white/10 shadow-lg active:scale-95 relative">
               <SlidersHorizontal size={18} />
+              {(filters.lookingFor !== 'Любой' || filters.city !== 'Весь мир') && (
+                <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-pink-500 rounded-full border-2 border-[#1A1A1D]"></div>
+              )}
             </button>
           </div>
         </div>
@@ -362,9 +381,9 @@ export default function DatingPage() {
         {likedMeProfiles.length > 0 && (
           <div className="lg:hidden absolute top-[calc(env(safe-area-inset-top)+64px)] left-0 right-0 z-20 overflow-x-auto scrollbar-none pointer-events-auto flex items-center gap-3 px-4 pb-4">
             {likedMeProfiles.map(p => (
-              <div key={p.id} onClick={() => setDetailedProfile(p)} className="relative w-14 h-14 shrink-0 rounded-full border-[3px] border-pink-500 p-0.5 cursor-pointer shadow-lg bg-white/20 backdrop-blur-md hover:scale-105 transition-transform">
+              <div key={p.id} onClick={() => setDetailedProfile(p)} className="relative w-14 h-14 shrink-0 rounded-full border-2 border-pink-500 p-0.5 cursor-pointer shadow-lg bg-white/10 backdrop-blur-md hover:scale-105 transition-transform">
                 <img src={p.gallery[0] || p.avatar} className="w-full h-full rounded-full object-cover" />
-                <div className="absolute -bottom-1 -right-1 bg-pink-500 rounded-full p-1 border-2 border-white dark:border-gray-900 shadow-sm">
+                <div className="absolute -bottom-1 -right-1 bg-pink-500 rounded-full p-1 border-2 border-[#1A1A1D] shadow-sm">
                   <Heart size={10} className="text-white fill-white"/>
                 </div>
               </div>
@@ -373,13 +392,13 @@ export default function DatingPage() {
         )}
 
         {/* ОСНОВНАЯ ЗОНА С КАРТОЧКАМИ */}
-        <div className="flex-1 relative overflow-hidden flex justify-center items-center pb-24 md:pb-28 pt-10">
+        <div className="flex-1 relative overflow-hidden flex justify-center items-center pb-[calc(env(safe-area-inset-bottom)+100px)] pt-10">
           
           {/* Подложка "Пусто" */}
           {!activeProfile && (
             <div className="flex flex-col items-center justify-center text-center animate-fade-in p-6 z-0">
-              <div className="w-24 h-24 bg-white/5 rounded-[24px] rotate-12 flex items-center justify-center mb-6 backdrop-blur-sm border border-white/10">
-                <RefreshCw size={40} className="text-white/50 -rotate-12" />
+              <div className="w-24 h-24 bg-white/5 rounded-[24px] rotate-12 flex items-center justify-center mb-6 backdrop-blur-sm border border-white/10 shadow-inner">
+                <RefreshCw size={40} className="text-white/30 -rotate-12" />
               </div>
               <h2 className="text-2xl font-black text-white mb-2 tracking-tight">Новых анкет пока нет</h2>
               <p className="text-[15px] font-medium text-white/50 max-w-xs mb-8">
@@ -394,16 +413,17 @@ export default function DatingPage() {
             </div>
           )}
 
-          {/* Карточки */}
+          {/* Следующая карточка */}
           {nextProfile && (
-            <div className="absolute inset-4 bottom-2 md:inset-y-6 md:inset-x-auto md:w-[420px] bg-gray-900 rounded-[32px] overflow-hidden transform scale-[0.95] translate-y-4 opacity-50 z-0 border border-white/5">
+            <div className="absolute inset-4 bottom-2 md:inset-y-6 md:inset-x-auto md:w-[420px] bg-gray-900 md:rounded-[32px] overflow-hidden transform scale-[0.95] translate-y-4 opacity-50 z-0 border border-white/5 rounded-[32px]">
               <img src={nextProfile.gallery[0] || nextProfile.avatar} className="w-full h-full object-cover blur-sm" />
             </div>
           )}
 
+          {/* Активная карточка */}
           {activeProfile && (
             <div 
-              className="absolute inset-4 bottom-2 md:inset-y-6 md:inset-x-auto md:w-[420px] bg-gray-900 rounded-[32px] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden z-10 cursor-grab active:cursor-grabbing border border-white/10"
+              className="absolute inset-4 bottom-2 md:inset-y-6 md:inset-x-auto md:w-[420px] bg-gray-900 rounded-[32px] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden z-10 cursor-grab active:cursor-grabbing border-0 md:border border-white/10"
               style={{
                 transform: `translate(${leaveX || pan.x}px, ${pan.y}px) rotate(${(leaveX || pan.x) * 0.04}deg)`,
                 transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)'
@@ -420,7 +440,7 @@ export default function DatingPage() {
                 
                 {/* Индикаторы слайдов */}
                 {activeProfile.gallery.length > 1 && (
-                  <div className="absolute top-[env(safe-area-inset-top)] pt-16 lg:pt-4 left-4 right-4 flex gap-1.5 z-30 pointer-events-none">
+                  <div className="absolute top-[env(safe-area-inset-top)] pt-20 lg:pt-4 left-4 right-4 flex gap-1.5 z-30 pointer-events-none">
                     {activeProfile.gallery.map((_, i) => (
                       <div key={i} className={`h-1 flex-1 rounded-full transition-all duration-300 ${i === photoIndex ? 'bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]' : 'bg-white/30 backdrop-blur-sm'}`} />
                     ))}
@@ -433,7 +453,6 @@ export default function DatingPage() {
                   <div className="w-1/2 h-full" onClick={(e) => handlePhotoClick('next', e, activeProfile.gallery.length)} />
                 </div>
 
-                {/* Картинка */}
                 <img 
                   src={activeProfile.gallery[photoIndex]} 
                   draggable={false}
@@ -496,14 +515,14 @@ export default function DatingPage() {
         <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+20px)] left-0 right-0 flex justify-center items-center gap-6 md:gap-12 z-20 pointer-events-none">
           <button 
             onClick={() => handleButtonSwipe('pass')}
-            disabled={!activeProfile || isDragging}
+            disabled={!activeProfile || isDragging || leaveX !== 0}
             className="w-16 h-16 md:w-20 md:h-20 bg-white/10 backdrop-blur-xl rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.3)] border border-white/20 flex items-center justify-center text-rose-500 hover:scale-110 hover:bg-rose-500 hover:text-white transition-all disabled:opacity-50 disabled:hover:scale-100 pointer-events-auto"
           >
             <X size={32} strokeWidth={3} />
           </button>
           <button 
             onClick={() => handleButtonSwipe('like')}
-            disabled={!activeProfile || isDragging}
+            disabled={!activeProfile || isDragging || leaveX !== 0}
             className="w-16 h-16 md:w-20 md:h-20 bg-white/10 backdrop-blur-xl rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.3)] border border-white/20 flex items-center justify-center text-green-400 hover:scale-110 hover:bg-green-500 hover:text-white transition-all disabled:opacity-50 disabled:hover:scale-100 pointer-events-auto"
           >
             <Heart size={32} strokeWidth={3} className="fill-current" />
@@ -515,22 +534,22 @@ export default function DatingPage() {
       {/* МОДАЛКА: ФИЛЬТРЫ */}
       {/* ========================================== */}
       {showFilters && (
-        <div className="fixed inset-0 z-[300] bg-white dark:bg-gray-950 md:bg-gray-950/80 md:backdrop-blur-sm flex justify-center md:items-center p-0 md:p-4 animate-fade-in flex-col">
-          <div className="bg-white dark:bg-gray-900 w-full md:w-[400px] h-full md:h-auto md:rounded-[32px] shadow-2xl flex flex-col relative animate-slide-up">
-            <div className="pt-[env(safe-area-inset-top)] px-6 py-4 flex items-center justify-between border-b border-gray-100 dark:border-gray-800 shrink-0">
-              <h2 className="text-xl font-black text-gray-900 dark:text-white">Кого ищем?</h2>
-              <button onClick={() => setShowFilters(false)} className="w-8 h-8 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-500"><X size={18} /></button>
+        <div className="fixed inset-0 z-[300] bg-gray-950/80 backdrop-blur-sm flex justify-center items-end md:items-center p-0 md:p-4 animate-fade-in flex-col" onClick={() => setShowFilters(false)}>
+          <div className="bg-gray-900 border border-gray-800 w-full md:w-[400px] rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col relative animate-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="pt-[env(safe-area-inset-top)] px-6 py-5 flex items-center justify-between border-b border-gray-800 shrink-0">
+              <h2 className="text-xl font-black text-white">Кого ищем?</h2>
+              <button onClick={() => setShowFilters(false)} className="w-8 h-8 bg-gray-800 rounded-full flex items-center justify-center text-gray-400 hover:text-white transition-colors"><X size={18} /></button>
             </div>
             
             <div className="p-6 flex-1 overflow-y-auto">
               <div className="mb-8">
-                <label className="text-[12px] font-bold text-gray-400 uppercase tracking-widest mb-3 block">Пол</label>
+                <label className="text-[12px] font-bold text-gray-500 uppercase tracking-widest mb-3 block">Пол</label>
                 <div className="flex gap-2">
                   {['Любой', 'Мужской', 'Женский'].map(g => (
                     <button 
                       key={g} 
                       onClick={() => setFilters({ ...filters, lookingFor: g })}
-                      className={`flex-1 py-3 rounded-xl font-bold text-[14px] transition-colors border ${filters.lookingFor === g ? 'bg-pink-500 text-white border-pink-500 shadow-md shadow-pink-500/20' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50'}`}
+                      className={`flex-1 py-3.5 rounded-xl font-bold text-[14px] transition-all border ${filters.lookingFor === g ? 'bg-pink-500 text-white border-pink-500 shadow-md shadow-pink-500/20' : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700'}`}
                     >
                       {g}
                     </button>
@@ -539,13 +558,13 @@ export default function DatingPage() {
               </div>
 
               <div>
-                <label className="text-[12px] font-bold text-gray-400 uppercase tracking-widest mb-3 block">Город (Украина)</label>
+                <label className="text-[12px] font-bold text-gray-500 uppercase tracking-widest mb-3 block">Город (Украина)</label>
                 <div className="grid grid-cols-2 gap-2">
                   {CITIES.map(c => (
                     <button 
                       key={c} 
                       onClick={() => setFilters({ ...filters, city: c })}
-                      className={`py-3 rounded-xl font-bold text-[14px] transition-colors border flex items-center justify-center gap-2 ${filters.city === c ? 'bg-blue-500 text-white border-blue-500 shadow-md shadow-blue-500/20' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50'}`}
+                      className={`py-3.5 rounded-xl font-bold text-[14px] transition-all border flex items-center justify-center gap-2 ${filters.city === c ? 'bg-blue-500 text-white border-blue-500 shadow-md shadow-blue-500/20' : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700'}`}
                     >
                       {c === 'Весь мир' && <Globe size={16} opacity={0.5} />} {c}
                     </button>
@@ -554,8 +573,8 @@ export default function DatingPage() {
               </div>
             </div>
             
-            <div className="p-6 pt-4 border-t border-gray-100 dark:border-gray-800 pb-[calc(env(safe-area-inset-bottom)+24px)]">
-              <button onClick={() => setShowFilters(false)} className="w-full py-4 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black rounded-2xl active:scale-95 transition-transform shadow-lg shadow-pink-500/25">
+            <div className="p-6 pt-4 border-t border-gray-800 pb-[calc(env(safe-area-inset-bottom)+24px)]">
+              <button onClick={() => setShowFilters(false)} className="w-full py-4 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black text-[15px] rounded-2xl active:scale-95 transition-transform shadow-lg shadow-pink-500/25">
                 Показать результаты
               </button>
             </div>
@@ -568,13 +587,13 @@ export default function DatingPage() {
       {/* ========================================== */}
       {detailedProfile && (
         <div className="fixed inset-0 z-[250] bg-gray-950/90 backdrop-blur-sm flex justify-center items-end md:items-center p-0 md:p-4 animate-fade-in" onClick={() => setDetailedProfile(null)}>
-          <div className="bg-white dark:bg-gray-900 w-full md:w-[460px] h-[95vh] md:h-auto md:max-h-[90vh] overflow-y-auto custom-scrollbar rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col relative animate-slide-up transition-colors" onClick={e => e.stopPropagation()}>
+          <div className="bg-gray-900 w-full md:w-[460px] h-[95vh] md:h-auto md:max-h-[90vh] overflow-y-auto custom-scrollbar rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col relative animate-slide-up border border-gray-800" onClick={e => e.stopPropagation()}>
             
-            <div className="relative h-[45vh] md:h-[50vh] bg-gray-100 dark:bg-gray-800 shrink-0">
+            <div className="relative h-[45vh] md:h-[50vh] bg-gray-800 shrink-0">
               <img src={detailedProfile.gallery[photoIndex]} className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-transparent pointer-events-none" />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-transparent pointer-events-none" />
               
-              <button onClick={() => setDetailedProfile(null)} className="absolute top-4 right-4 w-10 h-10 bg-black/30 hover:bg-black/50 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-md z-10">
+              <button onClick={() => setDetailedProfile(null)} className="absolute top-4 right-4 w-10 h-10 bg-black/40 hover:bg-black/60 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-md z-10">
                 <ChevronDown size={24} />
               </button>
               
@@ -585,13 +604,13 @@ export default function DatingPage() {
                       <div key={i} className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${i === photoIndex ? 'bg-white shadow-sm' : 'bg-white/30'}`} />
                     ))}
                   </div>
-                  <button onClick={(e) => handlePhotoClick('prev', e, detailedProfile.gallery.length)} className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/20 rounded-full flex items-center justify-center text-white backdrop-blur-sm z-10"><ChevronLeft size={24}/></button>
-                  <button onClick={(e) => handlePhotoClick('next', e, detailedProfile.gallery.length)} className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/20 rounded-full flex items-center justify-center text-white backdrop-blur-sm z-10"><ChevronRight size={24}/></button>
+                  <button onClick={(e) => handlePhotoClick('prev', e, detailedProfile.gallery.length)} className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/30 rounded-full flex items-center justify-center text-white backdrop-blur-sm z-10"><ChevronLeft size={24}/></button>
+                  <button onClick={(e) => handlePhotoClick('next', e, detailedProfile.gallery.length)} className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/30 rounded-full flex items-center justify-center text-white backdrop-blur-sm z-10"><ChevronRight size={24}/></button>
                 </>
               )}
             </div>
             
-            <div className="flex-1 flex flex-col relative">
+            <div className="flex-1 flex flex-col relative bg-gray-900">
               {/* Уведомление о взаимной симпатии */}
               {incomingLikes.has(detailedProfile.id) && !myLikesProfiles.some(p => p.id === detailedProfile.id) && (
                 <div className="mx-6 mt-6 p-4 bg-gradient-to-r from-pink-500 to-rose-500 rounded-2xl text-white shadow-lg shadow-pink-500/20 flex flex-col gap-1">
@@ -603,16 +622,16 @@ export default function DatingPage() {
               <div className="p-6">
                 <div className="flex items-start justify-between mb-6">
                   <div>
-                    <h2 className="text-[28px] font-black text-gray-900 dark:text-white flex items-center gap-2 leading-none mb-2">
+                    <h2 className="text-[28px] font-black text-white flex items-center gap-2 leading-none mb-2">
                       {detailedProfile.name}
-                      {detailedProfile.age ? <span className="font-medium text-gray-500">{detailedProfile.age}</span> : ''}
+                      {detailedProfile.age ? <span className="font-medium text-gray-400">{detailedProfile.age}</span> : ''}
                     </h2>
                     <div className="flex items-center gap-3 mt-1">
-                      <div className="flex items-center gap-1.5 text-[14px] font-semibold text-gray-500 dark:text-gray-400">
-                        <div className={`w-2 h-2 rounded-full ${getOnlineStatus(detailedProfile.lastSeen!) === 'В сети' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+                      <div className="flex items-center gap-1.5 text-[14px] font-semibold text-gray-400">
+                        <div className={`w-2 h-2 rounded-full ${getOnlineStatus(detailedProfile.lastSeen!) === 'В сети' ? 'bg-green-500 animate-pulse' : 'bg-gray-600'}`} />
                         {getOnlineStatus(detailedProfile.lastSeen!)}
                       </div>
-                      <div className="flex items-center gap-1 text-[13px] font-medium text-gray-400">
+                      <div className="flex items-center gap-1 text-[13px] font-medium text-gray-500">
                         <MapPin size={14} /> {detailedProfile.location || 'Поблизости'}
                       </div>
                     </div>
@@ -632,17 +651,17 @@ export default function DatingPage() {
 
                 {detailedProfile.role && (
                   <div className="mb-6">
-                    <h3 className="text-[13px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2"><Info size={16}/> О себе</h3>
-                    <p className="text-[16px] text-gray-800 dark:text-gray-200 leading-relaxed bg-gray-50 dark:bg-gray-800/50 p-4 rounded-[20px]">{detailedProfile.role}</p>
+                    <h3 className="text-[13px] font-bold text-gray-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Info size={16}/> О себе</h3>
+                    <p className="text-[15px] text-gray-300 leading-relaxed bg-gray-800 p-4 rounded-[20px]">{detailedProfile.role}</p>
                   </div>
                 )}
                 
                 {detailedProfile.interests && detailedProfile.interests.length > 0 && (
                   <div className="mb-6">
-                    <h3 className="text-[13px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2"><Sparkles size={16}/> Интересы</h3>
+                    <h3 className="text-[13px] font-bold text-gray-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Sparkles size={16}/> Интересы</h3>
                     <div className="flex flex-wrap gap-2">
                       {detailedProfile.interests.map((tag, idx) => (
-                        <span key={idx} className="bg-white dark:bg-gray-800 px-4 py-2 rounded-xl text-[14px] font-bold text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 shadow-sm transition-colors">
+                        <span key={idx} className="bg-gray-800 px-4 py-2 rounded-xl text-[13px] font-bold text-gray-300 border border-gray-700 shadow-sm transition-colors">
                           {tag}
                         </span>
                       ))}
@@ -652,16 +671,16 @@ export default function DatingPage() {
               </div>
 
               {/* КНОПКИ ДЕЙСТВИЙ ВНИЗУ АНКЕТЫ */}
-              <div className="mt-auto sticky bottom-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-t border-gray-100 dark:border-gray-800 pt-4 pb-[calc(env(safe-area-inset-bottom)+16px)] px-4 flex gap-3 z-20">
+              <div className="mt-auto sticky bottom-0 bg-gray-900/95 backdrop-blur-xl border-t border-gray-800 pt-4 pb-[calc(env(safe-area-inset-bottom)+16px)] px-4 flex gap-3 z-20">
                 {myLikesProfiles.some(p => p.id === detailedProfile.id) ? (
-                  <div className="w-full flex justify-center py-4 bg-gray-100 dark:bg-gray-800 text-gray-500 rounded-2xl font-bold flex items-center gap-2 cursor-not-allowed border border-gray-200 dark:border-gray-700">
+                  <div className="w-full flex justify-center py-4 bg-gray-800 text-gray-400 rounded-2xl font-bold flex items-center gap-2 cursor-not-allowed border border-gray-700">
                     <Check size={20} /> {incomingLikes.has(detailedProfile.id) ? 'У вас взаимная симпатия!' : 'Симпатия отправлена'}
                   </div>
                 ) : (
                   <>
                     <button 
                       onClick={() => processSwipe('pass', detailedProfile)} 
-                      className="flex-1 py-4 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-2xl font-bold flex justify-center items-center gap-2 transition-colors border border-gray-200 dark:border-gray-700"
+                      className="flex-1 py-4 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-2xl font-bold flex justify-center items-center gap-2 transition-colors border border-gray-700"
                     >
                       <X size={20} /> Скрыть
                     </button>

@@ -168,7 +168,7 @@ const SwipeableContact = ({ contact, isSelected, isPinned, onClick, onContextMen
   };
 
   return (
-    <div onContextMenu={(e) => onContextMenu(e, contact.id)} className="relative w-full overflow-hidden bg-gray-50 dark:bg-gray-950 border-b border-gray-100/50 dark:border-gray-800/50">
+    <div onContextMenu={(e) => onContextMenu(e, contact.id)} className="relative w-full overflow-hidden bg-[#F2F2F7] dark:bg-gray-950 border-b border-gray-100/50 dark:border-gray-800/50">
       <div className="absolute inset-0 flex justify-between">
         <div className={`w-1/2 ${rightBgClass} flex items-center pl-4 text-white transition-opacity ${offsetX > 0 ? 'opacity-100' : 'opacity-0'}`}><RightIcon size={24} className="text-white" /></div>
         <div className={`w-1/2 flex items-center justify-end pr-4 text-white transition-opacity ${offsetX < 0 ? 'opacity-100' : 'opacity-0'} ${leftBgClass}`}><LeftIcon size={24} className="text-white" /></div>
@@ -216,6 +216,10 @@ export default function ChatsPage() {
   const [pinnedChats, setPinnedChats] = useState<string[]>(() => JSON.parse(localStorage.getItem(`pinned_${user?.uid}`) || '[]'));
   const [chatActivity, setChatActivity] = useState<Record<string, number>>(() => JSON.parse(localStorage.getItem(`activity_${user?.uid}`) || '{}'));
 
+  // Индивидуальные настройки уведомлений для чатов
+  const [chatSoundPrefs, setChatSoundPrefs] = useState<Record<string, boolean>>(() => JSON.parse(localStorage.getItem(`chat_sound_prefs_${user?.uid}`) || '{}'));
+  const [chatPushPrefs, setChatPushPrefs] = useState<Record<string, boolean>>(() => JSON.parse(localStorage.getItem(`chat_push_prefs_${user?.uid}`) || '{}'));
+
   // Стейт Контекстного меню
   const [contextMenu, setContextMenu] = useState<{
     type: 'message' | 'contact' | null;
@@ -235,10 +239,8 @@ export default function ChatsPage() {
   const [showScrollButton, setShowScrollButton] = useState(false); 
   const [isExpanded, setIsExpanded] = useState(false);
   
-  // Настройки и системные стейты
+  // Системные стейты
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
-  const [soundEnabled, setSoundEnabled] = useState(() => JSON.parse(localStorage.getItem('chat_sound') ?? 'true'));
-  const [pushEnabled, setPushEnabled] = useState(() => JSON.parse(localStorage.getItem('chat_push') ?? 'true'));
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   
@@ -246,8 +248,10 @@ export default function ChatsPage() {
   const currentChatRef = useRef<string | null>(null); 
   const activeContactIdRef = useRef<string | null>(null);
   const globalUsersRef = useRef<UserProfile[]>([]);
-  const soundEnabledRef = useRef(soundEnabled);
-  const pushEnabledRef = useRef(pushEnabled);
+  
+  const chatSoundPrefsRef = useRef(chatSoundPrefs);
+  const chatPushPrefsRef = useRef(chatPushPrefs);
+  
   const checkoutProcessedRef = useRef(false);
   const isSendingRef = useRef(false);
   const actionProcessingRef = useRef(false);
@@ -266,13 +270,22 @@ export default function ChatsPage() {
 
   useEffect(() => { activeContactIdRef.current = selectedContact?.id || null; }, [selectedContact]);
   useEffect(() => { globalUsersRef.current = globalUsers; }, [globalUsers]);
-  useEffect(() => { soundEnabledRef.current = soundEnabled; localStorage.setItem('chat_sound', JSON.stringify(soundEnabled)); }, [soundEnabled]);
-  useEffect(() => { pushEnabledRef.current = pushEnabled; localStorage.setItem('chat_push', JSON.stringify(pushEnabled)); }, [pushEnabled]);
   
   // Сохранение стейтов сортировки локально
   useEffect(() => { if (user) localStorage.setItem(`archive_${user.uid}`, JSON.stringify(archivedContacts)); }, [archivedContacts, user]);
   useEffect(() => { if (user) localStorage.setItem(`pinned_${user.uid}`, JSON.stringify(pinnedChats)); }, [pinnedChats, user]);
   useEffect(() => { if (user) localStorage.setItem(`activity_${user.uid}`, JSON.stringify(chatActivity)); }, [chatActivity, user]);
+
+  // Сохранение настроек звука и пуш
+  useEffect(() => { 
+    chatSoundPrefsRef.current = chatSoundPrefs;
+    if (user) localStorage.setItem(`chat_sound_prefs_${user.uid}`, JSON.stringify(chatSoundPrefs)); 
+  }, [chatSoundPrefs, user]);
+  
+  useEffect(() => { 
+    chatPushPrefsRef.current = chatPushPrefs;
+    if (user) localStorage.setItem(`chat_push_prefs_${user.uid}`, JSON.stringify(chatPushPrefs)); 
+  }, [chatPushPrefs, user]);
 
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
@@ -281,14 +294,6 @@ export default function ChatsPage() {
     window.addEventListener('offline', handleOffline);
     return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
   }, []);
-
-  const handleTogglePush = () => {
-    const newVal = !pushEnabled;
-    setPushEnabled(newVal);
-    if (newVal && "Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-  };
 
   const showToast = (senderId: string, senderName: string, text: string, avatar: string) => {
     const id = Date.now().toString();
@@ -349,11 +354,17 @@ export default function ChatsPage() {
               const avatar = senderProfile?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}`;
               const body = msg.text || (msg.imageUrl ? '📷 Фотография' : 'Вложение');
 
-              if (soundEnabledRef.current) playNotificationSound();
-              showToast(msg.senderId, senderName, body, avatar);
+              // Индивидуальные проверки звука и пуш
+              const isSoundEnabled = chatSoundPrefsRef.current[msg.senderId] !== false; // По умолчанию включено
+              const isPushEnabled = chatPushPrefsRef.current[msg.senderId] !== false; // По умолчанию включено
 
-              if (pushEnabledRef.current && "Notification" in window && Notification.permission === "granted" && document.hidden) {
-                new Notification(`Новое сообщение от ${senderName}`, { body, icon: avatar });
+              if (isSoundEnabled) playNotificationSound();
+              
+              if (isPushEnabled) {
+                showToast(msg.senderId, senderName, body, avatar);
+                if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
+                  new Notification(`Новое сообщение от ${senderName}`, { body, icon: avatar });
+                }
               }
             }
           }
@@ -667,13 +678,26 @@ export default function ChatsPage() {
     }
   };
 
+  // ФУНКЦИИ УПРАВЛЕНИЯ ЗВУКОМ И ПУШ ДЛЯ КОНКРЕТНОГО ЧАТА
+  const toggleChatSound = (contactId: string) => {
+    setChatSoundPrefs(prev => ({ ...prev, [contactId]: prev[contactId] === false ? true : false }));
+  };
+
+  const toggleChatPush = (contactId: string) => {
+    setChatPushPrefs(prev => ({ ...prev, [contactId]: prev[contactId] === false ? true : false }));
+    // Запрашиваем права, если включили пуши и их еще нет
+    if ((chatPushPrefs[contactId] === false || chatPushPrefs[contactId] === undefined) && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  };
+
   const openContextMenu = (e: React.MouseEvent, type: 'message' | 'contact', data: any) => {
     e.preventDefault();
     let x = e.clientX;
     let y = e.clientY;
     
-    if (window.innerWidth - x < 220) x = window.innerWidth - 220;
-    if (window.innerHeight - y < 250) y = window.innerHeight - 250;
+    if (window.innerWidth - x < 240) x = window.innerWidth - 240;
+    if (window.innerHeight - y < 300) y = window.innerHeight - 300; // Увеличили отступ снизу из-за новых пунктов
 
     setContextMenu({ type, x, y, data });
   };
@@ -760,7 +784,7 @@ export default function ChatsPage() {
       {contextMenu.type && (
         <div 
           style={{ top: contextMenu.y, left: contextMenu.x }}
-          className="fixed z-[9999] bg-white dark:bg-gray-800 shadow-[0_8px_30px_rgba(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.5)] rounded-2xl border border-gray-100 dark:border-gray-700 py-2 min-w-[200px] animate-fade-in text-[14px] font-medium transition-colors"
+          className="fixed z-[9999] bg-white dark:bg-gray-800 shadow-[0_8px_30px_rgba(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.5)] rounded-2xl border border-gray-100 dark:border-gray-700 py-2 min-w-[220px] animate-fade-in text-[14px] font-medium transition-colors"
           onClick={(e) => e.stopPropagation()}
           onContextMenu={(e) => e.preventDefault()}
         >
@@ -778,14 +802,27 @@ export default function ChatsPage() {
           )}
           {contextMenu.type === 'contact' && (
             <>
-              <button onClick={() => { togglePin(contextMenu.data); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-800 dark:text-gray-200 flex items-center gap-3 transition-colors">
-                {pinnedChats.includes(contextMenu.data) ? <><PinOff size={18} className="text-gray-500 dark:text-gray-400"/> Открепить</> : <><Pin size={18} className="text-gray-500 dark:text-gray-400"/> Закрепить чат</>}
+              <button onClick={() => { togglePin(contextMenu.data); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-800 dark:text-gray-200 flex items-center justify-between transition-colors">
+                <span className="flex items-center gap-3">{pinnedChats.includes(contextMenu.data) ? <><PinOff size={18} className="text-gray-500 dark:text-gray-400"/> Открепить</> : <><Pin size={18} className="text-gray-500 dark:text-gray-400"/> Закрепить чат</>}</span>
               </button>
-              <button onClick={() => { toggleArchive(contextMenu.data); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-800 dark:text-gray-200 flex items-center gap-3 transition-colors">
-                {archivedContacts.includes(contextMenu.data) ? <><ArchiveRestore size={18} className="text-gray-500 dark:text-gray-400"/> Вернуть из архива</> : <><Archive size={18} className="text-gray-500 dark:text-gray-400"/> Архивировать</>}
+              <button onClick={() => { toggleArchive(contextMenu.data); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-800 dark:text-gray-200 flex items-center justify-between transition-colors">
+                <span className="flex items-center gap-3">{archivedContacts.includes(contextMenu.data) ? <><ArchiveRestore size={18} className="text-gray-500 dark:text-gray-400"/> Вернуть из архива</> : <><Archive size={18} className="text-gray-500 dark:text-gray-400"/> Архивировать</>}</span>
               </button>
+              
               <div className="h-px bg-gray-100 dark:bg-gray-700 my-1 mx-2"></div>
-              <button onClick={() => { handleDeleteChat(contextMenu.data); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500 flex items-center gap-3 transition-colors"><Trash2 size={18}/> Удалить чат (очистить)</button>
+              
+              {/* НАСТРОЙКИ УВЕДОМЛЕНИЙ */}
+              <button onClick={() => { toggleChatSound(contextMenu.data); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-800 dark:text-gray-200 flex items-center justify-between transition-colors">
+                <span className="flex items-center gap-3"><Volume2 size={18} className="text-gray-500 dark:text-gray-400"/> Звук сообщений</span>
+                <span className={`text-[12px] font-bold ${chatSoundPrefs[contextMenu.data] === false ? 'text-gray-400' : 'text-blue-500'}`}>{chatSoundPrefs[contextMenu.data] === false ? 'Выкл' : 'Вкл'}</span>
+              </button>
+              <button onClick={() => { toggleChatPush(contextMenu.data); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-800 dark:text-gray-200 flex items-center justify-between transition-colors">
+                <span className="flex items-center gap-3"><Bell size={18} className="text-gray-500 dark:text-gray-400"/> Push-уведомления</span>
+                <span className={`text-[12px] font-bold ${chatPushPrefs[contextMenu.data] === false ? 'text-gray-400' : 'text-blue-500'}`}>{chatPushPrefs[contextMenu.data] === false ? 'Выкл' : 'Вкл'}</span>
+              </button>
+
+              <div className="h-px bg-gray-100 dark:bg-gray-700 my-1 mx-2"></div>
+              <button onClick={() => { handleDeleteChat(contextMenu.data); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500 flex items-center gap-3 transition-colors"><Trash2 size={18}/> Удалить чат</button>
             </>
           )}
         </div>
@@ -989,7 +1026,7 @@ export default function ChatsPage() {
       </div>
       
       {/* ПРАВАЯ ПАНЕЛЬ: ЧАТ */}
-      <div className={`flex-1 flex flex-col bg-[#F2F2F7] dark:bg-gray-950 relative min-w-0 z-20 transition-colors ${!selectedContact ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`flex-1 flex flex-col bg-[#F2F2F7] dark:bg-[#0F0F0F] relative min-w-0 z-20 transition-colors ${!selectedContact ? 'hidden md:flex' : 'flex'}`}>
         
         {selectedContact && activeContactData ? (
           <>
@@ -1014,16 +1051,6 @@ export default function ChatsPage() {
                     )}
                   </div>
                 </div>
-              </div>
-              
-              {/* Доп настройки чата (Звук, Уведомления) */}
-              <div className="hidden md:flex items-center gap-1.5 shrink-0">
-                <button onClick={() => setSoundEnabled(!soundEnabled)} className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${soundEnabled ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}>
-                  {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-                </button>
-                <button onClick={handleTogglePush} className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${pushEnabled ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}>
-                  {pushEnabled ? <Bell size={16} /> : <BellOff size={16} />}
-                </button>
               </div>
             </div>
             

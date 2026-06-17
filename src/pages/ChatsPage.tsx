@@ -10,7 +10,7 @@ import {
   Bookmark, ArrowLeft, Image as ExternalLink,
   ShoppingBag, Truck, CheckCircle2, Package, 
   Users, Zap, Clock, Archive, ArchiveRestore, Reply,
-  Trash2, Edit2, ChevronDown, WifiOff, Volume2, VolumeX, Bell, BellOff,
+  Trash2, Edit2, ChevronDown, WifiOff, Volume2, Bell,
   Phone, Globe, Store, MessageSquare, Pin, PinOff, Maximize2, Minimize2, Info
 } from 'lucide-react';
 

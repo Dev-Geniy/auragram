@@ -8,8 +8,8 @@ import {
   Camera, User, Briefcase, 
   Phone, Globe, Package, Plus, Trash2, Image as ImageIcon, 
   Loader2, Edit2, Moon, Sun, Zap, MessageSquareText,
-  Target, LayoutList, GripVertical, Heart, Store, MessageCircle, ShoppingBag, LineChart, LayoutDashboard, Settings, Check, LogOut,
-  MapPin, Wifi
+  Target, LayoutList, GripVertical, Heart, Store, MessageCircle, ShoppingBag, LineChart, LayoutDashboard, Settings, X, Check, LogOut,
+  MapPin, Wifi, Users
 } from 'lucide-react';
 
 interface Product {
@@ -27,8 +27,8 @@ const BUSINESS_CATEGORIES = [
   'Консалтинг & Услуги',
   'E-commerce & Товары',
   'Образование',
-  'Недвижимость (Аренда/Продажа)', // <-- НОВАЯ КАТЕГОРИЯ
-  'Цифровая инфо (Курсы, Книги)',  // <-- НОВАЯ КАТЕГОРИЯ
+  'Недвижимость (Аренда/Продажа)', 
+  'Цифровая инфо (Курсы, Книги)',  
   'Другое', 
 ];
 
@@ -112,7 +112,9 @@ export default function ProfilePage() {
     role: '',
     avatar: '',
     category: '', 
-    location: '', // <-- Добавили локальное поле локации
+    location: '', 
+    gender: '', // <-- Добавлено для Dating
+    age: '' as number | string, // <-- Добавлено для Dating
     contacts: { phone: '', email: '', website: '' },
     products: [] as Product[],
     goals: [] as string[],
@@ -155,6 +157,8 @@ export default function ProfilePage() {
             avatar: data.avatar || user.photoURL || '',
             category: data.category || '',
             location: data.location || '',
+            gender: data.gender || '',
+            age: data.age || '',
             contacts: data.contacts || { phone: '', email: '', website: '' },
             products: data.products || [],
             goals: data.goals || [],
@@ -385,6 +389,8 @@ export default function ProfilePage() {
   };
 
   const blockClass = "bg-white dark:bg-gray-900 rounded-[20px] overflow-hidden border border-gray-200/50 dark:border-gray-800 mb-6 transition-colors shadow-sm";
+  const inputRowClass = "flex items-center px-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0";
+  const inputClass = "flex-1 bg-transparent text-[15px] font-medium text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none ml-3 w-full";
 
   if (isLoading) {
     return <div className="flex-1 bg-[#F2F2F7] dark:bg-gray-950 flex justify-center items-center transition-colors"><Loader2 className="animate-spin text-gray-400" size={32} /></div>;
@@ -415,7 +421,7 @@ export default function ProfilePage() {
       <div className="max-w-2xl mx-auto p-4 md:p-6">
         
         {/* ИНФОРМАЦИЯ О ПРОФИЛЕ (НОВАЯ КОМПОНОВКА: АВАТАР + ДАННЫЕ) */}
-        <div className="bg-white dark:bg-gray-900 rounded-[24px] p-5 shadow-sm border border-gray-200/50 dark:border-gray-800 mb-8 flex gap-5 items-start transition-colors">
+        <div className="bg-white dark:bg-gray-900 rounded-[24px] p-5 shadow-sm border border-gray-200/50 dark:border-gray-800 mb-6 flex gap-5 items-start transition-colors">
           
           <div className="flex flex-col items-center shrink-0 mt-1">
             <div className="relative group cursor-pointer w-20 h-20 sm:w-24 sm:h-24" onClick={() => avatarInputRef.current?.click()}>
@@ -440,8 +446,38 @@ export default function ProfilePage() {
           </div>
         </div>
 
+        {/* АНКЕТНЫЕ ДАННЫЕ (Для Маркета и Знакомств) */}
+        <h2 className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-2">Анкетные данные</h2>
+        <div className={blockClass}>
+          <div className={inputRowClass}>
+            <MapPin size={18} className="text-gray-400 dark:text-gray-500 shrink-0" />
+            <input type="text" placeholder="Город (например: Киев)" value={profile.location} onChange={(e) => setProfile({...profile, location: e.target.value})} className={inputClass} />
+          </div>
+          <div className="flex items-center px-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
+            <Users size={18} className="text-gray-400 dark:text-gray-500 shrink-0" />
+            <div className="flex-1 ml-3 flex gap-2">
+              <button 
+                onClick={() => setProfile({...profile, gender: 'Мужской'})} 
+                className={`flex-1 py-2 rounded-lg text-[13px] font-bold transition-all ${profile.gender === 'Мужской' ? 'bg-blue-500 text-white shadow-md shadow-blue-500/20' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+              >
+                Мужской
+              </button>
+              <button 
+                onClick={() => setProfile({...profile, gender: 'Женский'})} 
+                className={`flex-1 py-2 rounded-lg text-[13px] font-bold transition-all ${profile.gender === 'Женский' ? 'bg-pink-500 text-white shadow-md shadow-pink-500/20' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+              >
+                Женский
+              </button>
+            </div>
+          </div>
+          <div className={inputRowClass}>
+            <div className="w-[18px] text-center font-black text-gray-400 dark:text-gray-500 shrink-0 text-[12px]">18+</div>
+            <input type="number" placeholder="Ваш возраст" value={profile.age || ''} onChange={(e) => setProfile({...profile, age: e.target.value ? Number(e.target.value) : ''})} className={inputClass} />
+          </div>
+        </div>
+
         {/* ТИП АККАУНТА */}
-        <h2 className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-2">Тип аккаунта</h2>
+        <h2 className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-2 mt-8">Тип аккаунта</h2>
         <div className={blockClass}>
           <div className="flex bg-gray-100 dark:bg-gray-800 p-1 m-2 rounded-xl transition-colors">
             <button onClick={() => handleTypeChange('personal')} className={`flex-1 flex justify-center items-center gap-2 py-2 rounded-lg text-[14px] font-bold transition-all shadow-sm ${profile.type === 'personal' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white ring-1 ring-black/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 shadow-none'}`}><User size={16} /> Обычный</button>
@@ -510,13 +546,13 @@ export default function ProfilePage() {
 
             <h2 className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-2 mt-8">Контакты бизнеса</h2>
             <div className={blockClass}>
-              <div className="flex items-center px-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
+              <div className={inputRowClass}>
                 <Phone size={18} className="text-gray-400 dark:text-gray-500 shrink-0" />
-                <input type="text" placeholder="Телефон" value={profile.contacts.phone} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, phone: e.target.value}})} className="flex-1 bg-transparent text-[15px] font-medium text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none ml-3 w-full" />
+                <input type="text" placeholder="Телефон" value={profile.contacts.phone} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, phone: e.target.value}})} className={inputClass} />
               </div>
-              <div className="flex items-center px-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
+              <div className={inputRowClass}>
                 <Globe size={18} className="text-gray-400 dark:text-gray-500 shrink-0" />
-                <input type="text" placeholder="Сайт или ссылка" value={profile.contacts.website} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, website: e.target.value}})} className="flex-1 bg-transparent text-[15px] font-medium text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none ml-3 w-full" />
+                <input type="text" placeholder="Сайт или ссылка" value={profile.contacts.website} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, website: e.target.value}})} className={inputClass} />
               </div>
             </div>
 

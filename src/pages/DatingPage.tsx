@@ -5,7 +5,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
 import { 
   Heart, X, RefreshCw, MessageCircle, Star, 
-  MapPin, Info, Flame, Sparkles, ChevronDown, ChevronLeft, ChevronRight
+  MapPin, Flame, Sparkles, ChevronDown, ChevronLeft, ChevronRight, Zap
 } from 'lucide-react';
 
 interface DatingUser {
@@ -39,8 +39,7 @@ export default function DatingPage() {
   
   // Модалки
   const [matchData, setMatchData] = useState<DatingUser | null>(null);
-  const [detailedProfile, setDetailedProfile] = useState<DatingUser | null>(null); // Модалка детальной анкеты
-  const [showLikesModal, setShowLikesModal] = useState(false); // Модалка "Кому я понравился"
+  const [detailedProfile, setDetailedProfile] = useState<DatingUser | null>(null); 
 
   const startPanX = useRef(0);
   const startPanY = useRef(0);
@@ -61,10 +60,9 @@ export default function DatingPage() {
       const mySwipesQuery = query(collection(db, 'dating_swipes'), where('from', '==', user.uid));
       const mySwipesSnap = await getDocs(mySwipesQuery);
       const myLikedIds = new Set();
-      const myPassedIds = new Set();
       mySwipesSnap.docs.forEach(d => {
         if (d.data().action === 'like') myLikedIds.add(d.data().to);
-        if (d.data().action === 'pass') myPassedIds.add(d.data().to);
+        // Мы НЕ добавляем 'pass' в исключения, чтобы ленту можно было крутить бесконечно!
       });
 
       // 3. Кто лайкнул НАС
@@ -94,12 +92,12 @@ export default function DatingPage() {
             lastSeen: data.lastSeen?.toMillis?.() || 0
           };
 
-          // Добавляем в панель симпатий тех, кто лайкнул нас (и кого мы еще не свайпали или скипнули)
+          // Добавляем в верхнюю панель симпатий тех, кто лайкнул нас (и кого мы еще не лайкнули)
           if (likesMeIds.has(doc.id) && !myLikedIds.has(doc.id)) {
             incomingLikesData.push(profileData);
           }
 
-          // Показываем в ленте тех, кого мы ЕЩЕ НЕ ЛАЙКАЛИ (пропущенных можно показать по кругу)
+          // Показываем в ленте тех, кого мы ЕЩЕ НЕ ЛАЙКАЛИ
           if (!myLikedIds.has(doc.id)) {
             loadedProfiles.push(profileData);
           }
@@ -163,8 +161,10 @@ export default function DatingPage() {
     const swipedUser = customProfile || profiles[currentIndex];
     if (!swipedUser || !user) return;
 
+    const isMainCard = !customProfile || customProfile.id === profiles[currentIndex]?.id;
+
     // Анимация вылета только для карточек из основной ленты
-    if (!customProfile) {
+    if (isMainCard) {
       setLeaveX(action === 'like' ? 1000 : -1000);
       setTimeout(() => {
         setCurrentIndex(prev => prev + 1);
@@ -172,6 +172,12 @@ export default function DatingPage() {
         setPan({ x: 0, y: 0 });
         setLeaveX(0);
       }, 300);
+    } else {
+      // Если мы свайпнули из модалки профиля
+      setLikedProfilesData(prev => prev.filter(p => p.id !== swipedUser.id));
+      if (action === 'like') {
+        setProfiles(prev => prev.filter(p => p.id !== swipedUser.id));
+      }
     }
 
     try {
@@ -193,7 +199,8 @@ export default function DatingPage() {
         });
         setMatchData(swipedUser);
         setDetailedProfile(null);
-        setShowLikesModal(false);
+      } else if (action === 'pass' && customProfile) {
+         setDetailedProfile(null); // Просто закрываем профиль, если скипнули из модалки
       }
     } catch (error) { console.error("Ошибка сохранения свайпа:", error); }
   };
@@ -210,7 +217,6 @@ export default function DatingPage() {
     else setPhotoIndex(p => Math.min(maxPhotos - 1, p + 1));
   };
 
-  // Утилита: Время онлайна
   const getOnlineStatus = (lastSeen: number) => {
     if (!lastSeen) return 'Был(а) давно';
     const now = Date.now();
@@ -242,7 +248,7 @@ export default function DatingPage() {
     <div className="flex flex-col h-[100dvh] w-full overflow-hidden bg-gray-50 dark:bg-gray-950 relative select-none font-sans">
       
       {/* HEADER */}
-      <div className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl sticky top-0 z-20 px-4 md:px-6 py-3 flex items-center justify-between shrink-0 shadow-sm border-b border-gray-100 dark:border-gray-800">
+      <div className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl sticky top-0 z-20 px-4 md:px-6 py-3 flex items-center justify-between shrink-0 border-b border-gray-100 dark:border-gray-800">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-rose-400 rounded-[14px] flex items-center justify-center shadow-[0_4px_12px_rgba(236,72,153,0.3)]">
             <Flame size={20} className="text-white" strokeWidth={2.5} />
@@ -250,39 +256,53 @@ export default function DatingPage() {
           <h1 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white tracking-tight">Знакомства</h1>
         </div>
         
-        <div className="flex items-center gap-3">
-          {/* Кнопка "Симпатии" (Кто меня лайкнул) */}
-          {likedProfilesData.length > 0 && (
-            <button 
-              onClick={() => setShowLikesModal(true)}
-              className="relative w-10 h-10 rounded-full bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800 flex items-center justify-center transition-transform active:scale-95 group"
-            >
-              <Heart size={20} className="text-pink-500 fill-pink-500/50 group-hover:fill-pink-500 transition-colors" />
-              <div className="absolute -top-1 -right-1 bg-pink-500 text-white text-[10px] font-black w-4 h-4 flex items-center justify-center rounded-full shadow-sm ring-2 ring-white dark:ring-gray-900">
-                {likedProfilesData.length}
-              </div>
-            </button>
-          )}
-          <button onClick={fetchDatingData} className="w-10 h-10 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full flex items-center justify-center text-gray-600 dark:text-gray-300 transition-colors">
-            <RefreshCw size={18} />
-          </button>
-        </div>
+        <button onClick={fetchDatingData} className="w-10 h-10 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full flex items-center justify-center text-gray-600 dark:text-gray-300 transition-colors">
+          <RefreshCw size={18} />
+        </button>
       </div>
+
+      {/* ПАНЕЛЬ СИМПАТИЙ (НОВЫЙ БЛОК) */}
+      {likedProfilesData.length > 0 && (
+        <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-100 dark:border-gray-800 px-4 py-3 shrink-0 z-10 flex gap-4 overflow-x-auto scrollbar-none items-center shadow-sm animate-fade-in">
+          <div className="flex flex-col text-[10px] font-black uppercase tracking-widest text-pink-500 shrink-0 leading-tight border-r border-pink-100 dark:border-pink-900/30 pr-4">
+            <span>Ваши</span>
+            <span>Симпатии ({likedProfilesData.length})</span>
+          </div>
+          <div className="flex gap-3">
+            {likedProfilesData.map(p => (
+              <div 
+                key={p.id} 
+                onClick={() => setDetailedProfile(p)} 
+                className="relative w-14 h-14 shrink-0 rounded-full border-[3px] border-pink-500 p-[2px] cursor-pointer hover:scale-105 transition-transform shadow-[0_4px_10px_rgba(236,72,153,0.2)]"
+              >
+                <img src={p.gallery[0] || p.avatar} className="w-full h-full rounded-full object-cover" />
+                <div className="absolute -bottom-1 -right-1 bg-gradient-to-tr from-pink-500 to-rose-500 rounded-full p-1 border-2 border-white dark:border-gray-900 shadow-sm">
+                  <Heart size={12} className="text-white fill-white"/>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ОСНОВНАЯ ЗОНА (КАРТОЧКИ) */}
       <div className="flex-1 relative overflow-hidden flex justify-center items-center p-4 pb-2">
         
+        {/* ЕСЛИ АНКЕТЫ ЗАКОНЧИЛИСЬ (Цикл) */}
         {!activeProfile && (
-          <div className="flex flex-col items-center justify-center text-center animate-fade-in p-6">
+          <div className="flex flex-col items-center justify-center text-center animate-fade-in p-6 z-0">
             <div className="w-24 h-24 bg-pink-50 dark:bg-pink-500/10 rounded-[24px] rotate-12 flex items-center justify-center mb-6">
-              <Sparkles size={40} className="text-pink-500 -rotate-12" />
+              <RefreshCw size={40} className="text-pink-500 -rotate-12" />
             </div>
-            <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-2 tracking-tight">Пока что всё!</h2>
+            <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-2 tracking-tight">Новых анкет пока нет</h2>
             <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 max-w-xs mb-8">
-              Вы просмотрели всех пользователей. Загляните сюда чуть позже или начните сначала.
+              Вы просмотрели всех пользователей поблизости. Хотите пройтись по списку пропущенных заново?
             </p>
-            <button onClick={() => setCurrentIndex(0)} className="px-6 py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold rounded-2xl active:scale-95 transition-transform shadow-lg">
-              Смотреть снова
+            <button 
+              onClick={() => { setCurrentIndex(0); setPhotoIndex(0); }} 
+              className="px-6 py-4 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold rounded-2xl active:scale-95 transition-transform shadow-lg shadow-pink-500/25 flex items-center gap-2"
+            >
+              <Zap size={18} className="fill-white" /> Пойти на новый круг
             </button>
           </div>
         )}
@@ -419,17 +439,21 @@ export default function DatingPage() {
       {/* МОДАЛКА: ПОЛНЫЙ ПРОФИЛЬ */}
       {/* ========================================== */}
       {detailedProfile && (
-        <div className="fixed inset-0 z-[150] bg-gray-950/80 backdrop-blur-sm flex justify-center items-end md:items-center p-0 md:p-4 animate-fade-in" onClick={() => setDetailedProfile(null)}>
-          <div className="bg-white dark:bg-gray-900 w-full md:w-[460px] h-[90vh] md:h-auto md:max-h-[90vh] overflow-y-auto custom-scrollbar rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col relative animate-slide-up" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[150] bg-gray-950/90 backdrop-blur-sm flex justify-center items-end md:items-center p-0 md:p-4 animate-fade-in" onClick={() => setDetailedProfile(null)}>
+          <div className="bg-white dark:bg-gray-900 w-full md:w-[460px] h-[95vh] md:h-auto md:max-h-[90vh] overflow-y-auto custom-scrollbar rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col relative animate-slide-up" onClick={e => e.stopPropagation()}>
             
-            {/* Галерея */}
-            <div className="relative h-[50vh] bg-gray-100 dark:bg-gray-800 shrink-0">
+            {/* Галерея анкеты */}
+            <div className="relative h-[45vh] md:h-[50vh] bg-gray-100 dark:bg-gray-800 shrink-0">
               <img src={detailedProfile.gallery[photoIndex]} className="w-full h-full object-cover" />
-              <button onClick={() => setDetailedProfile(null)} className="absolute top-4 right-4 w-10 h-10 bg-black/30 hover:bg-black/50 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-md z-10"><ChevronDown size={24} /></button>
+              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-transparent pointer-events-none" />
+              
+              <button onClick={() => setDetailedProfile(null)} className="absolute top-4 right-4 w-10 h-10 bg-black/30 hover:bg-black/50 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-md z-10">
+                <ChevronDown size={24} />
+              </button>
               
               {detailedProfile.gallery.length > 1 && (
                 <>
-                  <div className="absolute top-4 left-4 right-16 flex gap-1 z-10">
+                  <div className="absolute top-4 left-4 right-16 flex gap-1 z-10 pointer-events-none">
                     {detailedProfile.gallery.map((_, i) => (
                       <div key={i} className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${i === photoIndex ? 'bg-white shadow-sm' : 'bg-white/30'}`} />
                     ))}
@@ -440,97 +464,67 @@ export default function DatingPage() {
               )}
             </div>
             
-            <div className="p-6 relative">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h2 className="text-[28px] font-black text-gray-900 dark:text-white flex items-center gap-2 leading-none">
-                    {detailedProfile.name}
-                    {detailedProfile.age ? <span className="font-medium text-gray-500">{detailedProfile.age}</span> : ''}
-                  </h2>
-                  <div className="flex items-center gap-1.5 text-[14px] font-semibold text-gray-500 dark:text-gray-400 mt-2">
-                    <div className={`w-2 h-2 rounded-full ${getOnlineStatus(detailedProfile.lastSeen!) === 'В сети' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
-                    {getOnlineStatus(detailedProfile.lastSeen!)}
-                  </div>
-                </div>
-                
-                {/* Кнопка отправки сообщения прямо из анкеты */}
-                <button onClick={() => navigate('/chats', { state: { selectedUserId: detailedProfile.id } })} className="w-12 h-12 bg-blue-500 hover:bg-blue-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-500/30 transition-transform active:scale-95 shrink-0">
-                  <MessageCircle size={22} className="fill-white" />
-                </button>
-              </div>
-
-              {detailedProfile.role && (
-                <div className="mb-6">
-                  <h3 className="text-[13px] font-bold text-gray-400 uppercase tracking-widest mb-2">О себе</h3>
-                  <p className="text-[16px] text-gray-800 dark:text-gray-200 leading-relaxed bg-gray-50 dark:bg-gray-800/50 p-4 rounded-[20px]">{detailedProfile.role}</p>
-                </div>
-              )}
+            <div className="flex-1 flex flex-col relative">
               
-              {detailedProfile.interests && detailedProfile.interests.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="text-[13px] font-bold text-gray-400 uppercase tracking-widest mb-2">Интересы</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {detailedProfile.interests.map((tag, idx) => (
-                      <span key={idx} className="bg-white dark:bg-gray-800 px-4 py-2 rounded-xl text-[14px] font-bold text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 shadow-sm">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
+              {/* УВЕДОМЛЕНИЕ ЕСЛИ ЭТО ВЗАИМНАЯ СИМПАТИЯ (Кто-то лайкнул вас) */}
+              {incomingLikes.has(detailedProfile.id) && (
+                <div className="mx-6 mt-6 p-4 bg-gradient-to-r from-pink-500 to-rose-500 rounded-2xl text-white shadow-lg shadow-pink-500/20 flex flex-col gap-1">
+                  <h4 className="font-black text-[16px] flex items-center gap-1.5 tracking-tight"><Heart size={18} className="fill-white animate-pulse" /> Вы понравились!</h4>
+                  <p className="text-[13px] font-medium text-pink-50">Ответьте взаимностью, чтобы образовать пару и начать переписку.</p>
                 </div>
               )}
 
-              {/* Если профиль активен в ленте (не из лайков) - показываем большие кнопки свайпа внизу модалки */}
-              {detailedProfile.id === activeProfile?.id && (
-                <div className="flex gap-4 pt-6 border-t border-gray-100 dark:border-gray-800 mt-4">
-                  <button onClick={() => { setDetailedProfile(null); handleButtonSwipe('pass'); }} className="flex-1 py-4 bg-gray-100 dark:bg-gray-800 hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-500 rounded-2xl font-black flex justify-center items-center gap-2 transition-colors">
-                    <X size={20} /> Пропустить
-                  </button>
-                  <button onClick={() => { setDetailedProfile(null); handleButtonSwipe('like'); }} className="flex-1 py-4 bg-gray-100 dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-900/30 text-green-500 rounded-2xl font-black flex justify-center items-center gap-2 transition-colors">
-                    <Heart size={20} className="fill-green-500/20" /> Лайк
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================== */}
-      {/* МОДАЛКА "СИМПАТИИ" (Кто лайкнул) */}
-      {/* ========================================== */}
-      {showLikesModal && (
-        <div className="fixed inset-0 z-[160] bg-gray-950/80 backdrop-blur-sm flex justify-center items-end md:items-center p-0 md:p-4 animate-fade-in" onClick={() => setShowLikesModal(false)}>
-          <div className="bg-white dark:bg-gray-900 w-full md:w-[420px] max-h-[85vh] overflow-y-auto custom-scrollbar rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col relative animate-slide-up" onClick={e => e.stopPropagation()}>
-            <div className="p-6 pb-4 flex items-center justify-between border-b border-gray-100 dark:border-gray-800 sticky top-0 bg-white/90 dark:bg-gray-900/90 backdrop-blur z-10">
-              <h2 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
-                Симпатии <span className="bg-pink-100 text-pink-500 text-[12px] px-2 py-0.5 rounded-lg">{likedProfilesData.length}</span>
-              </h2>
-              <button onClick={() => setShowLikesModal(false)} className="w-8 h-8 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-500"><X size={18} /></button>
-            </div>
-            
-            <div className="p-4 grid grid-cols-2 gap-3">
-              {likedProfilesData.map(p => (
-                <div key={p.id} onClick={() => setDetailedProfile(p)} className="bg-gray-50 dark:bg-gray-800 rounded-2xl overflow-hidden cursor-pointer group border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all">
-                  <div className="relative h-40">
-                    <img src={p.gallery[0] || p.avatar} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-transparent to-transparent opacity-80" />
-                    <div className="absolute bottom-2 left-2 right-2">
-                      <h4 className="text-white font-bold text-[14px] truncate">{p.name} {p.age && <span className="font-normal opacity-80">{p.age}</span>}</h4>
+              <div className="p-6">
+                <div className="flex items-start justify-between mb-6">
+                  <div>
+                    <h2 className="text-[28px] font-black text-gray-900 dark:text-white flex items-center gap-2 leading-none">
+                      {detailedProfile.name}
+                      {detailedProfile.age ? <span className="font-medium text-gray-500">{detailedProfile.age}</span> : ''}
+                    </h2>
+                    <div className="flex items-center gap-1.5 text-[14px] font-semibold text-gray-500 dark:text-gray-400 mt-2">
+                      <div className={`w-2 h-2 rounded-full ${getOnlineStatus(detailedProfile.lastSeen!) === 'В сети' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+                      {getOnlineStatus(detailedProfile.lastSeen!)}
                     </div>
                   </div>
-                  <div className="p-2 flex gap-1">
-                    <button onClick={(e) => { e.stopPropagation(); processSwipe('pass', p); }} className="flex-1 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-500 hover:text-rose-500 rounded-lg flex justify-center transition-colors"><X size={16} /></button>
-                    <button onClick={(e) => { e.stopPropagation(); processSwipe('like', p); }} className="flex-1 py-1.5 bg-pink-100 dark:bg-pink-900/30 text-pink-500 hover:bg-pink-500 hover:text-white rounded-lg flex justify-center transition-colors"><Heart size={16} className="fill-current" /></button>
-                  </div>
                 </div>
-              ))}
-            </div>
-            {likedProfilesData.length === 0 && (
-              <div className="p-10 text-center text-gray-500 dark:text-gray-400">
-                <Heart size={40} className="mx-auto mb-3 opacity-20" />
-                <p className="font-medium text-[15px]">Пока новых симпатий нет. Продолжайте свайпать!</p>
+
+                {detailedProfile.role && (
+                  <div className="mb-6">
+                    <h3 className="text-[13px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2"><Info size={16}/> О себе</h3>
+                    <p className="text-[16px] text-gray-800 dark:text-gray-200 leading-relaxed bg-gray-50 dark:bg-gray-800/50 p-4 rounded-[20px]">{detailedProfile.role}</p>
+                  </div>
+                )}
+                
+                {detailedProfile.interests && detailedProfile.interests.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-[13px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2"><Sparkles size={16}/> Интересы</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {detailedProfile.interests.map((tag, idx) => (
+                        <span key={idx} className="bg-white dark:bg-gray-800 px-4 py-2 rounded-xl text-[14px] font-bold text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 shadow-sm">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+
+              {/* КНОПКИ ДЕЙСТВИЙ ВНИЗУ АНКЕТЫ */}
+              <div className="mt-auto sticky bottom-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-t border-gray-100 dark:border-gray-800 p-4 pb-safe flex gap-3 z-20">
+                <button 
+                  onClick={() => processSwipe('pass', detailedProfile)} 
+                  className="flex-1 py-4 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-2xl font-bold flex justify-center items-center gap-2 transition-colors"
+                >
+                  <X size={20} /> Скрыть
+                </button>
+                <button 
+                  onClick={() => processSwipe('like', detailedProfile)} 
+                  className="flex-[2] py-4 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white rounded-2xl font-black flex justify-center items-center gap-2 transition-transform active:scale-95 shadow-lg shadow-pink-500/25"
+                >
+                  <Heart size={20} className="fill-white" /> Ответить взаимностью
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

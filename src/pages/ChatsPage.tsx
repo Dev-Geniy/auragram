@@ -11,7 +11,7 @@ import {
   ShoppingBag, Truck, CheckCircle2, Package, 
   Users, Zap, Clock, Archive, ArchiveRestore, Reply,
   Trash2, Edit2, ChevronDown, WifiOff, Volume2, VolumeX, Bell, BellOff,
-  Phone, Globe, Store, MessageSquare, Pin, PinOff, Maximize2, Minimize2
+  Phone, Globe, Store, MessageSquare, Pin, PinOff, Maximize2, Minimize2, Info
 } from 'lucide-react';
 
 // ==========================================
@@ -133,7 +133,7 @@ const SwipeableMessage = ({ children, onReply, onDelete, isMine }: { children: R
   };
 
   return (
-    <div className="relative w-full flex items-center py-1 overflow-hidden">
+    <div className="relative w-full flex items-center py-1 overflow-hidden group">
       <div className="absolute left-4 transition-opacity flex items-center justify-center" style={{ opacity: offsetX > 0 ? offsetX / 60 : 0 }}>
         <div className="w-8 h-8 bg-gray-200/50 dark:bg-gray-800/50 rounded-full flex items-center justify-center"><Reply size={16} className="text-gray-500 dark:text-gray-400" /></div>
       </div>
@@ -168,23 +168,23 @@ const SwipeableContact = ({ contact, isSelected, isPinned, onClick, onContextMen
   };
 
   return (
-    <div onContextMenu={(e) => onContextMenu(e, contact.id)} className="relative w-full overflow-hidden bg-[#F2F2F7] dark:bg-gray-950 border-b border-gray-100/50 dark:border-gray-800/50">
+    <div onContextMenu={(e) => onContextMenu(e, contact.id)} className="relative w-full overflow-hidden bg-gray-50 dark:bg-gray-950 border-b border-gray-100/50 dark:border-gray-800/50">
       <div className="absolute inset-0 flex justify-between">
         <div className={`w-1/2 ${rightBgClass} flex items-center pl-4 text-white transition-opacity ${offsetX > 0 ? 'opacity-100' : 'opacity-0'}`}><RightIcon size={24} className="text-white" /></div>
         <div className={`w-1/2 flex items-center justify-end pr-4 text-white transition-opacity ${offsetX < 0 ? 'opacity-100' : 'opacity-0'} ${leftBgClass}`}><LeftIcon size={24} className="text-white" /></div>
       </div>
-      <div onClick={onClick} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} style={{ transform: `translateX(${offsetX}px)` }} className={`relative z-10 flex items-center gap-3 px-4 py-3 cursor-pointer transition-all duration-200 ${isSelected ? 'bg-blue-500 text-white' : 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 dark:text-white'}`}>
+      <div onClick={onClick} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} style={{ transform: `translateX(${offsetX}px)` }} className={`relative z-10 flex items-center gap-3 px-4 py-3 cursor-pointer transition-all duration-200 ${isSelected ? 'bg-blue-500 dark:bg-blue-600 text-white' : 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/80 text-gray-900 dark:text-white'}`}>
         <div className="relative shrink-0">
-          {contact.isSaved ? <div className={`w-12 h-12 rounded-full flex items-center justify-center ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-500 text-white'}`}><Bookmark size={20} /></div> : <img src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} alt={contact.name} loading="lazy" className="w-12 h-12 rounded-full object-cover bg-gray-100 dark:bg-gray-800 shadow-sm" />}
-          {isPinned && !isSelected && <div className="absolute -bottom-1 -right-1 bg-white dark:bg-gray-900 rounded-full p-0.5 shadow-sm"><Pin size={12} className="text-blue-500 transform rotate-45" /></div>}
-          {isPinned && isSelected && <div className="absolute -bottom-1 -right-1 bg-blue-600 rounded-full p-0.5 shadow-sm"><Pin size={12} className="text-white transform rotate-45" /></div>}
+          {contact.isSaved ? <div className={`w-12 h-12 rounded-[18px] flex items-center justify-center shadow-sm ${isSelected ? 'bg-white/20 text-white' : 'bg-gradient-to-tr from-blue-500 to-indigo-500 text-white'}`}><Bookmark size={20} /></div> : <img src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`} alt={contact.name} loading="lazy" className="w-12 h-12 rounded-[18px] object-cover bg-gray-100 dark:bg-gray-800 shadow-sm border border-gray-100 dark:border-gray-700/50" />}
+          {isPinned && !isSelected && <div className="absolute -bottom-1 -right-1 bg-white dark:bg-gray-900 rounded-full p-0.5 shadow-sm border border-gray-100 dark:border-gray-800"><Pin size={12} className="text-blue-500 transform rotate-45" /></div>}
+          {isPinned && isSelected && <div className="absolute -bottom-1 -right-1 bg-blue-700 rounded-full p-0.5 shadow-sm border border-blue-500"><Pin size={12} className="text-white transform rotate-45" /></div>}
         </div>
         <div className="flex-1 min-w-0 pb-1">
-          <h4 className={`font-semibold text-[15px] truncate flex items-center justify-between ${isSelected ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
+          <h4 className={`font-bold text-[15px] truncate flex items-center justify-between ${isSelected ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
             <span className="truncate">{contact.name}</span>
-            {unreadCount > 0 && !isSelected && <span className="ml-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-sm shrink-0">{unreadCount}</span>}
+            {unreadCount > 0 && !isSelected && <span className="ml-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center text-[11px] font-black text-white shadow-sm shrink-0 border border-white dark:border-gray-900">{unreadCount}</span>}
           </h4>
-          <p className={`text-[13px] truncate ${isSelected ? 'text-white/80' : 'text-gray-500 dark:text-gray-400'}`}>
+          <p className={`text-[13px] font-medium truncate mt-0.5 ${isSelected ? 'text-white/80' : 'text-gray-500 dark:text-gray-400'}`}>
             {contact.typingTo === currentUserId ? <span className="text-blue-500 dark:text-blue-400 italic animate-pulse">печатает...</span> : (contact.isSaved ? 'Сохраненные сообщения' : contact.type === 'business' ? 'Бизнес-аккаунт' : 'Пользователь')}
           </p>
         </div>
@@ -366,7 +366,7 @@ export default function ChatsPage() {
     return () => { unsubscribeUsers(); unsubscribeUnread(); };
   }, [user]);
 
-  // Обработка чекаута из корзины
+  // Обработка чекаута из корзины (СВЯЗЬ С МАРКЕТОМ И МАГАЗИНОМ)
   useEffect(() => {
     const processCheckout = async () => {
       if (!location.state?.checkoutCart) {
@@ -621,9 +621,6 @@ export default function ChatsPage() {
     } catch (error) {}
   };
 
-  // ==========================================
-  // ЛОГИКА АРХИВА, ЗАКРЕПЛЕНИЯ И УДАЛЕНИЯ ЧАТА
-  // ==========================================
   const toggleArchive = (contactId: string) => {
     if (archivedContacts.includes(contactId)) {
       setArchivedContacts(prev => prev.filter(id => id !== contactId));
@@ -670,20 +667,17 @@ export default function ChatsPage() {
     }
   };
 
-  // Вызов контекстного меню
   const openContextMenu = (e: React.MouseEvent, type: 'message' | 'contact', data: any) => {
     e.preventDefault();
     let x = e.clientX;
     let y = e.clientY;
     
-    // Предотвращение выхода меню за пределы экрана
     if (window.innerWidth - x < 220) x = window.innerWidth - 220;
     if (window.innerHeight - y < 250) y = window.innerHeight - 250;
 
     setContextMenu({ type, x, y, data });
   };
 
-  // ФИЛЬТРАЦИЯ И УМНЫЙ ПОИСК
   const filteredContacts = globalUsers.filter(c => {
     const q = searchQuery.toLowerCase().trim();
     if (q) {
@@ -820,9 +814,9 @@ export default function ChatsPage() {
       {/* МОДАЛЬНОЕ ОКНО ПРОФИЛЯ */}
       {isProfileModalOpen && activeContactData && !activeContactData.isSaved && (
         <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex justify-center items-center p-4 animate-fade-in" onClick={() => setIsProfileModalOpen(false)}>
-          <div className="bg-white dark:bg-gray-900 w-full md:w-[420px] max-h-[85vh] overflow-y-auto custom-scrollbar rounded-[32px] shadow-2xl flex flex-col transform transition-all scale-100" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-900 w-full md:w-[420px] max-h-[85vh] overflow-y-auto custom-scrollbar rounded-[32px] shadow-2xl flex flex-col transform transition-all scale-100 border border-gray-200/50 dark:border-gray-800" onClick={e => e.stopPropagation()}>
             
-            <div className="relative h-32 bg-gradient-to-r from-[#A0C4FF] to-[#C4A0FF] shrink-0 rounded-t-[32px]">
+            <div className="relative h-32 bg-gradient-to-r from-blue-400 to-indigo-500 shrink-0 rounded-t-[32px]">
               <button onClick={() => setIsProfileModalOpen(false)} className="absolute top-4 right-4 w-8 h-8 bg-black/20 hover:bg-black/40 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-md"><X size={18} /></button>
             </div>
             
@@ -830,7 +824,7 @@ export default function ChatsPage() {
               <img src={activeContactData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(activeContactData.name)}`} alt={activeContactData.name} className="w-24 h-24 rounded-full object-cover border-4 border-white dark:border-gray-900 shadow-md bg-white dark:bg-gray-800 z-10" />
               
               <div className="mt-3 w-full text-center">
-                <h2 className="text-[22px] font-bold text-gray-900 dark:text-white flex items-center justify-center gap-2">
+                <h2 className="text-[22px] font-black text-gray-900 dark:text-white flex items-center justify-center gap-2">
                   {activeContactData.name}
                   {activeContactData.type === 'business' && <ShieldCheck size={20} className="text-blue-500" />}
                 </h2>
@@ -838,45 +832,45 @@ export default function ChatsPage() {
                   {getOnlineStatus(activeContactData.lastSeen)}
                 </p>
                 
-                <button onClick={() => setIsProfileModalOpen(false)} className="mt-4 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-[16px] flex items-center justify-center gap-2 shadow-sm transition-colors">
+                <button onClick={() => setIsProfileModalOpen(false)} className="mt-5 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 transition-transform active:scale-95">
                   <MessageSquare size={18} /> Написать сообщение
                 </button>
 
                 {activeContactData.role && (
                   <div className="mt-6 text-left w-full">
-                    <h3 className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider mb-2">О себе</h3>
-                    <p className="text-[15px] text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">{activeContactData.role}</p>
+                    <h3 className="text-[13px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2"><Info size={16} /> О себе</h3>
+                    <p className="text-[15px] text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">{activeContactData.role}</p>
                   </div>
                 )}
                 
                 {activeContactData.contacts && (activeContactData.contacts.phone || activeContactData.contacts.website || activeContactData.contacts.email) && (
                   <div className="mt-6 text-left w-full">
-                    <h3 className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Контакты</h3>
+                    <h3 className="text-[13px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2"><Globe size={16} /> Контакты</h3>
                     <div className="flex flex-col gap-2">
                       {activeContactData.contacts.email && (
-                        <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl transition-colors">
+                        <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl transition-colors border border-gray-100 dark:border-gray-800">
                           <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center rounded-full"><Users size={18} /></div>
                           <div className="flex flex-col">
                             <span className="text-[15px] font-bold text-gray-900 dark:text-white">{activeContactData.contacts.email}</span>
-                            <span className="text-[12px] text-gray-500">Email (Username)</span>
+                            <span className="text-[12px] font-medium text-gray-500">Email (Username)</span>
                           </div>
                         </div>
                       )}
                       {activeContactData.contacts.phone && (
-                        <a href={`tel:${activeContactData.contacts.phone}`} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                        <a href={`tel:${activeContactData.contacts.phone}`} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border border-gray-100 dark:border-gray-800">
                           <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 text-green-600 flex items-center justify-center rounded-full"><Phone size={18} /></div>
                           <div className="flex flex-col">
                             <span className="text-[15px] font-bold text-gray-900 dark:text-white">{activeContactData.contacts.phone}</span>
-                            <span className="text-[12px] text-gray-500">Мобильный</span>
+                            <span className="text-[12px] font-medium text-gray-500">Мобильный</span>
                           </div>
                         </a>
                       )}
                       {activeContactData.contacts.website && (
-                        <a href={activeContactData.contacts.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                        <a href={activeContactData.contacts.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border border-gray-100 dark:border-gray-800">
                           <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center rounded-full"><Globe size={18} /></div>
                           <div className="flex flex-col">
                             <span className="text-[15px] font-bold text-gray-900 dark:text-white line-clamp-1">{activeContactData.contacts.website.replace(/^https?:\/\//, '')}</span>
-                            <span className="text-[12px] text-gray-500">Веб-сайт</span>
+                            <span className="text-[12px] font-medium text-gray-500">Веб-сайт</span>
                           </div>
                         </a>
                       )}
@@ -887,7 +881,7 @@ export default function ChatsPage() {
                 {activeContactData.type === 'business' && (
                   <div className="mt-6 text-left w-full">
                     <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider">Витрина ({activeContactData.products?.length || 0})</h3>
+                      <h3 className="text-[13px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><Store size={16}/> Витрина ({activeContactData.products?.length || 0})</h3>
                       {activeContactData.products && activeContactData.products.length > 0 && (
                         <button onClick={(e) => { e.stopPropagation(); setIsProfileModalOpen(false); navigate(`/shop/${activeContactData.id}`); }} className="text-[13px] font-bold text-blue-500 hover:text-blue-600">Все товары</button>
                       )}
@@ -896,9 +890,9 @@ export default function ChatsPage() {
                     {activeContactData.products && activeContactData.products.length > 0 ? (
                       <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-none snap-x">
                         {activeContactData.products.slice(0, 5).map((product: any) => (
-                          <div key={product.id} className="min-w-[140px] max-w-[140px] bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-[16px] overflow-hidden shadow-sm hover:shadow-md transition-shadow group flex flex-col snap-start cursor-pointer" onClick={(e) => { e.stopPropagation(); setIsProfileModalOpen(false); navigate(`/shop/${activeContactData.id}`); }}>
-                            <div className="relative h-[140px] overflow-hidden bg-gray-50 dark:bg-gray-900">
-                              {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" /> : <div className="w-full h-full flex items-center justify-center text-gray-300 dark:text-gray-600"><ShoppingBag size={32}/></div>}
+                          <div key={product.id} className="min-w-[140px] max-w-[140px] bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group flex flex-col snap-start cursor-pointer" onClick={(e) => { e.stopPropagation(); setIsProfileModalOpen(false); navigate(`/shop/${activeContactData.id}`); }}>
+                            <div className="relative h-[120px] overflow-hidden bg-gray-50 dark:bg-gray-900">
+                              {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" /> : <div className="w-full h-full flex items-center justify-center text-gray-300 dark:text-gray-600"><ShoppingBag size={24}/></div>}
                             </div>
                             <div className="p-3 flex flex-col flex-1 bg-gray-50/50 dark:bg-gray-800/50">
                               <h4 className="font-bold text-[13px] text-gray-900 dark:text-white line-clamp-1 mb-1">{product.name}</h4>
@@ -908,8 +902,8 @@ export default function ChatsPage() {
                         ))}
                       </div>
                     ) : (
-                      <div className="text-center py-6 bg-gray-50 dark:bg-gray-800/50 rounded-[16px] border border-gray-100 dark:border-gray-800 border-dashed">
-                        <Store size={28} className="mx-auto text-gray-300 dark:text-gray-600 mb-2" />
+                      <div className="text-center py-6 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 border-dashed">
+                        <Store size={28} className="mx-auto text-gray-300 dark:text-gray-600 mb-2 opacity-50" />
                         <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400">Товаров пока нет</p>
                       </div>
                     )}
@@ -924,42 +918,42 @@ export default function ChatsPage() {
       {/* ЛЕВАЯ ПАНЕЛЬ С КОНТАКТАМИ */}
       <div className={`w-full md:w-[320px] lg:w-[380px] shrink-0 bg-white dark:bg-gray-900 md:border-r border-gray-200 dark:border-gray-800 flex flex-col z-10 transition-colors ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
         
+        {/* МИНИМАЛИСТИЧНЫЙ HEADER ЛЕВОЙ ПАНЕЛИ */}
         {isArchiveMode ? (
-          <div className="pt-4 pb-3 border-b border-gray-100 dark:border-gray-800 shrink-0 bg-blue-50/50 dark:bg-gray-800/50 flex items-center justify-between px-4">
+          <div className="pt-4 pb-3 border-b border-gray-100 dark:border-gray-800 shrink-0 bg-blue-50/50 dark:bg-gray-800/50 flex items-center justify-between px-4 transition-colors">
             <button onClick={() => setIsArchiveMode(false)} className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold transition-colors hover:opacity-80">
               <ArrowLeft size={20} /> Вернуться к чатам
             </button>
           </div>
         ) : (
-          <div className={`pt-3 border-b border-gray-100 dark:border-gray-800 shrink-0 ${isOffline ? 'mt-6' : ''}`}>
-            <div className="px-3 mb-3 flex items-center gap-2">
-              <div className="relative flex-1 flex items-center bg-[#F2F2F7] dark:bg-gray-800 rounded-[10px] px-3 py-1.5 focus-within:bg-gray-200/80 dark:focus-within:bg-gray-700 transition-colors">
-                <Search className="text-gray-400 dark:text-gray-500 shrink-0" size={18} />
-                <input type="text" placeholder="Поиск по имени или @email..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-transparent pl-2 pr-8 py-1 text-[15px] focus:outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400" />
-                {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={16} /></button>}
+          <div className={`pt-3 border-b border-gray-100 dark:border-gray-800 shrink-0 transition-colors ${isOffline ? 'mt-6' : ''}`}>
+            <div className="px-4 mb-3 flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-[14px] flex items-center justify-center shadow-lg shadow-blue-500/30 shrink-0">
+                <MessageSquare size={20} className="text-white" strokeWidth={2.5} />
               </div>
-              <button onClick={() => setSoundEnabled(!soundEnabled)} className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${soundEnabled ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
-                {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
-              </button>
-              <button onClick={handleTogglePush} className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${pushEnabled ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
-                {pushEnabled ? <Bell size={18} /> : <BellOff size={18} />}
-              </button>
+              <div className="relative flex-1 flex items-center bg-gray-100/80 dark:bg-gray-800/80 rounded-2xl px-3 py-2 focus-within:ring-2 ring-blue-500/50 transition-all">
+                <Search className="text-gray-400 dark:text-gray-500 shrink-0" size={18} />
+                <input type="text" placeholder="Поиск..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-transparent pl-2 pr-8 py-0.5 text-[15px] focus:outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500" />
+                {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"><X size={16} /></button>}
+              </div>
             </div>
-            <div className="flex px-3 pb-2 gap-2 overflow-x-auto scrollbar-none">
-              <button onClick={() => setActiveTab('all')} className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>Все</button>
-              <button onClick={() => setActiveTab('personal')} className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'personal' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>Личные</button>
-              <button onClick={() => setActiveTab('business')} className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors shrink-0 ${activeTab === 'business' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>Магазины</button>
+            
+            {/* ТАБЫ */}
+            <div className="flex px-4 pb-2 gap-2 overflow-x-auto scrollbar-none">
+              <button onClick={() => setActiveTab('all')} className={`px-4 py-1.5 rounded-full text-[13px] font-bold transition-colors shrink-0 shadow-sm ${activeTab === 'all' ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>Все</button>
+              <button onClick={() => setActiveTab('personal')} className={`px-4 py-1.5 rounded-full text-[13px] font-bold transition-colors shrink-0 shadow-sm ${activeTab === 'personal' ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>Личные</button>
+              <button onClick={() => setActiveTab('business')} className={`px-4 py-1.5 rounded-full text-[13px] font-bold transition-colors shrink-0 shadow-sm ${activeTab === 'business' ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>Магазины</button>
               {currentUserProfile?.type === 'business' && (
-                <button onClick={() => setActiveTab('clients')} className={`px-4 py-1.5 rounded-full text-[13px] font-medium flex items-center gap-1.5 transition-colors shrink-0 ${activeTab === 'clients' ? 'bg-indigo-500 text-white' : 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20'}`}><Users size={14} /> Заказы</button>
+                <button onClick={() => setActiveTab('clients')} className={`px-4 py-1.5 rounded-full text-[13px] font-bold flex items-center gap-1.5 transition-colors shrink-0 shadow-sm ${activeTab === 'clients' ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'}`}><Users size={14} /> Заказы</button>
               )}
             </div>
           </div>
         )}
         
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="flex-1 overflow-y-auto custom-scrollbar bg-white dark:bg-gray-950 transition-colors">
           {!isArchiveMode && archivedContacts.length > 0 && activeTab === 'all' && !searchQuery && (
-            <div onClick={() => setIsArchiveMode(true)} className="flex items-center gap-3 px-4 py-3 cursor-pointer bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors border-b border-gray-100/50 dark:border-gray-800/50">
-              <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0"><Archive size={22} className="text-blue-500 dark:text-blue-400" /></div>
+            <div onClick={() => setIsArchiveMode(true)} className="flex items-center gap-3 px-4 py-3 cursor-pointer bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/80 transition-colors border-b border-gray-100/50 dark:border-gray-800/50">
+              <div className="w-12 h-12 rounded-[18px] bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0 border border-gray-200/50 dark:border-gray-700/50"><Archive size={20} className="text-gray-500 dark:text-gray-400" /></div>
               <div className="flex-1 min-w-0">
                 <h4 className="font-bold text-[15px] text-gray-900 dark:text-white">Архив</h4>
                 <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400">Скрытые чаты ({archivedContacts.length})</p>
@@ -978,54 +972,63 @@ export default function ChatsPage() {
               onSwipeRight={togglePin}
               rightIcon={pinnedChats.includes(contact.id) ? PinOff : Pin} 
               leftIcon={isArchiveMode ? ArchiveRestore : Archive} 
-              rightBgClass="bg-indigo-500" 
-              leftBgClass="bg-orange-500" 
+              rightBgClass="bg-blue-500" 
+              leftBgClass="bg-gray-500" 
               unreadCount={unreadCounts[contact.id] || 0} 
               currentUserId={user?.uid}
             />
           ))}
           
           {filteredContacts.length === 0 && (
-             <div className="flex flex-col items-center justify-center mt-10 opacity-50 px-4 text-center">
-               <Search size={48} className="text-gray-400 dark:text-gray-600 mb-2" />
-               <div className="text-gray-500 dark:text-gray-400 text-[14px] font-medium">{searchQuery ? 'Пользователь не найден' : isArchiveMode ? 'В архиве пусто' : 'У вас пока нет активных диалогов. Найдите кого-нибудь через поиск.'}</div>
+             <div className="flex flex-col items-center justify-center h-[40vh] opacity-50 px-4 text-center animate-fade-in">
+               <MessageSquare size={48} className="text-gray-400 dark:text-gray-600 mb-3" />
+               <div className="text-gray-500 dark:text-gray-400 text-[14px] font-medium max-w-[200px]">{searchQuery ? 'Пользователь не найден' : isArchiveMode ? 'В архиве пусто' : 'У вас пока нет активных диалогов.'}</div>
              </div>
           )}
         </div>
       </div>
       
       {/* ПРАВАЯ ПАНЕЛЬ: ЧАТ */}
-      <div className={`flex-1 flex flex-col bg-[#EFEFEF] dark:bg-[#0F0F0F] relative min-w-0 z-20 transition-colors ${!selectedContact ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`flex-1 flex flex-col bg-[#F2F2F7] dark:bg-gray-950 relative min-w-0 z-20 transition-colors ${!selectedContact ? 'hidden md:flex' : 'flex'}`}>
         
         {selectedContact && activeContactData ? (
           <>
-            {/* ШАПКА ЧАТА */}
-            <div className={`h-[60px] bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200/60 dark:border-gray-800 flex items-center justify-between px-4 shrink-0 shadow-sm z-10 transition-colors ${isOffline ? 'mt-6' : ''}`}>
-              <div className="flex items-center gap-3">
-                <button onClick={() => setSelectedContact(null)} className="md:hidden text-blue-500 dark:text-blue-400 p-1 -ml-2"><ArrowLeft size={24} /></button>
-                <div className={`flex items-center gap-3 transition-opacity ${!selectedContact.isSaved ? 'cursor-pointer hover:opacity-80' : ''}`} onClick={() => !selectedContact.isSaved && setIsProfileModalOpen(true)}>
+            {/* ШАПКА ЧАТА (Premium Glassmorphism) */}
+            <div className={`h-[64px] bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/60 dark:border-gray-800 flex items-center justify-between px-4 shrink-0 shadow-sm z-20 transition-colors ${isOffline ? 'mt-6' : ''}`}>
+              <div className="flex items-center gap-3 min-w-0">
+                <button onClick={() => setSelectedContact(null)} className="md:hidden text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 p-1 -ml-2 transition-colors"><ArrowLeft size={24} /></button>
+                <div className={`flex items-center gap-3 transition-opacity min-w-0 ${!selectedContact.isSaved ? 'cursor-pointer hover:opacity-80' : ''}`} onClick={() => !selectedContact.isSaved && setIsProfileModalOpen(true)}>
                   {selectedContact.isSaved ? (
-                    <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center"><Bookmark size={18} /></div>
+                    <div className="w-11 h-11 rounded-[16px] bg-gradient-to-tr from-blue-500 to-indigo-500 text-white flex items-center justify-center shadow-sm shrink-0"><Bookmark size={20} /></div>
                   ) : (
-                    <img src={selectedContact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}`} alt={selectedContact.name} loading="lazy" className="w-10 h-10 rounded-full object-cover bg-gray-100 dark:bg-gray-800 shadow-sm" />
+                    <img src={selectedContact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name)}`} alt={selectedContact.name} loading="lazy" className="w-11 h-11 rounded-[16px] object-cover bg-gray-100 dark:bg-gray-800 shadow-sm border border-gray-200/50 dark:border-gray-700 shrink-0" />
                   )}
-                  <div>
-                    <h3 className="font-semibold text-[15px] text-gray-900 dark:text-white leading-tight">{selectedContact.name}</h3>
+                  <div className="min-w-0 pr-4">
+                    <h3 className="font-bold text-[16px] text-gray-900 dark:text-white leading-tight truncate">{selectedContact.name}</h3>
                     {activeContactData.typingTo === user?.uid ? (
-                      <span className="text-[12px] font-medium text-blue-500 dark:text-blue-400 italic animate-pulse">печатает...</span>
+                      <span className="text-[12px] font-bold text-blue-500 dark:text-blue-400 italic animate-pulse truncate block">печатает...</span>
                     ) : (
-                      <span className={`text-[12px] font-medium ${getOnlineStatus(activeContactData.lastSeen) === 'в сети' ? 'text-blue-500 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                      <span className={`text-[12px] font-medium truncate block ${getOnlineStatus(activeContactData.lastSeen) === 'в сети' ? 'text-blue-500 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
                         {selectedContact.isSaved ? 'Избранное' : getOnlineStatus(activeContactData.lastSeen)}
                       </span>
                     )}
                   </div>
                 </div>
               </div>
-              <button onClick={() => setSelectedContact(null)} className="hidden md:flex items-center gap-1.5 text-[13px] font-bold text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors">Закрыть чат <X size={16} /></button>
+              
+              {/* Доп настройки чата (Звук, Уведомления) */}
+              <div className="hidden md:flex items-center gap-1.5 shrink-0">
+                <button onClick={() => setSoundEnabled(!soundEnabled)} className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${soundEnabled ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}>
+                  {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                </button>
+                <button onClick={handleTogglePush} className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${pushEnabled ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}>
+                  {pushEnabled ? <Bell size={16} /> : <BellOff size={16} />}
+                </button>
+              </div>
             </div>
             
             {/* КОНТЕЙНЕР СООБЩЕНИЙ */}
-            <div className="flex-1 relative flex flex-col overflow-hidden">
+            <div className="flex-1 relative flex flex-col overflow-hidden bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] dark:bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-fixed" style={{ backgroundBlendMode: 'overlay', backgroundColor: isDark ? '#111827' : '#F3F4F6' }}>
               
               {showScrollButton && (
                 <button onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })} className="absolute bottom-4 right-4 z-30 w-11 h-11 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all animate-fade-in">
@@ -1036,13 +1039,15 @@ export default function ChatsPage() {
 
               <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 pb-6 custom-scrollbar flex flex-col">
                 {messages.length === 0 && (
-                  <div className="flex-1 flex flex-col items-center justify-center opacity-50">
-                    <ShieldCheck size={48} className="text-gray-400 dark:text-gray-600 mb-2" />
-                    <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 bg-gray-200/50 dark:bg-gray-800/50 px-4 py-1.5 rounded-full">Здесь пока нет сообщений</p>
+                  <div className="flex-1 flex flex-col items-center justify-center opacity-50 animate-fade-in">
+                    <div className="w-20 h-20 bg-gray-200/50 dark:bg-gray-800/50 rounded-full flex items-center justify-center mb-4">
+                      <ShieldCheck size={32} className="text-gray-400 dark:text-gray-500" />
+                    </div>
+                    <p className="text-[13px] font-bold text-gray-500 dark:text-gray-400 bg-white/50 dark:bg-gray-900/50 backdrop-blur-md px-4 py-2 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800">Сообщения защищены сквозным шифрованием</p>
                   </div>
                 )}
 
-                {messages.length >= messageLimit && <div className="flex justify-center py-2 mb-2"><Loader2 size={20} className="animate-spin text-gray-400 dark:text-gray-600" /></div>}
+                {messages.length >= messageLimit && <div className="flex justify-center py-4 mb-2"><Loader2 size={24} className="animate-spin text-gray-400 dark:text-gray-600" /></div>}
 
                 {messages.map((msg, index) => {
                   const isMine = msg.senderId === user?.uid;
@@ -1062,17 +1067,17 @@ export default function ChatsPage() {
                   const isLastInGroup = !isNextMine;
                   const marginTopClass = isFirstInGroup && !showDateDivider ? 'mt-3' : 'mt-0.5';
 
-                  let bubbleRadius = isMine ? 'rounded-2xl rounded-tr-sm' : 'rounded-2xl rounded-tl-sm';
+                  let bubbleRadius = isMine ? 'rounded-[20px] rounded-tr-[4px]' : 'rounded-[20px] rounded-tl-[4px]';
                   if (isMine) {
-                    if (isFirstInGroup && isLastInGroup) bubbleRadius = 'rounded-2xl rounded-br-sm'; 
-                    else if (isFirstInGroup) bubbleRadius = 'rounded-2xl rounded-br-sm'; 
-                    else if (isLastInGroup) bubbleRadius = 'rounded-2xl rounded-tr-sm';  
-                    else bubbleRadius = 'rounded-2xl rounded-r-sm'; 
+                    if (isFirstInGroup && isLastInGroup) bubbleRadius = 'rounded-[20px] rounded-br-[4px]'; 
+                    else if (isFirstInGroup) bubbleRadius = 'rounded-[20px] rounded-br-[4px]'; 
+                    else if (isLastInGroup) bubbleRadius = 'rounded-[20px] rounded-tr-[4px]';  
+                    else bubbleRadius = 'rounded-[20px] rounded-r-[4px]'; 
                   } else {
-                    if (isFirstInGroup && isLastInGroup) bubbleRadius = 'rounded-2xl rounded-bl-sm';
-                    else if (isFirstInGroup) bubbleRadius = 'rounded-2xl rounded-bl-sm';
-                    else if (isLastInGroup) bubbleRadius = 'rounded-2xl rounded-tl-sm';
-                    else bubbleRadius = 'rounded-2xl rounded-l-sm';
+                    if (isFirstInGroup && isLastInGroup) bubbleRadius = 'rounded-[20px] rounded-bl-[4px]';
+                    else if (isFirstInGroup) bubbleRadius = 'rounded-[20px] rounded-bl-[4px]';
+                    else if (isLastInGroup) bubbleRadius = 'rounded-[20px] rounded-tl-[4px]';
+                    else bubbleRadius = 'rounded-[20px] rounded-l-[4px]';
                   }
 
                   const isCard = msg.type === 'share_card' && msg.cardData;
@@ -1082,44 +1087,44 @@ export default function ChatsPage() {
                   return (
                     <div key={msg.id}>
                       {showDateDivider && (
-                        <div className="flex justify-center my-4">
-                          <span className="bg-black/10 dark:bg-white/10 backdrop-blur-sm text-gray-600 dark:text-gray-300 text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                        <div className="flex justify-center my-5">
+                          <span className="bg-black/10 dark:bg-white/10 backdrop-blur-md text-gray-700 dark:text-gray-300 text-[11px] font-bold px-3.5 py-1.5 rounded-full uppercase tracking-widest shadow-sm">
                             {formatDateDivider(msg.createdAt)}
                           </span>
                         </div>
                       )}
 
                       {isSystem ? (
-                        <div className="flex justify-center my-3">
-                          <div className="bg-gray-200/80 dark:bg-gray-800/80 backdrop-blur text-gray-600 dark:text-gray-300 text-[12px] font-medium px-4 py-1.5 rounded-full shadow-sm">{msg.statusText}</div>
+                        <div className="flex justify-center my-4 animate-fade-in">
+                          <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md border border-gray-200/50 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-[12px] font-bold px-4 py-2 rounded-2xl shadow-sm">{msg.statusText}</div>
                         </div>
                       ) : (
                         <div onContextMenu={(e) => openContextMenu(e, 'message', msg)}>
                           <SwipeableMessage onReply={() => setReplyingTo(msg)} onDelete={() => handleDeleteMessage(msg.id)} isMine={isMine}>
-                            <div className={`relative max-w-[85%] sm:max-w-[70%] flex flex-col ${
-                              isMine ? `bg-[#E3FECE] dark:bg-[#1E3A8A] text-gray-900 dark:text-white ${bubbleRadius}` 
-                                     : `bg-white dark:bg-[#202020] text-gray-900 dark:text-white border border-gray-100 dark:border-gray-800 shadow-sm ${bubbleRadius}`
-                            } ${(isCard || isReceipt) ? 'p-1.5' : 'px-3 pt-2 pb-1.5 text-[15px] leading-relaxed'} ${marginTopClass} group cursor-default select-text`}>
+                            <div className={`relative max-w-[85%] sm:max-w-[70%] flex flex-col shadow-sm ${
+                              isMine ? `bg-gradient-to-br from-blue-500 to-indigo-600 text-white ${bubbleRadius}` 
+                                     : `bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-100 dark:border-gray-700/50 ${bubbleRadius}`
+                            } ${(isCard || isReceipt) ? 'p-1.5' : 'px-4 pt-2.5 pb-2 text-[15px] leading-relaxed'} ${marginTopClass} group cursor-default select-text transition-colors`}>
                               
                               {isMine && !isCard && !isReceipt && (
                                 <div className="absolute top-1 -left-16 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 hidden md:flex">
-                                  <button onClick={() => { setEditingMessage(msg); setNewMessage(msg.text || ''); }} className="p-1.5 bg-white dark:bg-gray-800 rounded-full shadow-sm text-gray-500 hover:text-blue-500 transition-colors"><Edit2 size={14}/></button>
-                                  <button onClick={() => handleDeleteMessage(msg.id)} className="p-1.5 bg-white dark:bg-gray-800 rounded-full shadow-sm text-gray-500 hover:text-red-500 transition-colors"><Trash2 size={14}/></button>
+                                  <button onClick={() => { setEditingMessage(msg); setNewMessage(msg.text || ''); }} className="p-1.5 bg-white dark:bg-gray-800 rounded-full shadow-md text-gray-500 hover:text-blue-500 transition-colors"><Edit2 size={14}/></button>
+                                  <button onClick={() => handleDeleteMessage(msg.id)} className="p-1.5 bg-white dark:bg-gray-800 rounded-full shadow-md text-gray-500 hover:text-red-500 transition-colors"><Trash2 size={14}/></button>
                                 </div>
                               )}
 
                               {msg.replyToText && (
-                                <div className="mb-1.5 pl-2 border-l-[3px] border-blue-500 bg-black/5 dark:bg-black/20 rounded-r-md py-1 pr-2">
-                                  <span className="text-[11px] font-bold text-blue-600 dark:text-blue-300 block mb-0.5">{msg.replyToSender}</span>
-                                  <span className="text-[12px] text-gray-600 dark:text-gray-300 line-clamp-2 leading-tight opacity-90">{msg.replyToText}</span>
+                                <div className="mb-2 pl-3 border-l-4 border-white/40 bg-black/10 dark:bg-white/5 rounded-r-xl py-1.5 pr-3 shadow-inner">
+                                  <span className="text-[12px] font-black text-white/90 block mb-0.5">{msg.replyToSender}</span>
+                                  <span className="text-[13px] text-white/80 line-clamp-2 leading-snug">{msg.replyToText}</span>
                                 </div>
                               )}
 
                               {isReceipt ? (
-                                <div className="flex flex-col min-w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-blue-200 dark:border-blue-900 shadow-sm">
+                                <div className="flex flex-col min-w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm">
                                   <div className="bg-blue-50 dark:bg-blue-900/30 p-3 border-b border-blue-100 dark:border-blue-800/50 flex items-center justify-between">
                                     <span className="font-black text-blue-600 dark:text-blue-400 flex items-center gap-1.5"><ShoppingBag size={16}/> ЗАКАЗ</span>
-                                    <span className="text-[10px] font-bold uppercase text-gray-500 bg-white dark:bg-gray-700 px-2 py-0.5 rounded-md">
+                                    <span className="text-[10px] font-bold uppercase text-gray-500 bg-white dark:bg-gray-700 px-2 py-0.5 rounded-md shadow-sm border border-gray-100 dark:border-gray-600">
                                       {msg.orderData.status === 'new' && 'Ожидает'}
                                       {msg.orderData.status === 'processing' && 'В работе'}
                                       {msg.orderData.status === 'shipped' && 'Отправлен'}
@@ -1129,38 +1134,38 @@ export default function ChatsPage() {
                                     <p className="whitespace-pre-wrap text-gray-600 dark:text-gray-300 font-medium mb-3">{msg.orderData.items}</p>
                                     <div className="flex justify-between items-center pt-2 border-t border-dashed border-gray-200 dark:border-gray-700">
                                       <span className="font-bold text-gray-400">Итого:</span>
-                                      <span className="font-black text-[15px]">{msg.orderData.total > 0 ? `${msg.orderData.total}` : 'Уточняется'}</span>
+                                      <span className="font-black text-[15px] text-gray-900 dark:text-white">{msg.orderData.total > 0 ? `${msg.orderData.total}` : 'Уточняется'}</span>
                                     </div>
                                   </div>
                                   {!isMine && (
                                     <div className="p-2 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 flex gap-2">
-                                      {msg.orderData.status === 'new' && <button onClick={() => handleOrderStatusUpdate(msg.id, 'processing', '🛠 Продавец взял заказ в работу')} className="flex-1 bg-amber-500 text-white py-1.5 rounded-lg text-[12px] font-bold flex items-center justify-center gap-1"><Package size={14}/> В работу</button>}
-                                      {msg.orderData.status === 'processing' && <button onClick={() => handleOrderStatusUpdate(msg.id, 'shipped', '🚚 Заказ передан в службу доставки')} className="flex-1 bg-blue-500 text-white py-1.5 rounded-lg text-[12px] font-bold flex items-center justify-center gap-1"><Truck size={14}/> Отправлено</button>}
-                                      {msg.orderData.status === 'shipped' && <div className="flex-1 py-1.5 text-center text-[12px] font-bold text-green-500 flex items-center justify-center gap-1"><CheckCircle2 size={14}/> Выполнено</div>}
+                                      {msg.orderData.status === 'new' && <button onClick={() => handleOrderStatusUpdate(msg.id, 'processing', '🛠 Продавец взял заказ в работу')} className="flex-1 bg-amber-500 text-white py-1.5 rounded-xl text-[12px] font-bold flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-transform"><Package size={14}/> В работу</button>}
+                                      {msg.orderData.status === 'processing' && <button onClick={() => handleOrderStatusUpdate(msg.id, 'shipped', '🚚 Заказ передан в службу доставки')} className="flex-1 bg-blue-500 text-white py-1.5 rounded-xl text-[12px] font-bold flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-transform"><Truck size={14}/> Отправлено</button>}
+                                      {msg.orderData.status === 'shipped' && <div className="flex-1 py-1.5 text-center text-[12px] font-bold text-green-500 flex items-center justify-center gap-1 bg-green-50 dark:bg-green-500/10 rounded-xl"><CheckCircle2 size={14}/> Выполнено</div>}
                                     </div>
                                   )}
                                 </div>
                               ) : isCard ? (
-                                <div className="flex flex-col w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-200/50 dark:border-gray-700">
-                                  <img src={msg.cardData!.imageUrl} onClick={() => setViewingImage(msg.cardData!.imageUrl)} loading="lazy" className="w-full h-36 object-cover cursor-pointer hover:opacity-90 transition-opacity" alt="card" />
+                                <div className="flex flex-col w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-200/50 dark:border-gray-700 shadow-sm">
+                                  <img src={msg.cardData!.imageUrl} onClick={() => setViewingImage(msg.cardData!.imageUrl)} loading="lazy" className="w-full h-40 object-cover cursor-pointer hover:opacity-90 transition-opacity" alt="card" />
                                   <div className="p-3">
-                                    <h4 className="font-semibold text-[14px] text-gray-900 dark:text-white line-clamp-1 mb-1">{msg.cardData!.title}</h4>
-                                    {msg.cardData!.price && <span className="text-[13px] font-bold text-blue-500 dark:text-blue-400">{msg.cardData!.price}</span>}
-                                    <a href={msg.cardData!.link} target="_blank" rel="noopener noreferrer" className="mt-2 flex items-center justify-center gap-1.5 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 py-1.5 rounded-lg text-[13px] font-medium">Смотреть <ExternalLink size={14} /></a>
+                                    <h4 className="font-bold text-[14px] text-gray-900 dark:text-white line-clamp-1 mb-1">{msg.cardData!.title}</h4>
+                                    {msg.cardData!.price && <span className="text-[14px] font-black text-blue-500 dark:text-blue-400">{msg.cardData!.price}</span>}
+                                    <a href={msg.cardData!.link} target="_blank" rel="noopener noreferrer" className="mt-3 flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-500/10 dark:hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 py-2 rounded-xl text-[13px] font-bold transition-colors">Смотреть <ExternalLink size={14} /></a>
                                   </div>
                                 </div>
                               ) : (
                                 <>
-                                  {msg.imageUrl && <img src={msg.imageUrl} onClick={() => setViewingImage(msg.imageUrl!)} loading="lazy" alt="attachment" className="w-full max-w-[280px] h-auto rounded-xl mb-1 object-cover cursor-pointer hover:opacity-90 transition-opacity" />}
+                                  {msg.imageUrl && <img src={msg.imageUrl} onClick={() => setViewingImage(msg.imageUrl!)} loading="lazy" alt="attachment" className="w-full max-w-[280px] h-auto rounded-[16px] mb-1.5 object-cover cursor-pointer hover:opacity-90 transition-opacity border border-black/5 dark:border-white/5 shadow-sm" />}
                                   {msg.text && <span className="whitespace-pre-wrap break-words">{msg.text}</span>}
                                 </>
                               )}
 
-                              <div className={`flex items-center justify-end gap-1 mt-0.5 ml-4 float-right ${(isCard || isReceipt) && 'px-2 pb-1'}`}>
-                                {msg.isEdited && <span className="text-[10px] text-gray-400 dark:text-gray-500 italic mr-1">изменено</span>}
-                                <span className={`text-[11px] font-medium ${isMine ? 'text-green-700/60 dark:text-blue-200/60' : 'text-gray-400 dark:text-gray-500'}`}>{formatTime(msg.createdAt)}</span>
+                              <div className={`flex items-center justify-end gap-1 mt-1 float-right ${(isCard || isReceipt) && 'px-2 pb-1.5'}`}>
+                                {msg.isEdited && <span className="text-[10px] text-white/50 dark:text-gray-500 italic mr-1">изменено</span>}
+                                <span className={`text-[11px] font-medium ${isMine ? 'text-white/70' : 'text-gray-400 dark:text-gray-500'}`}>{formatTime(msg.createdAt)}</span>
                                 {isMine && !selectedContact.isSaved && (
-                                  <span className={`${isMine ? 'text-green-600/70 dark:text-blue-300/80' : ''}`}>
+                                  <span className="text-white/90">
                                     {msg.isRead ? <CheckCheck size={14} /> : <Check size={14} />}
                                   </span>
                                 )}
@@ -1178,38 +1183,38 @@ export default function ChatsPage() {
             
             {/* ОТОБРАЖЕНИЕ ОТВЕТА И РЕДАКТИРОВАНИЯ */}
             {(replyingTo || editingMessage) && (
-              <div className="mx-3 mt-1 bg-gray-100 dark:bg-gray-800 rounded-t-2xl border-l-[3px] border-blue-500 flex items-center justify-between px-4 py-2 animate-fade-in shadow-sm z-20 relative">
-                <div className="flex flex-col min-w-0 pr-4">
-                  <span className="text-[12px] font-bold text-blue-500 dark:text-blue-400">
+              <div className="mx-4 mt-2 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md rounded-2xl border border-blue-500/30 flex items-center justify-between px-4 py-2 animate-fade-in shadow-lg z-20 relative">
+                <div className="flex flex-col min-w-0 pr-4 border-l-[3px] border-blue-500 pl-3">
+                  <span className="text-[12px] font-black text-blue-500 dark:text-blue-400 tracking-wide uppercase">
                     {editingMessage ? 'Редактирование' : (replyingTo?.senderId === user?.uid ? 'Ответ себе' : `Ответ ${selectedContact.name}`)}
                   </span>
-                  <span className="text-[13px] text-gray-600 dark:text-gray-300 truncate">
+                  <span className="text-[13px] font-medium text-gray-600 dark:text-gray-300 truncate mt-0.5">
                     {editingMessage ? editingMessage.text : (replyingTo?.text || (replyingTo?.imageUrl ? 'Фотография' : 'Вложение'))}
                   </span>
                 </div>
-                <button onClick={() => { setReplyingTo(null); setEditingMessage(null); setNewMessage(''); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"><X size={18}/></button>
+                <button onClick={() => { setReplyingTo(null); setEditingMessage(null); setNewMessage(''); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-1.5 bg-gray-100 dark:bg-gray-700 rounded-full"><X size={16}/></button>
               </div>
             )}
 
             {attachedImage && (
-              <div className="absolute bottom-[90px] left-4 z-30">
-                <div className="relative w-16 h-16 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-1">
-                  <img src={attachedImage} alt="preview" className="w-full h-full object-cover rounded-lg" />
-                  <button onClick={() => setAttachedImage('')} className="absolute -top-2 -right-2 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 w-5 h-5 rounded-full flex items-center justify-center"><X size={12} /></button>
+              <div className="absolute bottom-[100px] left-4 z-30 animate-fade-in">
+                <div className="relative w-20 h-20 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 p-1.5">
+                  <img src={attachedImage} alt="preview" className="w-full h-full object-cover rounded-xl" />
+                  <button onClick={() => setAttachedImage('')} className="absolute -top-2 -right-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 w-6 h-6 rounded-full flex items-center justify-center shadow-md hover:scale-110 transition-transform"><X size={14} /></button>
                 </div>
               </div>
             )}
 
-            {/* ОБНОВЛЕННАЯ НИЖНЯЯ ПАНЕЛЬ (ЭТАП 3) */}
-            <div className={`bg-white dark:bg-gray-900 px-2 sm:px-4 py-2 border-t border-gray-100 dark:border-gray-800 shrink-0 transition-all duration-300 flex flex-col relative z-20 
+            {/* ОБНОВЛЕННАЯ НИЖНЯЯ ПАНЕЛЬ С УМНЫМ ВВОДОМ */}
+            <div className={`bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl px-2 sm:px-4 py-2 border-t border-gray-200/60 dark:border-gray-800 shrink-0 transition-all duration-300 flex flex-col relative z-20 
               ${(replyingTo || editingMessage) ? 'pt-2' : ''} 
               ${isExpanded ? 'h-[50dvh] shadow-[0_-20px_60px_rgba(0,0,0,0.1)] pb-[calc(env(safe-area-inset-bottom)+12px)]' : 'pb-[calc(env(safe-area-inset-bottom)+8px)] md:pb-4'}`}>
               
               {/* ШАБЛОНЫ ОТВЕТОВ */}
               {isTemplatesAllowed && !replyingTo && !editingMessage && (
                 <div className="flex gap-2 mb-2 w-full max-w-4xl mx-auto overflow-x-auto scrollbar-none items-center">
-                  <button type="button" onClick={insertQuickReply} className="shrink-0 flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-xl text-[13px] font-semibold transition-colors border border-indigo-100 dark:border-indigo-500/20"><Zap size={14} /> Шаблон ответа</button>
-                  {currentUserProfile?.aiSettings?.followUps && <button type="button" onClick={insertFollowUp} className="shrink-0 flex items-center gap-1.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-500/10 dark:hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 px-3 py-1.5 rounded-xl text-[13px] font-semibold transition-colors border border-purple-100 dark:border-purple-500/20"><Clock size={14} /> Напоминание</button>}
+                  <button type="button" onClick={insertQuickReply} className="shrink-0 flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-xl text-[13px] font-bold transition-colors border border-indigo-100 dark:border-indigo-500/20"><Zap size={14} /> Шаблон ответа</button>
+                  {currentUserProfile?.aiSettings?.followUps && <button type="button" onClick={insertFollowUp} className="shrink-0 flex items-center gap-1.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-500/10 dark:hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 px-3 py-1.5 rounded-xl text-[13px] font-bold transition-colors border border-purple-100 dark:border-purple-500/20"><Clock size={14} /> Напоминание</button>}
                 </div>
               )}
 
@@ -1225,7 +1230,7 @@ export default function ChatsPage() {
                 ) : (
                   <div className="flex justify-between items-center px-2 py-1 mb-1">
                     <span className="text-[12px] font-bold text-gray-400 uppercase tracking-widest ml-2">Расширенный ввод</span>
-                    <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isOffline} className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-lg text-[13px] font-semibold text-gray-600 dark:text-gray-300 transition-colors">
+                    <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isOffline} className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-xl text-[13px] font-bold text-gray-600 dark:text-gray-300 transition-colors">
                       <Paperclip size={16} /> Прикрепить файл
                     </button>
                   </div>
@@ -1261,14 +1266,14 @@ export default function ChatsPage() {
                     }} 
                     placeholder={editingMessage ? "Отредактируйте сообщение..." : isExpanded ? "Введите длинный текст... (Ctrl + Enter для отправки)" : "Сообщение..."} 
                     disabled={isOffline} 
-                    className={`w-full bg-transparent text-[15px] outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none custom-scrollbar disabled:opacity-50 pt-3 pb-3 pl-4 ${isExpanded ? 'flex-1 pr-4' : 'min-h-[44px] max-h-[120px] pr-10'}`} 
+                    className={`w-full bg-transparent text-[15px] font-medium outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 resize-none custom-scrollbar disabled:opacity-50 pt-3.5 pb-3 pl-4 ${isExpanded ? 'flex-1 pr-4' : 'min-h-[48px] max-h-[120px] pr-10'}`} 
                   />
 
                   {/* Кнопка отправки внутри поля для расширенного режима */}
                   {isExpanded && (
                     <div className="flex items-center justify-between p-2 mt-auto border-t border-gray-200/50 dark:border-gray-700/50 bg-white/50 dark:bg-gray-900/50 rounded-b-[24px]">
-                      <span className="text-[11px] font-medium text-gray-400 ml-2 hidden sm:block">Ctrl + Enter для отправки</span>
-                      <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isOffline} className={`px-5 py-2 shrink-0 rounded-xl transition-all font-bold flex items-center gap-2 text-[14px] ${ (newMessage.trim() || attachedImage) && !isOffline ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-md' : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 disabled:opacity-50'}`}>
+                      <span className="text-[11px] font-bold text-gray-400 ml-2 hidden sm:block uppercase tracking-wide">Ctrl + Enter для отправки</span>
+                      <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isOffline} className={`px-5 py-2.5 shrink-0 rounded-xl transition-all font-bold flex items-center gap-2 text-[14px] ${ (newMessage.trim() || attachedImage) && !isOffline ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-md' : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 disabled:opacity-50'}`}>
                         {editingMessage ? <Check size={16} /> : <Send size={16} />}
                         {editingMessage ? 'Сохранить' : 'Отправить'}
                       </button>
@@ -1278,7 +1283,7 @@ export default function ChatsPage() {
                 
                 {/* Обычная кнопка отправки справа от поля (если не расширено) */}
                 {!isExpanded && (
-                  <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isOffline} className={`p-2.5 shrink-0 mb-0.5 rounded-full transition-all shadow-sm ${ (newMessage.trim() || attachedImage) && !isOffline ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 disabled:opacity-50'}`}>
+                  <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isOffline} className={`p-2.5 shrink-0 mb-0.5 rounded-full transition-all shadow-sm ${ (newMessage.trim() || attachedImage) && !isOffline ? 'bg-blue-500 hover:bg-blue-600 text-white active:scale-95' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 disabled:opacity-50'}`}>
                     {editingMessage ? <Check size={22} /> : <Send size={22} className="ml-0.5" />}
                   </button>
                 )}
@@ -1286,10 +1291,14 @@ export default function ChatsPage() {
             </div>
           </>
         ) : (
-          <div className="flex-1 hidden md:flex flex-col items-center justify-center bg-gray-50/50 dark:bg-gray-950/50 transition-colors">
-            <div className="bg-white/50 dark:bg-gray-800/50 px-4 py-1.5 rounded-full font-medium text-[14px] text-gray-500 dark:text-gray-400 shadow-sm border border-gray-200/50 dark:border-gray-800">
-              Выберите чат, чтобы начать общение
+          <div className="flex-1 hidden md:flex flex-col items-center justify-center bg-white/50 dark:bg-gray-950/50 transition-colors animate-fade-in">
+            <div className="w-24 h-24 bg-blue-50 dark:bg-blue-900/10 rounded-[32px] flex items-center justify-center mb-6 shadow-sm border border-blue-100 dark:border-blue-900/30">
+              <MessageSquare size={40} className="text-blue-500" strokeWidth={1.5} />
             </div>
+            <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-2 tracking-tight">Выберите чат</h2>
+            <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 max-w-xs text-center">
+              Выберите контакт слева или найдите пользователя через поиск, чтобы начать общение.
+            </p>
           </div>
         )}
       </div>

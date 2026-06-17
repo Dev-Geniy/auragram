@@ -5,9 +5,9 @@ import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useCartStore } from '../store/useCartStore';
 import { 
-  MessageCircle, Share2, Phone, Mail, Globe, 
+  ArrowLeft, MessageCircle, Share2, Phone, Mail, Globe, 
   Package, Loader2, CheckCircle, ShoppingCart, 
-  Plus, Minus, ShieldCheck, MapPin, Sparkles, Store, LogIn, Star, Trash2
+  Plus, Minus, ShieldCheck, MapPin, Sparkles, Store, LogIn, Star, Trash2, X
 } from 'lucide-react';
 
 interface Product {
@@ -190,7 +190,6 @@ export default function ShopPage() {
       
       const docRef = await addDoc(collection(db, 'shop_reviews'), newReview);
       
-      // Добавляем в локальный стейт для мгновенного отображения
       setReviews([{ id: docRef.id, ...newReview, createdAt: { toMillis: () => Date.now() } }, ...reviews]);
       
       setIsReviewModalOpen(false);
@@ -214,7 +213,6 @@ export default function ShopPage() {
     }
   };
 
-  // Вычисляем средний рейтинг
   const averageRating = reviews.length > 0 
     ? (reviews.reduce((acc, curr) => acc + curr.rating, 0) / reviews.length).toFixed(1)
     : '0';

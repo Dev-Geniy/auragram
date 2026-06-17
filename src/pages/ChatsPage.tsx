@@ -1195,76 +1195,76 @@ export default function ChatsPage() {
               </div>
             )}
 
-            {/* ОБНОВЛЕННАЯ НИЖНЯЯ ПАНЕЛЬ С ПОЛНОЭКРАННЫМ РЕЖИМОМ */}
-            <div className={`bg-white dark:bg-gray-900 px-3 py-2 pb-safe md:pb-3 border-t border-gray-200 dark:border-gray-800 shrink-0 transition-all duration-300 flex flex-col ${(replyingTo || editingMessage) ? 'rounded-b-none border-t-0 pt-1' : ''} ${isExpanded ? 'h-[50vh] md:h-[60vh] absolute bottom-0 left-0 right-0 z-50 shadow-[0_-20px_60px_rgba(0,0,0,0.1)]' : ''}`}>
+{/* ОБНОВЛЕННАЯ НИЖНЯЯ ПАНЕЛЬ (ЭТАП 3) */}
+            <div className={`bg-white dark:bg-gray-900 px-2 sm:px-4 py-2 pb-[calc(env(safe-area-inset-bottom)+8px)] md:pb-4 border-t border-gray-100 dark:border-gray-800 shrink-0 transition-all duration-300 flex flex-col relative z-20 ${(replyingTo || editingMessage) ? 'pt-2' : ''}`}>
               
-              {/* ВЕРХНИЙ БАР НАД ПОЛЕМ ВВОДА */}
-              <div className="flex gap-2 mb-2 w-full max-w-4xl mx-auto overflow-x-auto scrollbar-none items-center">
-                <button 
-                  type="button" 
-                  onClick={() => setIsExpanded(!isExpanded)} 
-                  className="shrink-0 flex items-center justify-center w-8 h-8 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-lg transition-colors border border-gray-200 dark:border-gray-700"
-                  title={isExpanded ? "Свернуть" : "Полноэкранный режим"}
-                >
-                  {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                </button>
-
-                {!replyingTo && !editingMessage && isTemplatesAllowed && (
-                  <>
-                    <button type="button" onClick={insertQuickReply} className="shrink-0 flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-colors border border-indigo-100 dark:border-indigo-500/20"><Zap size={14} /> Шаблон ответа</button>
-                    {currentUserProfile?.aiSettings?.followUps && <button type="button" onClick={insertFollowUp} className="shrink-0 flex items-center gap-1.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-500/10 dark:hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-colors border border-purple-100 dark:border-purple-500/20"><Clock size={14} /> Напоминание</button>}
-                  </>
-                )}
-              </div>
+              {/* ШАБЛОНЫ ОТВЕТОВ */}
+              {isTemplatesAllowed && !replyingTo && !editingMessage && (
+                <div className="flex gap-2 mb-2 w-full max-w-4xl mx-auto overflow-x-auto scrollbar-none items-center">
+                  <button type="button" onClick={insertQuickReply} className="shrink-0 flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-xl text-[13px] font-semibold transition-colors border border-indigo-100 dark:border-indigo-500/20"><Zap size={14} /> Шаблон ответа</button>
+                  {currentUserProfile?.aiSettings?.followUps && <button type="button" onClick={insertFollowUp} className="shrink-0 flex items-center gap-1.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-500/10 dark:hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 px-3 py-1.5 rounded-xl text-[13px] font-semibold transition-colors border border-purple-100 dark:border-purple-500/20"><Clock size={14} /> Напоминание</button>}
+                </div>
+              )}
 
               {/* ФОРМА ОТПРАВКИ */}
-              <form onSubmit={handleSendMessage} className={`flex items-end gap-2 max-w-4xl mx-auto relative w-full ${isExpanded ? 'flex-col items-stretch h-full' : ''}`}>
+              <form onSubmit={handleSendMessage} className="flex items-end gap-2 max-w-4xl mx-auto relative w-full">
                 <input type="file" ref={fileInputRef} onChange={handleImageAttach} accept="image/*" className="hidden" />
                 
-                {!isExpanded ? (
-                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isOffline} className="p-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-xl transition-colors shrink-0 mb-0.5 disabled:opacity-50 border border-gray-200 dark:border-gray-700">
-                    <Paperclip size={20} />
-                  </button>
-                ) : (
-                  <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-800/50 px-3 py-2 rounded-t-2xl border-b border-gray-200 dark:border-gray-700">
-                    <span className="text-[12px] font-bold text-gray-500 uppercase tracking-widest">Расширенный ввод</span>
-                    <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isOffline} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-700 rounded-lg text-[13px] font-semibold text-gray-700 dark:text-gray-200 shadow-sm border border-gray-200 dark:border-gray-600 transition-colors hover:bg-gray-50 dark:hover:bg-gray-600">
-                      <Paperclip size={16} /> Прикрепить файл
-                    </button>
-                  </div>
-                )}
+                {/* Скрепка */}
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isOffline} className="p-2.5 text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors shrink-0 mb-0.5 disabled:opacity-50">
+                  <Paperclip size={24} />
+                </button>
 
-                <textarea 
-                  value={newMessage} 
-                  onChange={handleTyping} 
-                  onKeyDown={(e) => { 
-                    if (e.key === 'Enter' && !e.shiftKey) { 
-                      if (!isExpanded) {
-                        e.preventDefault(); 
-                        handleSendMessage(); 
-                      }
-                    }
-                    if (isExpanded && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                       e.preventDefault();
-                       handleSendMessage();
-                    }
-                  }} 
-                  placeholder={editingMessage ? "Отредактируйте сообщение..." : isExpanded ? "Введите длинный текст... (Ctrl + Enter для отправки)" : "Сообщение..."} 
-                  disabled={isOffline} 
-                  className={`flex-1 bg-gray-100 dark:bg-gray-800 text-[15px] outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none custom-scrollbar disabled:opacity-50 transition-all duration-300 ${isExpanded ? 'min-h-[40vh] h-full p-4 rounded-b-2xl border border-gray-200 dark:border-gray-700 border-t-0 shadow-inner' : 'min-h-[48px] max-h-32 px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700'}`} 
-                />
-                
-                {!isExpanded ? (
-                  <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isOffline} className={`p-2.5 shrink-0 mb-0.5 rounded-xl transition-all shadow-sm ${ (newMessage.trim() || attachedImage) && !isOffline ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-800 text-gray-400 dark:text-gray-600 disabled:opacity-50'}`}>
-                    {editingMessage ? <Check size={20} /> : <Send size={20} className="ml-0.5" />}
+                {/* Умный контейнер ввода текста */}
+                <div className={`relative flex-1 flex flex-col bg-gray-100/80 dark:bg-gray-800/80 rounded-3xl border border-transparent focus-within:border-gray-200 dark:focus-within:border-gray-700 transition-all duration-300 ${isExpanded ? 'h-[40vh] shadow-inner' : ''}`}>
+
+                  {/* Иконка Расширения прямо внутри поля */}
+                  <button
+                    type="button"
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors z-10 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
+                    title={isExpanded ? "Свернуть" : "Расширенный ввод"}
+                  >
+                    {isExpanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
                   </button>
-                ) : (
-                  <div className="flex justify-end mt-2 shrink-0">
-                    <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isOffline} className={`px-6 py-3 shrink-0 rounded-xl transition-all shadow-md font-bold flex items-center gap-2 ${ (newMessage.trim() || attachedImage) && !isOffline ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-800 text-gray-400 dark:text-gray-600 disabled:opacity-50'}`}>
-                      {editingMessage ? <Check size={20} /> : <Send size={20} />}
-                      {editingMessage ? 'Сохранить' : 'Отправить'}
-                    </button>
-                  </div>
+
+                  <textarea 
+                    value={newMessage} 
+                    onChange={handleTyping} 
+                    onKeyDown={(e) => { 
+                      if (e.key === 'Enter' && !e.shiftKey) { 
+                        if (!isExpanded) {
+                          e.preventDefault(); 
+                          handleSendMessage(); 
+                        }
+                      }
+                      if (isExpanded && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                         e.preventDefault();
+                         handleSendMessage();
+                      }
+                    }} 
+                    placeholder={editingMessage ? "Отредактируйте сообщение..." : isExpanded ? "Введите длинный текст... (Ctrl + Enter для отправки)" : "Сообщение..."} 
+                    disabled={isOffline} 
+                    className={`w-full bg-transparent text-[15px] outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none custom-scrollbar disabled:opacity-50 pt-3 pb-3 pl-4 ${isExpanded ? 'h-full pr-4' : 'min-h-[44px] max-h-[120px] pr-10'}`} 
+                  />
+
+                  {/* Кнопка отправки внутри поля для расширенного режима */}
+                  {isExpanded && (
+                    <div className="flex items-center justify-between p-2 mt-auto border-t border-gray-200/50 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-900/20 rounded-b-3xl">
+                      <span className="text-[11px] font-medium text-gray-400 ml-2 hidden sm:block">Ctrl + Enter для отправки</span>
+                      <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isOffline} className={`px-5 py-2 shrink-0 rounded-2xl transition-all font-bold flex items-center gap-2 text-[14px] ${ (newMessage.trim() || attachedImage) && !isOffline ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-md' : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 disabled:opacity-50'}`}>
+                        {editingMessage ? <Check size={16} /> : <Send size={16} />}
+                        {editingMessage ? 'Сохранить' : 'Отправить'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Обычная кнопка отправки справа от поля (если не расширено) */}
+                {!isExpanded && (
+                  <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isOffline} className={`p-2.5 shrink-0 mb-0.5 rounded-full transition-all shadow-sm ${ (newMessage.trim() || attachedImage) && !isOffline ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 disabled:opacity-50'}`}>
+                    {editingMessage ? <Check size={22} /> : <Send size={22} className="ml-0.5" />}
+                  </button>
                 )}
               </form>
             </div>

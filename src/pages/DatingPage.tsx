@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Heart, X, RefreshCw, MessageCircle, Star, 
   MapPin, Flame, Sparkles, ChevronDown, ChevronLeft, ChevronRight, Zap,
-  SlidersHorizontal, Check, Users
+  SlidersHorizontal, Check, Users, Info, Globe
 } from 'lucide-react';
 
 interface DatingUser {
@@ -33,9 +33,8 @@ export default function DatingPage() {
   
   // Данные пользователей
   const [allProfiles, setAllProfiles] = useState<DatingUser[]>([]);
-  const [profiles, setProfiles] = useState<DatingUser[]>([]); // Отфильтрованная лента
-  const [likedMeProfiles, setLikedMeProfiles] = useState<DatingUser[]>([]); // Кто лайкнул меня
-  const [myLikesProfiles, setMyLikesProfiles] = useState<DatingUser[]>([]); // Кого лайкнул я
+  const [likedMeProfiles, setLikedMeProfiles] = useState<DatingUser[]>([]); 
+  const [myLikesProfiles, setMyLikesProfiles] = useState<DatingUser[]>([]); 
   
   const [currentIndex, setCurrentIndex] = useState(0);
   const [photoIndex, setPhotoIndex] = useState(0);
@@ -72,6 +71,7 @@ export default function DatingPage() {
       const mySwipesSnap = await getDocs(mySwipesQuery);
       const myLikedIds = new Set<string>();
       const myPassedIds = new Set<string>();
+      
       mySwipesSnap.docs.forEach(d => {
         if (d.data().action === 'like') myLikedIds.add(d.data().to);
         if (d.data().action === 'pass') myPassedIds.add(d.data().to);
@@ -105,7 +105,10 @@ export default function DatingPage() {
             location: data.location || ''
           };
 
-          tempAllProfiles.push(profileData);
+          // Добавляем в ленту (если еще не лайкали и не дизлайкали)
+          if (!myLikedIds.has(doc.id) && !myPassedIds.has(doc.id)) {
+            tempAllProfiles.push(profileData);
+          }
 
           // Заполняем списки симпатий
           if (likesMeIds.has(doc.id) && !myLikedIds.has(doc.id) && !myPassedIds.has(doc.id)) {
@@ -130,25 +133,16 @@ export default function DatingPage() {
   useEffect(() => { fetchDatingData(); }, [user]);
 
   // ==========================================
-  // ПРИМЕНЕНИЕ ФИЛЬТРОВ К ЛЕНТЕ
+  // ПРИМЕНЕНИЕ ФИЛЬТРОВ К ЛЕНТЕ (useMemo)
   // ==========================================
-  useEffect(() => {
+  const feedProfiles = useMemo(() => {
     let feed = allProfiles.filter(p => {
-      // 1. Исключаем тех, кого мы уже лайкнули
-      const alreadyLiked = myLikesProfiles.some(liked => liked.id === p.id);
-      if (alreadyLiked) return false;
-
-      // 2. Фильтр по полу (Если не 'Любой')
-      if (filters.lookingFor !== 'Любой') {
-        if (p.gender !== filters.lookingFor) return false;
-      }
-
-      // 3. Фильтр по городу (Если не 'Весь мир')
+      // Фильтр по полу
+      if (filters.lookingFor !== 'Любой' && p.gender !== filters.lookingFor) return false;
+      // Фильтр по городу
       if (filters.city !== 'Весь мир') {
-        // Простая проверка вхождения строки города в location профиля
-        if (!p.location?.toLowerCase().includes(filters.city.toLowerCase())) return false;
+        if (!p.location || !p.location.toLowerCase().includes(filters.city.toLowerCase())) return false;
       }
-
       return true;
     });
 
@@ -167,13 +161,17 @@ export default function DatingPage() {
       return Math.random() - 0.5;
     });
 
-    setProfiles(feed);
+    return feed;
+  }, [allProfiles, filters, incomingLikes]);
+
+  // Сброс индекса при смене фильтров
+  useEffect(() => {
     setCurrentIndex(0);
     setPhotoIndex(0);
-  }, [allProfiles, filters, incomingLikes, myLikesProfiles]);
+  }, [filters]);
 
   // ==========================================
-  // 2. ФИЗИКА СВАЙПОВ
+  // 2. ФИЗИКА СВАЙПОВ (Drag & Drop)
   // ==========================================
   const handleTouchStart = (clientX: number, clientY: number) => {
     setIsDragging(true);
@@ -198,10 +196,10 @@ export default function DatingPage() {
   // 3. ЛОГИКА ОЦЕНКИ И МЭТЧА
   // ==========================================
   const processSwipe = async (action: 'like' | 'pass', customProfile?: DatingUser) => {
-    const swipedUser = customProfile || profiles[currentIndex];
+    const swipedUser = customProfile || feedProfiles[currentIndex];
     if (!swipedUser || !user) return;
 
-    const isMainCard = !customProfile || customProfile.id === profiles[currentIndex]?.id;
+    const isMainCard = !customProfile || customProfile.id === feedProfiles[currentIndex]?.id;
 
     if (isMainCard) {
       setLeaveX(action === 'like' ? 1000 : -1000);
@@ -212,8 +210,10 @@ export default function DatingPage() {
         setLeaveX(0);
       }, 300);
     } else {
-      if (action === 'like') {
-        setProfiles(prev => prev.filter(p => p.id !== swipedUser.id));
+      if (action === 'like' || action === 'pass') {
+        // Убираем из списка входящих если приняли решение
+        setLikedMeProfiles(prev => prev.filter(p => p.id !== swipedUser.id));
+        setAllProfiles(prev => prev.filter(p => p.id !== swipedUser.id));
       }
     }
 
@@ -225,8 +225,6 @@ export default function DatingPage() {
         createdAt: serverTimestamp()
       });
 
-      // Обновляем списки
-      setLikedMeProfiles(prev => prev.filter(p => p.id !== swipedUser.id));
       if (action === 'like') {
         setMyLikesProfiles(prev => [...prev, swipedUser]);
       }
@@ -278,10 +276,9 @@ export default function DatingPage() {
     );
   }
 
-  const activeProfile = profiles[currentIndex];
-  const nextProfile = profiles[currentIndex + 1];
+  const activeProfile = feedProfiles[currentIndex];
+  const nextProfile = feedProfiles[currentIndex + 1];
 
-  // Массив для вывода в боковой/верхней панели
   const activeSidebarData = sidebarTab === 'likedMe' ? likedMeProfiles : myLikesProfiles;
 
   return (
@@ -291,12 +288,14 @@ export default function DatingPage() {
       {/* 💻 ЛЕВАЯ КОЛОНКА (ПК) - СИМПАТИИ */}
       {/* ========================================== */}
       <div className="hidden lg:flex w-[380px] bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex-col z-10 transition-colors">
-        <div className="p-6 pb-2">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-rose-500 rounded-2xl flex items-center justify-center shadow-lg shadow-pink-500/30 shrink-0">
-              <Flame size={20} className="text-white" strokeWidth={2.5} />
+        <div className="p-6 pb-2 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-rose-500 rounded-2xl flex items-center justify-center shadow-lg shadow-pink-500/30 shrink-0">
+                <Flame size={20} className="text-white" strokeWidth={2.5} />
+              </div>
+              <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Dating</h1>
             </div>
-            <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Dating</h1>
           </div>
 
           <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl mb-4">
@@ -309,7 +308,7 @@ export default function DatingPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 pt-0">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
           <div className="grid grid-cols-2 gap-3">
             {activeSidebarData.map(p => (
               <div key={p.id} onClick={() => setDetailedProfile(p)} className="bg-gray-50 dark:bg-gray-800 rounded-2xl overflow-hidden cursor-pointer group hover:shadow-md transition-all border border-gray-100 dark:border-gray-700">
@@ -340,33 +339,41 @@ export default function DatingPage() {
       {/* ========================================== */}
       {/* 📱 ЦЕНТРАЛЬНАЯ ЧАСТЬ (Лента) */}
       {/* ========================================== */}
-      <div className="flex-1 flex flex-col relative overflow-hidden">
+      <div className="flex-1 flex flex-col relative overflow-hidden bg-gray-950">
         
-        {/* МИНИМАЛИСТИЧНЫЙ HEADER */}
+        {/* МИНИМАЛИСТИЧНЫЙ HEADER (АБСОЛЮТНЫЙ ПОВЕРХ КАРТОЧЕК) */}
         <div className="absolute top-0 left-0 right-0 z-20 pt-[env(safe-area-inset-top)] px-4 py-4 flex items-center justify-between pointer-events-none">
-          {/* На мобилках логотип показываем поверх карточек */}
           <div className="lg:hidden w-10 h-10 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-lg border border-white/20 pointer-events-auto">
             <Flame size={20} className="text-white" strokeWidth={2.5} />
           </div>
-          <div className="hidden lg:block"></div> {/* Spacer */}
+          <div className="hidden lg:block"></div> {/* Spacer for PC */}
 
-          <button onClick={() => setShowFilters(true)} className="w-10 h-10 bg-white/20 backdrop-blur-md hover:bg-white/30 rounded-full flex items-center justify-center text-white pointer-events-auto transition-colors border border-white/20 shadow-lg">
-            <SlidersHorizontal size={20} />
-          </button>
+          <div className="flex gap-2 pointer-events-auto">
+            <button onClick={fetchDatingData} className="w-10 h-10 bg-white/20 backdrop-blur-md hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors border border-white/20 shadow-lg">
+              <RefreshCw size={18} />
+            </button>
+            <button onClick={() => setShowFilters(true)} className="w-10 h-10 bg-white/20 backdrop-blur-md hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors border border-white/20 shadow-lg">
+              <SlidersHorizontal size={18} />
+            </button>
+          </div>
         </div>
 
         {/* МОБИЛЬНАЯ ПАНЕЛЬ СИМПАТИЙ (Видна только на узких экранах) */}
-        <div className="lg:hidden absolute top-[env(safe-area-inset-top)] left-16 right-16 z-20 overflow-x-auto scrollbar-none pointer-events-auto flex items-center gap-2 pt-1 pb-4">
-          {likedMeProfiles.map(p => (
-            <div key={p.id} onClick={() => setDetailedProfile(p)} className="relative w-10 h-10 shrink-0 rounded-full border-2 border-pink-500 p-0.5 cursor-pointer shadow-lg bg-white/20 backdrop-blur-md">
-              <img src={p.gallery[0] || p.avatar} className="w-full h-full rounded-full object-cover" />
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-pink-500 rounded-full border border-white"></div>
-            </div>
-          ))}
-        </div>
+        {likedMeProfiles.length > 0 && (
+          <div className="lg:hidden absolute top-[calc(env(safe-area-inset-top)+64px)] left-0 right-0 z-20 overflow-x-auto scrollbar-none pointer-events-auto flex items-center gap-3 px-4 pb-4">
+            {likedMeProfiles.map(p => (
+              <div key={p.id} onClick={() => setDetailedProfile(p)} className="relative w-14 h-14 shrink-0 rounded-full border-[3px] border-pink-500 p-0.5 cursor-pointer shadow-lg bg-white/20 backdrop-blur-md hover:scale-105 transition-transform">
+                <img src={p.gallery[0] || p.avatar} className="w-full h-full rounded-full object-cover" />
+                <div className="absolute -bottom-1 -right-1 bg-pink-500 rounded-full p-1 border-2 border-white dark:border-gray-900 shadow-sm">
+                  <Heart size={10} className="text-white fill-white"/>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* ОСНОВНАЯ ЗОНА С КАРТОЧКАМИ */}
-        <div className="flex-1 relative overflow-hidden flex justify-center items-center bg-gray-950 pb-20 md:pb-24">
+        <div className="flex-1 relative overflow-hidden flex justify-center items-center pb-24 md:pb-28 pt-10">
           
           {/* Подложка "Пусто" */}
           {!activeProfile && (
@@ -376,7 +383,7 @@ export default function DatingPage() {
               </div>
               <h2 className="text-2xl font-black text-white mb-2 tracking-tight">Новых анкет пока нет</h2>
               <p className="text-[15px] font-medium text-white/50 max-w-xs mb-8">
-                Вы просмотрели всех пользователей по заданным фильтрам. Попробуйте изменить поиск или пройдитесь по ленте заново.
+                Вы просмотрели всех пользователей по заданным фильтрам. Измените параметры поиска или обновите ленту.
               </p>
               <button 
                 onClick={() => { fetchDatingData(); }} 
@@ -389,14 +396,14 @@ export default function DatingPage() {
 
           {/* Карточки */}
           {nextProfile && (
-            <div className="absolute inset-0 md:inset-y-6 md:inset-x-auto md:w-[440px] bg-gray-900 md:rounded-[32px] overflow-hidden transform scale-[0.95] translate-y-4 opacity-50 z-0">
+            <div className="absolute inset-4 bottom-2 md:inset-y-6 md:inset-x-auto md:w-[420px] bg-gray-900 rounded-[32px] overflow-hidden transform scale-[0.95] translate-y-4 opacity-50 z-0 border border-white/5">
               <img src={nextProfile.gallery[0] || nextProfile.avatar} className="w-full h-full object-cover blur-sm" />
             </div>
           )}
 
           {activeProfile && (
             <div 
-              className="absolute inset-0 md:inset-y-6 md:inset-x-auto md:w-[440px] bg-gray-900 md:rounded-[32px] shadow-2xl overflow-hidden z-10 cursor-grab active:cursor-grabbing border-0 md:border border-white/10"
+              className="absolute inset-4 bottom-2 md:inset-y-6 md:inset-x-auto md:w-[420px] bg-gray-900 rounded-[32px] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden z-10 cursor-grab active:cursor-grabbing border border-white/10"
               style={{
                 transform: `translate(${leaveX || pan.x}px, ${pan.y}px) rotate(${(leaveX || pan.x) * 0.04}deg)`,
                 transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)'
@@ -611,7 +618,7 @@ export default function DatingPage() {
                     </div>
                   </div>
                   
-                  {/* Кнопка "Написать" доступна только если уже есть мэтч (он в моих лайках И лайкнул меня) */}
+                  {/* Кнопка "Написать" доступна только если уже есть мэтч */}
                   {(myLikesProfiles.some(p => p.id === detailedProfile.id) && incomingLikes.has(detailedProfile.id)) && (
                     <button 
                       onClick={() => navigate('/chats', { state: { selectedUserId: detailedProfile.id } })}
@@ -647,16 +654,14 @@ export default function DatingPage() {
               {/* КНОПКИ ДЕЙСТВИЙ ВНИЗУ АНКЕТЫ */}
               <div className="mt-auto sticky bottom-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-t border-gray-100 dark:border-gray-800 pt-4 pb-[calc(env(safe-area-inset-bottom)+16px)] px-4 flex gap-3 z-20">
                 {myLikesProfiles.some(p => p.id === detailedProfile.id) ? (
-                  // Если профиль уже лайкнут
-                  <div className="w-full flex justify-center py-4 bg-gray-100 dark:bg-gray-800 text-gray-500 rounded-2xl font-bold flex items-center gap-2 cursor-not-allowed">
+                  <div className="w-full flex justify-center py-4 bg-gray-100 dark:bg-gray-800 text-gray-500 rounded-2xl font-bold flex items-center gap-2 cursor-not-allowed border border-gray-200 dark:border-gray-700">
                     <Check size={20} /> {incomingLikes.has(detailedProfile.id) ? 'У вас взаимная симпатия!' : 'Симпатия отправлена'}
                   </div>
                 ) : (
-                  // Обычные кнопки свайпа
                   <>
                     <button 
                       onClick={() => processSwipe('pass', detailedProfile)} 
-                      className="flex-1 py-4 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-2xl font-bold flex justify-center items-center gap-2 transition-colors"
+                      className="flex-1 py-4 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-2xl font-bold flex justify-center items-center gap-2 transition-colors border border-gray-200 dark:border-gray-700"
                     >
                       <X size={20} /> Скрыть
                     </button>

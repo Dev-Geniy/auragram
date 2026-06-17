@@ -5,7 +5,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
 import { 
   Heart, X, RefreshCw, MessageCircle, Star, 
-  MapPin, Flame, Sparkles, ChevronDown, ChevronLeft, ChevronRight, Zap
+  MapPin, Flame, Info, Sparkles, ChevronDown, ChevronLeft, ChevronRight, Zap
 } from 'lucide-react';
 
 interface DatingUser {

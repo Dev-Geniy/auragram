@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useCartStore } from '../store/useCartStore';
 import { 
-  MessageCircle, Phone, Mail, 
+  MessageCircle, Share2, Phone, Mail, Globe, 
   Package, Loader2, CheckCircle, ShoppingCart, 
-  Plus, Minus, MapPin, Sparkles, LogIn, Link2
+  Plus, Minus, ShieldCheck, MapPin, Sparkles, Store, LogIn, Star, Trash2
 } from 'lucide-react';
 
 interface Product {
@@ -31,6 +31,16 @@ interface ShopProfile {
   products?: Product[];
 }
 
+interface Review {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar: string;
+  rating: number;
+  text: string;
+  createdAt: any;
+}
+
 export default function ShopPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -38,39 +48,63 @@ export default function ShopPage() {
   const { user } = useAuthStore();
   
   const [shop, setShop] = useState<ShopProfile | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCopied, setIsCopied] = useState(false);
+
+  // Стейты для отзывов
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewText, setReviewText] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   // Извлекаем методы корзины
   const { addItem, removeItem, getItemsByShop } = useCartStore();
   
-  // Товары в корзине ТОЛЬКО для этого магазина
   const shopCartItems = shop?.id ? getItemsByShop(shop.id) : [];
   const cartTotalItems = shopCartItems.reduce((sum, item) => sum + item.quantity, 0);
 
   // ==========================================
-  // 1. ЗАГРУЗКА МАГАЗИНА (ПО ID ИЛИ КРАСИВОЙ ССЫЛКЕ)
+  // 1. ЗАГРУЗКА МАГАЗИНА
   // ==========================================
   useEffect(() => {
     const fetchShop = async () => {
       if (!id) return;
       setIsLoading(true);
       try {
+        let shopData: ShopProfile | null = null;
+        let shopIdToFetch = id;
+
+        // Ищем по прямому системному ID
         const docRef = doc(db, 'users', id);
         const docSnap = await getDoc(docRef);
         
         if (docSnap.exists() && docSnap.data().type === 'business') {
-          setShop({ id: docSnap.id, ...docSnap.data() } as ShopProfile);
+          shopData = { id: docSnap.id, ...docSnap.data() } as ShopProfile;
         } else {
+          // Ищем по красивой ссылке (customUrl)
           const q = query(collection(db, 'users'), where('customUrl', '==', id.toLowerCase()), where('type', '==', 'business'));
           const querySnapshot = await getDocs(q);
           
           if (!querySnapshot.empty) {
             const shopDoc = querySnapshot.docs[0];
-            setShop({ id: shopDoc.id, ...shopDoc.data() } as ShopProfile);
-          } else {
-            setShop(null);
+            shopIdToFetch = shopDoc.id;
+            shopData = { id: shopDoc.id, ...shopDoc.data() } as ShopProfile;
           }
+        }
+
+        setShop(shopData);
+
+        // Если магазин найден, загружаем отзывы
+        if (shopData) {
+          const reviewsQ = query(collection(db, 'shop_reviews'), where('shopId', '==', shopIdToFetch));
+          const reviewsSnap = await getDocs(reviewsQ);
+          const loadedReviews: Review[] = [];
+          reviewsSnap.forEach(r => loadedReviews.push({ id: r.id, ...r.data() } as Review));
+          
+          // Сортировка (новые сверху)
+          loadedReviews.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+          setReviews(loadedReviews);
         }
       } catch (error) {
         console.error('Ошибка загрузки магазина:', error);
@@ -82,14 +116,11 @@ export default function ShopPage() {
   }, [id]);
 
   // ==========================================
-  // 2. БАЗОВОЕ SEO (Меняем заголовок вкладки)
+  // 2. БАЗОВОЕ SEO
   // ==========================================
   useEffect(() => {
-    if (shop) {
-      document.title = `${shop.name} | Aura Store`;
-    } else {
-      document.title = `Магазин | Aura`;
-    }
+    if (shop) document.title = `${shop.name} | Aura Store`;
+    else document.title = `Магазин | Aura`;
   }, [shop]);
 
   // ==========================================
@@ -107,11 +138,8 @@ export default function ShopPage() {
     };
 
     if (navigator.share) {
-      try {
-        await navigator.share(shareData);
-      } catch (err) {
-        console.log('Поделиться отменено', err);
-      }
+      try { await navigator.share(shareData); } 
+      catch (err) { console.log('Поделиться отменено', err); }
     } else {
       navigator.clipboard.writeText(link);
       setIsCopied(true);
@@ -119,23 +147,14 @@ export default function ShopPage() {
     }
   };
 
-  // УМНАЯ КНОПКА: Если гость — на логин, если свой — в чат
   const handleRequireAuthAction = (action: () => void) => {
-    if (!user) {
-      navigate('/login', { state: { from: location.pathname } });
-    } else {
-      action();
-    }
+    if (!user) navigate('/login', { state: { from: location.pathname } });
+    else action();
   };
 
   const handleCheckout = () => {
     handleRequireAuthAction(() => {
-      navigate('/chats', { 
-        state: { 
-          selectedUserId: shop?.id, 
-          checkoutCart: shopCartItems
-        } 
-      });
+      navigate('/chats', { state: { selectedUserId: shop?.id, checkoutCart: shopCartItems } });
     });
   };
 
@@ -144,6 +163,61 @@ export default function ShopPage() {
       navigate('/chats', { state: { selectedUserId: shop?.id } });
     });
   };
+
+  // --- ЛОГИКА ОТЗЫВОВ ---
+  const handleAddReview = async () => {
+    if (!user || !shop) return;
+    if (reviewText.trim().length === 0) return alert('Пожалуйста, напишите текст отзыва.');
+    if (reviewText.length > 150) return alert('Отзыв слишком длинный (максимум 150 символов).');
+    
+    // Анти-спам: проверка на ссылки
+    const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/i;
+    if (linkRegex.test(reviewText)) {
+      return alert('Ссылки в отзывах запрещены. Пожалуйста, удалите линк из текста.');
+    }
+
+    setIsSubmittingReview(true);
+    try {
+      const newReview = {
+        shopId: shop.id,
+        userId: user.uid,
+        userName: user.displayName || 'Пользователь',
+        userAvatar: user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=random`,
+        rating: reviewRating,
+        text: reviewText.trim(),
+        createdAt: serverTimestamp()
+      };
+      
+      const docRef = await addDoc(collection(db, 'shop_reviews'), newReview);
+      
+      // Добавляем в локальный стейт для мгновенного отображения
+      setReviews([{ id: docRef.id, ...newReview, createdAt: { toMillis: () => Date.now() } }, ...reviews]);
+      
+      setIsReviewModalOpen(false);
+      setReviewText('');
+      setReviewRating(5);
+    } catch (error) {
+      console.error("Ошибка добавления отзыва", error);
+      alert('Не удалось добавить отзыв.');
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
+  const handleDeleteReview = async (reviewId: string) => {
+    if (!window.confirm('Вы уверены, что хотите удалить этот отзыв?')) return;
+    try {
+      await deleteDoc(doc(db, 'shop_reviews', reviewId));
+      setReviews(prev => prev.filter(r => r.id !== reviewId));
+    } catch (error) {
+      console.error('Ошибка удаления', error);
+    }
+  };
+
+  // Вычисляем средний рейтинг
+  const averageRating = reviews.length > 0 
+    ? (reviews.reduce((acc, curr) => acc + curr.rating, 0) / reviews.length).toFixed(1)
+    : '0';
 
   // ==========================================
   // 4. РЕНДЕР
@@ -189,29 +263,32 @@ export default function ShopPage() {
             loading="lazy"
             className="w-10 h-10 rounded-[12px] object-cover border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 shrink-0 shadow-sm" 
           />
-          <h1 className="text-[16px] md:text-[18px] font-black text-gray-900 dark:text-white truncate">
-            {shop.name}
-          </h1>
+          <div className="flex flex-col min-w-0">
+            <h1 className="text-[15px] md:text-[16px] font-black text-gray-900 dark:text-white truncate leading-tight">
+              {shop.name}
+            </h1>
+            {reviews.length > 0 && (
+              <div className="flex items-center gap-1 text-[11px] font-bold text-amber-500">
+                <Star size={10} className="fill-amber-500" /> {averageRating} <span className="text-gray-400 font-medium ml-0.5">({reviews.length})</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Правая часть: Контакты и Действия */}
         <div className="flex items-center gap-1.5 shrink-0">
-          
-          {/* Телефон (если указан) */}
           {shop.contacts?.phone && (
             <a href={`tel:${shop.contacts.phone}`} className="w-9 h-9 flex items-center justify-center bg-gray-100 hover:bg-green-50 dark:bg-gray-800 dark:hover:bg-green-500/20 text-gray-600 hover:text-green-500 dark:text-gray-300 dark:hover:text-green-400 rounded-full transition-colors">
               <Phone size={16} />
             </a>
           )}
           
-          {/* Почта (если указана) */}
           {shop.contacts?.email && (
             <a href={`mailto:${shop.contacts.email}`} className="hidden sm:flex w-9 h-9 items-center justify-center bg-gray-100 hover:bg-orange-50 dark:bg-gray-800 dark:hover:bg-orange-500/20 text-gray-600 hover:text-orange-500 dark:text-gray-300 dark:hover:text-orange-400 rounded-full transition-colors">
               <Mail size={16} />
             </a>
           )}
 
-          {/* Написать (Если это не наш собственный магазин) */}
           {!isMyOwnShop && (
             <button 
               onClick={handleContactSeller}
@@ -222,12 +299,11 @@ export default function ShopPage() {
             </button>
           )}
 
-          {/* Поделиться (Копировать ссылку) */}
           <button 
             onClick={handleShare}
             className="w-9 h-9 flex items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full transition-colors ml-1"
           >
-            {isCopied ? <CheckCircle size={18} className="text-green-500" /> : <Link2 size={18} />}
+            {isCopied ? <CheckCircle size={18} className="text-green-500" /> : <Share2 size={18} />}
           </button>
         </div>
       </div>
@@ -328,9 +404,67 @@ export default function ShopPage() {
             <p className="text-[14px] font-medium max-w-[200px]">В этом магазине пока нет товаров.</p>
           </div>
         )}
+
+        {/* ========================================== */}
+        {/* БЛОК ОТЗЫВОВ */}
+        {/* ========================================== */}
+        <div className="mt-12 mb-8">
+          <div className="flex items-center justify-between mb-5 px-1">
+            <h2 className="text-[16px] font-black text-gray-900 dark:text-white tracking-widest uppercase flex items-center gap-2">
+              Отзывы 
+              {reviews.length > 0 && <span className="flex items-center gap-1 text-[13px] font-bold text-amber-500 normal-case tracking-normal bg-amber-50 dark:bg-amber-500/10 px-2 py-0.5 rounded-lg ml-2"><Star size={14} className="fill-amber-500" /> {averageRating}</span>}
+            </h2>
+            
+            {!isMyOwnShop && user ? (
+              <button 
+                onClick={() => setIsReviewModalOpen(true)}
+                className="text-[13px] font-bold text-blue-500 hover:text-blue-600 transition-colors bg-blue-50 dark:bg-blue-500/10 px-3 py-1.5 rounded-lg shadow-sm"
+              >
+                Оставить отзыв
+              </button>
+            ) : !user ? (
+              <button onClick={() => navigate('/login', { state: { from: location.pathname } })} className="text-[12px] font-bold text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors flex items-center gap-1">
+                <LogIn size={14} /> Войти, чтобы оценить
+              </button>
+            ) : null}
+          </div>
+
+          {reviews.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {reviews.map(review => (
+                <div key={review.id} className="bg-white dark:bg-[#151518] p-5 rounded-[24px] border border-gray-100 dark:border-gray-800/50 shadow-sm relative group">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <img src={review.userAvatar} alt="avatar" className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800" />
+                      <div>
+                        <h4 className="font-bold text-[14px] text-gray-900 dark:text-white leading-tight">{review.userName}</h4>
+                        <div className="flex items-center gap-0.5 mt-0.5">
+                          {[1, 2, 3, 4, 5].map(star => (
+                            <Star key={star} size={12} className={star <= review.rating ? "text-amber-400 fill-amber-400" : "text-gray-200 dark:text-gray-700"} />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    {isMyOwnShop && (
+                      <button onClick={() => handleDeleteReview(review.id)} className="w-8 h-8 rounded-full bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[14px] text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{review.text}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-10 bg-white dark:bg-[#151518] rounded-[24px] border border-gray-100 dark:border-gray-800/50 text-gray-400 transition-colors shadow-sm">
+              <Star size={32} className="mx-auto mb-3 opacity-30" />
+              <p className="text-[14px] font-medium">Отзывов пока нет. Будьте первыми!</p>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* ПЛАВАЮЩАЯ ПАНЕЛЬ ЗАКАЗА (Отображается, если в корзине магазина есть товары) */}
+      {/* ПЛАВАЮЩАЯ ПАНЕЛЬ ЗАКАЗА */}
       {cartTotalItems > 0 && !isMyOwnShop && user && (
         <div className="fixed bottom-[80px] md:bottom-6 left-0 right-0 px-4 flex justify-center z-50 animate-slide-up">
           <button 
@@ -350,6 +484,53 @@ export default function ShopPage() {
               {cartTotalItems}
             </div>
           </button>
+        </div>
+      )}
+
+      {/* МОДАЛКА НАПИСАНИЯ ОТЗЫВА */}
+      {isReviewModalOpen && (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex justify-center items-end md:items-center p-0 md:p-4 animate-fade-in" onClick={() => setIsReviewModalOpen(false)}>
+          <div className="bg-white dark:bg-gray-900 w-full md:w-[400px] rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col relative animate-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+              <h3 className="font-black text-[18px] text-gray-900 dark:text-white">Новый отзыв</h3>
+              <button onClick={() => setIsReviewModalOpen(false)} className="w-8 h-8 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-500"><X size={18}/></button>
+            </div>
+            
+            <div className="p-6">
+              <div className="flex justify-center gap-2 mb-6">
+                {[1, 2, 3, 4, 5].map(star => (
+                  <button 
+                    key={star} 
+                    onClick={() => setReviewRating(star)}
+                    className="transition-transform active:scale-90 hover:scale-110"
+                  >
+                    <Star size={36} className={star <= reviewRating ? "text-amber-400 fill-amber-400" : "text-gray-200 dark:text-gray-700"} />
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative mb-6">
+                <textarea 
+                  value={reviewText}
+                  onChange={(e) => setReviewText(e.target.value)}
+                  maxLength={150}
+                  placeholder="Поделитесь впечатлениями о магазине..."
+                  className="w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-[20px] px-4 py-3 text-[14px] text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all resize-none h-32 custom-scrollbar"
+                />
+                <span className={`absolute bottom-3 right-4 text-[11px] font-bold ${reviewText.length === 150 ? 'text-red-500' : 'text-gray-400'}`}>
+                  {reviewText.length}/150
+                </span>
+              </div>
+
+              <button 
+                onClick={handleAddReview}
+                disabled={isSubmittingReview || reviewText.trim().length === 0}
+                className="w-full bg-blue-500 hover:bg-blue-600 text-white font-black py-4 rounded-[20px] flex items-center justify-center gap-2 transition-transform active:scale-[0.98] shadow-lg shadow-blue-500/25 disabled:opacity-50 text-[15px]"
+              >
+                {isSubmittingReview ? <Loader2 size={20} className="animate-spin" /> : 'Опубликовать'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

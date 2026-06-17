@@ -1,12 +1,12 @@
 import { useEffect, useState, Suspense, lazy } from 'react';
 import { HashRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './services/firebase';
 import { useAuthStore } from './store/useAuthStore';
 
 import { 
-  MessageCircle, Store, Settings, LogOut, Hexagon,
+  MessageCircle, Store, Settings, Hexagon,
   Heart, ShoppingBag, LineChart, LayoutDashboard, Menu, X
 } from 'lucide-react';
 
@@ -25,14 +25,21 @@ const DatingPage = lazy(() => import('./pages/DatingPage'));
 const CRMPage = lazy(() => import('./pages/CRMPage'));
 
 // ==========================================
-// ГЛОБАЛЬНЫЙ ЗАГРУЗЧИК
+// ГЛОБАЛЬНЫЙ ЗАГРУЗЧИК (COSMIC STYLE)
 // ==========================================
 const GlobalLoader = () => (
-  <div className="min-h-screen flex items-center justify-center bg-white dark:bg-gray-950 w-full transition-colors duration-300">
-    <div className="w-12 h-12 relative flex items-center justify-center">
-      <div className="absolute inset-0 bg-gray-100 dark:bg-gray-800 rounded-full animate-ping opacity-50"></div>
-      <Hexagon size={32} className="text-gray-900 dark:text-white absolute" strokeWidth={1.5} />
-      <div className="w-12 h-12 border-[2px] border-gray-900 dark:border-white border-t-transparent dark:border-t-transparent rounded-full animate-spin relative z-10"></div>
+  <div className="min-h-[100dvh] flex items-center justify-center bg-[#F5F5F7] dark:bg-[#030712] w-full transition-colors duration-500 overflow-hidden relative">
+    {/* Глубокое космическое свечение */}
+    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[50vw] h-[50vw] md:w-[20vw] md:h-[20vw] bg-blue-500/10 rounded-full blur-[80px] animate-pulse duration-1000" />
+    
+    <div className="relative z-10 flex flex-col items-center">
+      <div className="relative w-20 h-20 flex items-center justify-center">
+        <div className="absolute inset-0 bg-blue-500/20 dark:bg-white/10 rounded-full animate-ping opacity-50 duration-1000"></div>
+        <Hexagon size={48} className="text-gray-900 dark:text-white relative z-10 animate-pulse" strokeWidth={1.5} />
+      </div>
+      <p className="mt-6 text-[10px] uppercase tracking-[0.4em] text-gray-400 dark:text-gray-500 font-black animate-pulse">
+        Синхронизация
+      </p>
     </div>
   </div>
 );
@@ -78,15 +85,11 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
     return () => unsubscribe();
   }, [user]);
 
-  const handleLogout = async () => {
-    try { await signOut(auth); } catch (error) { console.error(error); }
-  };
-
   // Если пользователя нет (гостевой режим для магазина), не рендерим меню
   if (!user) {
     return (
-      <div className="flex h-[100dvh] bg-white dark:bg-gray-950 overflow-hidden font-sans antialiased text-gray-900 dark:text-gray-100 transition-colors duration-300">
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative bg-white dark:bg-gray-950 transition-colors duration-300 z-10">
+      <div className="flex h-[100dvh] bg-[#F5F5F7] dark:bg-[#030712] overflow-hidden font-sans antialiased text-gray-900 dark:text-gray-100 transition-colors duration-300">
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative transition-colors duration-300 z-10">
           <Suspense fallback={<GlobalLoader />}>
             {children}
           </Suspense>
@@ -98,24 +101,23 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
   const availableItems = [];
   
   if (profile?.goals?.includes('dating')) {
-    availableItems.push({ id: 'dating', path: '/dating', icon: <Heart size={24} strokeWidth={2} />, label: 'Знакомства' });
+    availableItems.push({ id: 'dating', path: '/dating', icon: <Heart size={22} strokeWidth={2} />, label: 'Знакомства' });
   }
   
-  availableItems.push({ id: 'chats', path: '/chats', icon: <MessageCircle size={24} strokeWidth={2} />, label: 'Чаты' });
-  availableItems.push({ id: 'market', path: '/market', icon: <Store size={24} strokeWidth={2} />, label: 'Маркет' });
+  availableItems.push({ id: 'chats', path: '/chats', icon: <MessageCircle size={22} strokeWidth={2} />, label: 'Чаты' });
+  availableItems.push({ id: 'market', path: '/market', icon: <Store size={22} strokeWidth={2} />, label: 'Маркет' });
   
   if (profile?.type === 'business') {
-    // Если у пользователя есть customUrl, используем его в меню, иначе id
     const shopLink = profile.customUrl ? profile.customUrl : user.uid;
-    availableItems.push({ id: 'myshop', path: `/shop/${shopLink}`, icon: <ShoppingBag size={24} strokeWidth={2} />, label: 'Мой магазин' });
-    availableItems.push({ id: 'crm', path: '/crm', icon: <LineChart size={24} strokeWidth={2} />, label: 'Smart CRM' });
+    availableItems.push({ id: 'myshop', path: `/shop/${shopLink}`, icon: <ShoppingBag size={22} strokeWidth={2} />, label: 'Мой магазин' });
+    availableItems.push({ id: 'crm', path: '/crm', icon: <LineChart size={22} strokeWidth={2} />, label: 'Smart CRM' });
   }
 
   if (profile?.goals?.includes('productivity')) {
-    availableItems.push({ id: 'productivity', path: '/productivity', icon: <LayoutDashboard size={24} strokeWidth={2} />, label: 'Продуктивность' });
+    availableItems.push({ id: 'productivity', path: '/productivity', icon: <LayoutDashboard size={22} strokeWidth={2} />, label: 'Продуктивность' });
   }
 
-  availableItems.push({ id: 'profile', path: '/profile', icon: <Settings size={24} strokeWidth={2} />, label: 'Настройки' });
+  availableItems.push({ id: 'profile', path: '/profile', icon: <Settings size={22} strokeWidth={2} />, label: 'Настройки' });
 
   if (profile?.menuOrder && Array.isArray(profile.menuOrder)) {
     availableItems.sort((a, b) => {
@@ -133,11 +135,11 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
   const mobileMoreItems = isMobileOverflow ? availableItems.slice(3) : [];
 
   return (
-    <div className="flex h-[100dvh] bg-white dark:bg-gray-950 overflow-hidden font-sans antialiased text-gray-900 dark:text-gray-100 transition-colors duration-300">
+    <div className="flex h-[100dvh] bg-[#F5F5F7] dark:bg-[#030712] overflow-hidden font-sans antialiased text-gray-900 dark:text-gray-100 transition-colors duration-300">
       
-      {/* 💻 ДЕСКТОПНЫЙ САЙДБАР */}
+      {/* 💻 ДЕСКТОПНЫЙ САЙДБАР (GLASSMORPHISM) */}
       <aside 
-        className={`hidden md:flex bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex-col justify-between z-20 transition-all duration-300 ease-in-out ${
+        className={`hidden md:flex bg-white/80 dark:bg-[#0A0A0B]/80 backdrop-blur-2xl border-r border-gray-200/50 dark:border-white/5 flex-col justify-between z-30 transition-all duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
           isSidebarCollapsed ? 'w-[80px]' : 'w-[80px] lg:w-[260px]'
         }`}
       >
@@ -145,16 +147,16 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
           
           <div 
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            className={`h-16 flex items-center mx-3 mb-4 mt-2 cursor-pointer hover:bg-gray-200/50 dark:hover:bg-gray-800/50 rounded-2xl transition-all duration-200 ${
-              isSidebarCollapsed ? 'justify-center' : 'justify-center lg:justify-start lg:px-3'
+            className={`h-16 flex items-center mx-3 mb-6 mt-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5 rounded-[20px] transition-all duration-200 ${
+              isSidebarCollapsed ? 'justify-center' : 'justify-center lg:justify-start lg:px-4'
             }`}
             title={isSidebarCollapsed ? "Развернуть меню" : "Свернуть меню"}
           >
-            <div className="w-10 h-10 bg-gray-900 dark:bg-gray-800 rounded-xl flex items-center justify-center shadow-sm shrink-0 transition-transform hover:scale-105">
-              <Hexagon size={22} className="text-white" strokeWidth={2.5} />
+            <div className="w-10 h-10 bg-gray-900 dark:bg-white rounded-[14px] flex items-center justify-center shadow-lg shadow-black/10 dark:shadow-white/10 shrink-0 transition-transform hover:scale-105">
+              <Hexagon size={22} className="text-white dark:text-black" strokeWidth={2.5} />
             </div>
             <span 
-              className={`ml-3 font-black text-xl tracking-tight text-gray-900 dark:text-white truncate transition-all duration-300 ${
+              className={`ml-3.5 font-black text-xl tracking-tight text-gray-900 dark:text-white truncate transition-all duration-300 ${
                 isSidebarCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100 hidden lg:block'
               }`}
             >
@@ -162,19 +164,19 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
             </span>
           </div>
 
-          <nav className="flex-1 px-3 space-y-1 overflow-y-auto custom-scrollbar pb-4">
+          <nav className="flex-1 px-3 space-y-1.5 overflow-y-auto custom-scrollbar pb-4">
             {availableItems.map((item) => {
               const isActive = location.pathname.startsWith(item.path);
               return (
                 <Link
                   key={item.id}
                   to={item.path}
-                  className={`flex items-center py-3 rounded-2xl transition-all duration-200 group ${
+                  className={`flex items-center py-3.5 rounded-[18px] transition-all duration-300 group ${
                     isSidebarCollapsed ? 'justify-center px-0' : 'justify-center lg:justify-start lg:px-4'
                   } ${
                     isActive
-                      ? 'bg-gray-900 dark:bg-gray-800 text-white shadow-sm'
-                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
+                      ? 'bg-gray-900 dark:bg-white text-white dark:text-black shadow-lg shadow-black/10 dark:shadow-white/10'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'
                   }`}
                   title={isSidebarCollapsed ? item.label : undefined}
                 >
@@ -183,7 +185,7 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
                       {item.icon}
                     </div>
                     <span 
-                      className={`ml-3.5 text-[15px] font-semibold tracking-wide truncate transition-all duration-300 ${
+                      className={`ml-3.5 text-[14px] font-bold tracking-wide truncate transition-all duration-300 ${
                         isSidebarCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100 hidden lg:block'
                       }`}
                     >
@@ -195,53 +197,41 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
             })}
           </nav>
 
-          <div className="p-3 border-t border-gray-200 dark:border-gray-800 shrink-0">
+          {/* Профиль внизу (Кликабельный) */}
+          <div className="p-3 border-t border-gray-200/50 dark:border-white/5 shrink-0">
             {user && (
-              <div className={`flex items-center mb-2 p-2 rounded-2xl transition-all ${
-                isSidebarCollapsed ? 'justify-center' : 'justify-center lg:justify-start lg:px-3 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 cursor-pointer'
-              }`}>
+              <Link 
+                to="/profile"
+                className={`flex items-center p-2 rounded-[20px] transition-all duration-300 ${
+                  isSidebarCollapsed ? 'justify-center' : 'justify-center lg:justify-start lg:px-3 hover:bg-gray-100 dark:hover:bg-white/5 cursor-pointer'
+                }`}
+                title="Настройки профиля"
+              >
                 <img 
                   src={profile?.avatar || user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile?.name || user.displayName || 'U')}&background=random`} 
                   alt="Profile" 
-                  className="w-10 h-10 rounded-full object-cover border border-gray-200 dark:border-gray-700 shrink-0 hover:scale-105 transition-transform" 
+                  className="w-10 h-10 rounded-[14px] object-cover border border-gray-200 dark:border-gray-800 shrink-0 hover:scale-105 transition-transform shadow-sm" 
                 />
                 <div 
                   className={`flex-1 min-w-0 ml-3 transition-all duration-300 ${
                     isSidebarCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100 hidden lg:block'
                   }`}
                 >
-                  <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
+                  <p className="text-[14px] font-bold text-gray-900 dark:text-white truncate">
                     {profile?.name || user.displayName || 'Пользователь'}
                   </p>
-                  <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 truncate">
-                    {profile?.type === 'business' ? 'Бизнес-аккаунт' : 'Online'}
+                  <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 truncate uppercase tracking-widest mt-0.5">
+                    {profile?.type === 'business' ? 'Бизнес' : 'Online'}
                   </p>
                 </div>
-              </div>
+              </Link>
             )}
-            
-            <button
-              onClick={handleLogout}
-              className={`w-full flex items-center py-3 text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-2xl transition-colors group ${
-                isSidebarCollapsed ? 'justify-center px-0' : 'justify-center lg:justify-start lg:px-4'
-              }`}
-              title="Выйти"
-            >
-              <LogOut size={22} className={`${!isSidebarCollapsed && 'lg:mr-3'} shrink-0 group-hover:scale-110 transition-transform`} />
-              <span 
-                className={`text-[15px] font-semibold truncate transition-all duration-300 ${
-                  isSidebarCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100 hidden lg:block'
-                }`}
-              >
-                Выйти
-              </span>
-            </button>
           </div>
         </div>
       </aside>
 
       {/* 📱 ОСНОВНОЙ КОНТЕЙНЕР РЕНДЕРА СТРАНИЦ */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative pb-[60px] md:pb-0 bg-white dark:bg-gray-950 transition-colors duration-300 z-10">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative pb-[60px] md:pb-0 transition-colors duration-300 z-10">
         <Suspense fallback={<GlobalLoader />}>
           {children}
         </Suspense>
@@ -249,15 +239,15 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
 
       {/* 📱 ШТОРКА (БОЛЬШЕ ПУНКТов) ДЛЯ МОБИЛОК */}
       {isMoreMenuOpen && isMobileOverflow && (
-        <div className="md:hidden fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm animate-fade-in flex flex-col justify-end" onClick={() => setIsMoreMenuOpen(false)}>
+        <div className="md:hidden fixed inset-0 z-[60] bg-gray-950/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end" onClick={() => setIsMoreMenuOpen(false)}>
           <div 
-            className="bg-white dark:bg-gray-900 rounded-t-[32px] p-6 pb-[90px] shadow-2xl animate-slide-up relative"
+            className="bg-white/90 dark:bg-[#0A0A0B]/90 backdrop-blur-2xl rounded-t-[40px] p-6 pb-[100px] shadow-2xl animate-slide-up relative border-t border-white/20 dark:border-white/5"
             onClick={e => e.stopPropagation()}
           >
-            <button onClick={() => setIsMoreMenuOpen(false)} className="absolute top-4 right-4 w-8 h-8 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-              <X size={18} />
+            <button onClick={() => setIsMoreMenuOpen(false)} className="absolute top-4 right-4 w-10 h-10 bg-gray-100 dark:bg-white/10 rounded-full flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
+              <X size={20} />
             </button>
-            <h3 className="text-[13px] font-bold text-gray-400 uppercase tracking-widest mb-4 ml-2">Все сервисы</h3>
+            <h3 className="text-[11px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-6 ml-2">Все сервисы</h3>
             <div className="grid grid-cols-4 gap-y-6 gap-x-2">
               {mobileMoreItems.map((item) => {
                 const isActive = location.pathname.startsWith(item.path);
@@ -266,9 +256,9 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
                     key={item.id}
                     to={item.path}
                     onClick={() => setIsMoreMenuOpen(false)}
-                    className="flex flex-col items-center gap-2 group"
+                    className="flex flex-col items-center gap-2.5 group"
                   >
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${isActive ? 'bg-gray-900 dark:bg-gray-800 text-white shadow-md scale-105' : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 group-hover:scale-105 group-hover:bg-gray-100 dark:group-hover:bg-gray-700'}`}>
+                    <div className={`w-14 h-14 rounded-[20px] flex items-center justify-center transition-all duration-300 ${isActive ? 'bg-gray-900 dark:bg-white text-white dark:text-black shadow-lg scale-105' : 'bg-gray-50 dark:bg-[#151518] text-gray-600 dark:text-gray-400 group-hover:scale-105'}`}>
                       {item.icon}
                     </div>
                     <span className={`text-[10px] font-bold text-center leading-tight w-full truncate px-1 transition-colors ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
@@ -282,8 +272,8 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
         </div>
       )}
 
-      {/* 📱 МОБИЛЬНОЕ НИЖНЕЕ МЕНЮ */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-[65px] pb-safe bg-white/90 dark:bg-gray-950/90 backdrop-blur-xl border-t border-gray-200/80 dark:border-gray-800/80 z-50 flex items-center justify-around px-2 transition-colors duration-300 shadow-[0_-10px_40px_rgba(0,0,0,0.03)]">
+      {/* 📱 МОБИЛЬНОЕ НИЖНЕЕ МЕНЮ (GLASSMORPHISM) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-[70px] pb-safe bg-white/80 dark:bg-[#0A0A0B]/80 backdrop-blur-2xl border-t border-gray-200/50 dark:border-white/5 z-50 flex items-center justify-around px-2 transition-colors duration-300 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
         {mobileNavItems.map((item) => {
           const isActive = location.pathname.startsWith(item.path);
           return (
@@ -292,10 +282,10 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
               to={item.path}
               className="flex flex-col items-center justify-center w-full h-full relative group"
             >
-              <div className={`transition-all duration-300 ${isActive ? 'text-gray-900 dark:text-white scale-110 -translate-y-1' : 'text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300'}`}>
+              <div className={`transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${isActive ? 'text-gray-900 dark:text-white scale-110 -translate-y-2' : 'text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300'}`}>
                 {item.icon}
               </div>
-              <span className={`absolute bottom-1.5 text-[9px] font-bold transition-all duration-300 ${isActive ? 'text-gray-900 dark:text-white opacity-100' : 'text-gray-400 dark:text-gray-500 opacity-0 group-hover:opacity-100'}`}>
+              <span className={`absolute bottom-2 text-[10px] font-bold transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${isActive ? 'text-gray-900 dark:text-white opacity-100 transform translate-y-0' : 'text-gray-400 dark:text-gray-500 opacity-0 transform translate-y-2'}`}>
                 {item.label}
               </span>
             </Link>
@@ -307,10 +297,10 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
             onClick={() => setIsMoreMenuOpen(true)}
             className="flex flex-col items-center justify-center w-full h-full relative group"
           >
-            <div className={`transition-all duration-300 ${isMoreMenuOpen ? 'text-gray-900 dark:text-white scale-110 -translate-y-1' : 'text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300'}`}>
-              <Menu size={24} strokeWidth={2} />
+            <div className={`transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${isMoreMenuOpen ? 'text-gray-900 dark:text-white scale-110 -translate-y-2' : 'text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300'}`}>
+              <Menu size={24} strokeWidth={2.5} />
             </div>
-            <span className={`absolute bottom-1.5 text-[9px] font-bold transition-all duration-300 ${isMoreMenuOpen ? 'text-gray-900 dark:text-white opacity-100' : 'text-gray-400 dark:text-gray-500 opacity-0 group-hover:opacity-100'}`}>
+            <span className={`absolute bottom-2 text-[10px] font-bold transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${isMoreMenuOpen ? 'text-gray-900 dark:text-white opacity-100 transform translate-y-0' : 'text-gray-400 dark:text-gray-500 opacity-0 transform translate-y-2'}`}>
               Меню
             </span>
           </button>
@@ -365,7 +355,7 @@ export default function App() {
           <Route path="/market" element={<RequireAuth><MainLayout><MarketPage /></MainLayout></RequireAuth>} />
           <Route path="/profile" element={<RequireAuth><MainLayout><ProfilePage /></MainLayout></RequireAuth>} />
           
-          {/* РОУТ МАГАЗИНА: ТЕПЕРЬ ОН ДОСТУПЕН ДЛЯ ВСЕХ (БЕЗ RequireAuth) */}
+          {/* РОУТ МАГАЗИНА: ДОСТУПЕН ДЛЯ ВСЕХ */}
           <Route path="/shop/:id" element={<MainLayout><ShopPage /></MainLayout>} />
           
           <Route path="/dating" element={<RequireAuth><MainLayout><DatingPage /></MainLayout></RequireAuth>} />

@@ -8,7 +8,7 @@ import {
   Camera, User, Briefcase, 
   Phone, Globe, Package, Plus, Trash2, Image as ImageIcon, 
   Loader2, Edit2, Moon, Sun, Zap, MessageSquareText,
-  Target, LayoutList, GripVertical, Heart, Store, MessageCircle, ShoppingBag, LineChart, LayoutDashboard, Settings, X, Check
+  Target, LayoutList, GripVertical, Heart, Store, MessageCircle, ShoppingBag, LineChart, LayoutDashboard, Settings, Check
 } from 'lucide-react';
 
 interface Product {

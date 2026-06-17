@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useCartStore } from '../store/useCartStore';
 import { 
   ArrowLeft, MessageCircle, Share2, 
   Phone, Mail, Globe, Package, Loader2, CheckCircle,
-  ShoppingCart, Plus, Minus, ShieldCheck, MapPin, Sparkles, Store
+  ShoppingCart, Plus, Minus, ShieldCheck, MapPin, Sparkles, Store, LogIn
 } from 'lucide-react';
 
 interface Product {
@@ -26,6 +26,7 @@ interface ShopProfile {
   type: string;
   category?: string;
   location?: string;
+  customUrl?: string; // Красивая ссылка
   contacts?: { phone: string; email: string; website: string };
   products?: Product[];
 }
@@ -33,6 +34,7 @@ interface ShopProfile {
 export default function ShopPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuthStore();
   
   const [shop, setShop] = useState<ShopProfile | null>(null);
@@ -43,18 +45,34 @@ export default function ShopPage() {
   const { addItem, removeItem, getItemsByShop } = useCartStore();
   
   // Товары в корзине ТОЛЬКО для этого магазина
-  const shopCartItems = id ? getItemsByShop(id) : [];
+  const shopCartItems = shop?.id ? getItemsByShop(shop.id) : [];
   const cartTotalItems = shopCartItems.reduce((sum, item) => sum + item.quantity, 0);
 
+  // ==========================================
+  // 1. ЗАГРУЗКА МАГАЗИНА (ПО ID ИЛИ КРАСИВОЙ ССЫЛКЕ)
+  // ==========================================
   useEffect(() => {
     const fetchShop = async () => {
       if (!id) return;
       setIsLoading(true);
       try {
+        // Сначала пробуем найти по прямому системному ID
         const docRef = doc(db, 'users', id);
         const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
+        
+        if (docSnap.exists() && docSnap.data().type === 'business') {
           setShop({ id: docSnap.id, ...docSnap.data() } as ShopProfile);
+        } else {
+          // Если по ID не нашли, ищем по красивой ссылке (customUrl)
+          const q = query(collection(db, 'users'), where('customUrl', '==', id.toLowerCase()), where('type', '==', 'business'));
+          const querySnapshot = await getDocs(q);
+          
+          if (!querySnapshot.empty) {
+            const shopDoc = querySnapshot.docs[0];
+            setShop({ id: shopDoc.id, ...shopDoc.data() } as ShopProfile);
+          } else {
+            setShop(null); // Магазин не найден
+          }
         }
       } catch (error) {
         console.error('Ошибка загрузки магазина:', error);
@@ -65,11 +83,27 @@ export default function ShopPage() {
     fetchShop();
   }, [id]);
 
+  // ==========================================
+  // 2. БАЗОВОЕ SEO (Меняем заголовок вкладки)
+  // ==========================================
+  useEffect(() => {
+    if (shop) {
+      document.title = `${shop.name} | Магазин на Aura`;
+    } else {
+      document.title = `Магазин | Aura`;
+    }
+  }, [shop]);
+
+  // ==========================================
+  // 3. ФУНКЦИИ И ДЕЙСТВИЯ
+  // ==========================================
   const handleShare = async (item?: Product) => {
     const baseUrl = window.location.origin;
+    const shopLink = shop?.customUrl || shop?.id; // Используем красивую ссылку если есть
+    
     const link = item 
-      ? `${baseUrl}/#/shop/${shop?.id}?product=${item.id}` 
-      : `${baseUrl}/#/shop/${shop?.id}`;
+      ? `${baseUrl}/#/shop/${shopLink}?product=${item.id}` 
+      : `${baseUrl}/#/shop/${shopLink}`;
     
     const shareData = {
       title: item ? item.name : shop?.name,
@@ -90,35 +124,56 @@ export default function ShopPage() {
     }
   };
 
+  // УМНАЯ КНОПКА: Если гость — на логин, если свой — в чат
+  const handleRequireAuthAction = (action: () => void) => {
+    if (!user) {
+      // Отправляем на логин и запоминаем, куда вернуться
+      navigate('/login', { state: { from: location.pathname } });
+    } else {
+      action();
+    }
+  };
+
   const handleCheckout = () => {
-    navigate('/chats', { 
-      state: { 
-        selectedUserId: shop?.id, 
-        checkoutCart: shopCartItems
-      } 
+    handleRequireAuthAction(() => {
+      navigate('/chats', { 
+        state: { 
+          selectedUserId: shop?.id, 
+          checkoutCart: shopCartItems
+        } 
+      });
     });
   };
 
+  const handleContactSeller = () => {
+    handleRequireAuthAction(() => {
+      navigate('/chats', { state: { selectedUserId: shop?.id } });
+    });
+  };
+
+  // ==========================================
+  // 4. РЕНДЕР
+  // ==========================================
   if (isLoading) {
     return (
-      <div className="flex-1 bg-[#F2F2F7] dark:bg-gray-950 flex justify-center items-center transition-colors">
-        <Loader2 className="animate-spin text-gray-400" size={32} />
+      <div className="flex-1 bg-[#F2F2F7] dark:bg-gray-950 flex justify-center items-center transition-colors h-[100dvh]">
+        <Loader2 className="animate-spin text-blue-500" size={32} />
       </div>
     );
   }
 
-  if (!shop || shop.type !== 'business') {
+  if (!shop) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-[#F2F2F7] dark:bg-gray-950 p-6 transition-colors">
-        <div className="w-24 h-24 bg-gray-200 dark:bg-gray-800 rounded-full flex items-center justify-center mb-6">
+      <div className="flex-1 flex flex-col items-center justify-center bg-[#F2F2F7] dark:bg-gray-950 p-6 transition-colors h-[100dvh]">
+        <div className="w-24 h-24 bg-gray-200 dark:bg-gray-800 rounded-full flex items-center justify-center mb-6 shadow-inner">
           <Package size={40} className="text-gray-400 dark:text-gray-600" />
         </div>
         <h2 className="text-xl font-black text-gray-900 dark:text-white mb-2">Магазин не найден</h2>
         <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 mb-8 text-center max-w-xs">
-          Возможно, он был удален или продавец изменил тип аккаунта.
+          Возможно, ссылка устарела, либо продавец изменил тип аккаунта.
         </p>
-        <button onClick={() => navigate('/market')} className="bg-blue-500 text-white px-6 py-3 rounded-2xl font-bold active:scale-95 transition-transform shadow-lg shadow-blue-500/30">
-          Вернуться в маркет
+        <button onClick={() => navigate('/market')} className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3.5 rounded-2xl font-bold active:scale-95 transition-transform shadow-lg shadow-blue-500/30">
+          Вернуться в маркетплейс
         </button>
       </div>
     );
@@ -127,7 +182,7 @@ export default function ShopPage() {
   const isMyOwnShop = user?.uid === shop.id;
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950 pb-32 select-none custom-scrollbar relative transition-colors">
+    <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950 pb-32 select-none custom-scrollbar relative transition-colors min-h-[100dvh]">
       
       {/* ПЛАВАЮЩИЙ УЛЬТРА-МИНИМАЛИСТИЧНЫЙ ХЕДЕР */}
       <div className="sticky top-0 z-30 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl px-4 py-3 pt-[calc(env(safe-area-inset-top)+12px)] flex items-center justify-between border-b border-gray-200/60 dark:border-gray-800 transition-colors shadow-sm">
@@ -189,13 +244,14 @@ export default function ShopPage() {
             </p>
 
             {/* Контакты и Действия (Smart Buttons) */}
-            <div className="flex flex-wrap items-center justify-center gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-3 w-full">
               {!isMyOwnShop ? (
                 <button 
-                  onClick={() => navigate('/chats', { state: { selectedUserId: shop.id } })}
-                  className="bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:scale-105 py-3.5 px-6 rounded-2xl font-black text-[14px] flex items-center gap-2 transition-transform shadow-lg shadow-black/10 dark:shadow-white/10"
+                  onClick={handleContactSeller}
+                  className={`bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:scale-105 py-3.5 px-6 rounded-2xl font-black text-[14px] flex items-center gap-2 transition-transform shadow-lg shadow-black/10 dark:shadow-white/10 ${!user ? 'w-full max-w-xs justify-center mb-2' : ''}`}
                 >
-                  <MessageCircle size={20} className="fill-current" /> Написать
+                  {user ? <MessageCircle size={20} className="fill-current" /> : <LogIn size={20} />} 
+                  {user ? 'Связаться' : 'Войти, чтобы написать'}
                 </button>
               ) : (
                 <div className="bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 py-3.5 px-6 rounded-2xl font-bold text-[14px] flex items-center gap-2 border border-gray-200 dark:border-gray-700 cursor-not-allowed">
@@ -203,7 +259,7 @@ export default function ShopPage() {
                 </div>
               )}
               
-              {/* Круглые иконки контактов */}
+              {/* Круглые иконки контактов (показываем всегда) */}
               {shop.contacts?.phone && (
                 <a href={`tel:${shop.contacts.phone}`} className="w-12 h-12 bg-green-50 hover:bg-green-100 dark:bg-green-500/10 dark:hover:bg-green-500/20 text-green-600 dark:text-green-400 rounded-2xl flex items-center justify-center transition-transform hover:scale-105 shadow-sm border border-green-100 dark:border-green-900/30">
                   <Phone size={20} />
@@ -282,10 +338,10 @@ export default function ShopPage() {
                             </div>
                           ) : (
                             <button 
-                              onClick={() => addItem(product, shop.id, shop.name)}
+                              onClick={() => handleRequireAuthAction(() => addItem(product, shop.id, shop.name))}
                               className="w-full flex items-center justify-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white py-2.5 rounded-xl text-[13px] font-bold transition-transform active:scale-95 shadow-sm shadow-blue-500/20"
                             >
-                              <ShoppingCart size={16} className="fill-current" /> В корзину
+                              <ShoppingCart size={16} className="fill-current" /> {user ? 'В корзину' : 'Войти для заказа'}
                             </button>
                           )
                         )}
@@ -309,7 +365,7 @@ export default function ShopPage() {
       </div>
 
       {/* ПЛАВАЮЩАЯ ПАНЕЛЬ ЗАКАЗА (Отображается, если в корзине магазина есть товары) */}
-      {cartTotalItems > 0 && !isMyOwnShop && (
+      {cartTotalItems > 0 && !isMyOwnShop && user && (
         <div className="fixed bottom-[80px] md:bottom-6 left-0 right-0 px-4 flex justify-center z-40 animate-slide-up">
           <button 
             onClick={handleCheckout}

@@ -5,19 +5,19 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
 import { 
   Heart, X, RefreshCw, MessageCircle, Star, 
-  MapPin, Info, Flame, Sparkles
+  MapPin, Info, Flame, Sparkles, ChevronDown, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 interface DatingUser {
   id: string;
   name: string;
   avatar: string;
-  gallery: string[];  // Массив фото
-  interests: string[]; // Массив тегов
-  age?: number;       // Возраст
+  gallery: string[];
+  interests: string[];
+  age?: number;
   role?: string;
   type: string;
-  lastSeen?: number;  // Для умной ленты
+  lastSeen?: number;
 }
 
 export default function DatingPage() {
@@ -27,18 +27,20 @@ export default function DatingPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [profiles, setProfiles] = useState<DatingUser[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [photoIndex, setPhotoIndex] = useState(0); // Индекс текущего фото в галерее
+  const [photoIndex, setPhotoIndex] = useState(0);
   
-  // Кеш входящих лайков (чтобы моментально определять мэтч)
   const [incomingLikes, setIncomingLikes] = useState<Set<string>>(new Set());
+  const [likedProfilesData, setLikedProfilesData] = useState<DatingUser[]>([]); // Данные тех, кто лайкнул меня
   
-  // Стейты для физики свайпа
+  // Стейты физики свайпа
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [leaveX, setLeaveX] = useState(0);
   
-  // Стейт Мэтча
+  // Модалки
   const [matchData, setMatchData] = useState<DatingUser | null>(null);
+  const [detailedProfile, setDetailedProfile] = useState<DatingUser | null>(null); // Модалка детальной анкеты
+  const [showLikesModal, setShowLikesModal] = useState(false); // Модалка "Кому я понравился"
 
   const startPanX = useRef(0);
   const startPanY = useRef(0);
@@ -46,73 +48,90 @@ export default function DatingPage() {
   // ==========================================
   // 1. ЗАГРУЗКА ДАННЫХ И ЛОГИКА МЭТЧЕЙ
   // ==========================================
-  useEffect(() => {
-    const fetchDatingData = async () => {
-      if (!user) return;
-      setIsLoading(true);
+  const fetchDatingData = async () => {
+    if (!user) return;
+    setIsLoading(true);
 
-      try {
-        // 1. Получаем всех, кто ищет знакомства
-        const usersQuery = query(collection(db, 'users'), where('goals', 'array-contains', 'dating'));
-        const usersSnap = await getDocs(usersQuery);
-        
-        // 2. Получаем историю наших свайпов
-        const mySwipesQuery = query(collection(db, 'dating_swipes'), where('from', '==', user.uid));
-        const mySwipesSnap = await getDocs(mySwipesQuery);
-        const swipedIds = new Set(mySwipesSnap.docs.map(d => d.data().to));
+    try {
+      // 1. Все пользователи, ищущие знакомства
+      const usersQuery = query(collection(db, 'users'), where('goals', 'array-contains', 'dating'));
+      const usersSnap = await getDocs(usersQuery);
+      
+      // 2. История наших свайпов
+      const mySwipesQuery = query(collection(db, 'dating_swipes'), where('from', '==', user.uid));
+      const mySwipesSnap = await getDocs(mySwipesQuery);
+      const myLikedIds = new Set();
+      const myPassedIds = new Set();
+      mySwipesSnap.docs.forEach(d => {
+        if (d.data().action === 'like') myLikedIds.add(d.data().to);
+        if (d.data().action === 'pass') myPassedIds.add(d.data().to);
+      });
 
-        // 3. Получаем тех, кто лайкнул нас (для инста-мэтча)
-        const likesMeQuery = query(
-          collection(db, 'dating_swipes'), 
-          where('to', '==', user.uid),
-          where('action', '==', 'like')
-        );
-        const likesMeSnap = await getDocs(likesMeQuery);
-        setIncomingLikes(new Set(likesMeSnap.docs.map(d => d.data().from)));
+      // 3. Кто лайкнул НАС
+      const likesMeQuery = query(collection(db, 'dating_swipes'), where('to', '==', user.uid), where('action', '==', 'like'));
+      const likesMeSnap = await getDocs(likesMeQuery);
+      const likesMeIds = new Set<string>();
+      likesMeSnap.docs.forEach(d => likesMeIds.add(d.data().from));
+      setIncomingLikes(likesMeIds);
 
-        // Фильтруем профили
-        const loadedProfiles: DatingUser[] = [];
-        usersSnap.forEach((doc) => {
-          if (doc.id !== user.uid && !swipedIds.has(doc.id)) {
-            const data = doc.data();
-            const avatarFallback = data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'A')}&background=random`;
-            
-            loadedProfiles.push({
-              id: doc.id,
-              name: data.name || 'Аноним',
-              avatar: avatarFallback,
-              // Защита от отсутствия полей у старых юзеров
-              gallery: data.gallery?.length > 0 ? data.gallery : [avatarFallback],
-              interests: data.interests || [],
-              age: data.age,
-              role: data.role,
-              type: data.type,
-              lastSeen: data.lastSeen?.toMillis?.() || 0
-            });
+      // Собираем профили
+      const loadedProfiles: DatingUser[] = [];
+      const incomingLikesData: DatingUser[] = [];
+
+      usersSnap.forEach((doc) => {
+        if (doc.id !== user.uid) {
+          const data = doc.data();
+          const avatarFallback = data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'A')}&background=random`;
+          const profileData: DatingUser = {
+            id: doc.id,
+            name: data.name || 'Аноним',
+            avatar: avatarFallback,
+            gallery: data.gallery?.length > 0 ? data.gallery : [avatarFallback],
+            interests: data.interests || [],
+            age: data.age,
+            role: data.role,
+            type: data.type,
+            lastSeen: data.lastSeen?.toMillis?.() || 0
+          };
+
+          // Добавляем в панель симпатий тех, кто лайкнул нас (и кого мы еще не свайпали или скипнули)
+          if (likesMeIds.has(doc.id) && !myLikedIds.has(doc.id)) {
+            incomingLikesData.push(profileData);
           }
-        });
 
-        // 4. УМНАЯ ЛЕНТА (Сортировка: онлайн < 15 мин назад -> рандом)
-        const now = Date.now();
-        loadedProfiles.sort((a, b) => {
-          const aOnline = (now - a.lastSeen!) < 15 * 60 * 1000;
-          const bOnline = (now - b.lastSeen!) < 15 * 60 * 1000;
-          
-          if (aOnline && !bOnline) return -1;
-          if (!aOnline && bOnline) return 1;
-          return Math.random() - 0.5; // Перемешиваем остальных
-        });
+          // Показываем в ленте тех, кого мы ЕЩЕ НЕ ЛАЙКАЛИ (пропущенных можно показать по кругу)
+          if (!myLikedIds.has(doc.id)) {
+            loadedProfiles.push(profileData);
+          }
+        }
+      });
 
-        setProfiles(loadedProfiles);
-      } catch (error) {
-        console.error("Ошибка загрузки анкет:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+      setLikedProfilesData(incomingLikesData);
 
-    fetchDatingData();
-  }, [user]);
+      // Умная сортировка ленты
+      const now = Date.now();
+      loadedProfiles.sort((a, b) => {
+        // Те, кто нас лайкнул - в приоритете!
+        if (likesMeIds.has(a.id) && !likesMeIds.has(b.id)) return -1;
+        if (!likesMeIds.has(a.id) && likesMeIds.has(b.id)) return 1;
+
+        const aOnline = (now - a.lastSeen!) < 15 * 60 * 1000;
+        const bOnline = (now - b.lastSeen!) < 15 * 60 * 1000;
+        if (aOnline && !bOnline) return -1;
+        if (!aOnline && bOnline) return 1;
+        return Math.random() - 0.5;
+      });
+
+      setProfiles(loadedProfiles);
+      setCurrentIndex(0);
+    } catch (error) {
+      console.error("Ошибка загрузки анкет:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchDatingData(); }, [user]);
 
   // ==========================================
   // 2. ФИЗИКА СВАЙПОВ (Drag & Drop)
@@ -125,45 +144,37 @@ export default function DatingPage() {
 
   const handleTouchMove = (clientX: number, clientY: number) => {
     if (!isDragging) return;
-    setPan({
-      x: clientX - startPanX.current,
-      y: clientY - startPanY.current
-    });
+    setPan({ x: clientX - startPanX.current, y: clientY - startPanY.current });
   };
 
   const handleTouchEnd = () => {
     setIsDragging(false);
-    const threshold = window.innerWidth * 0.3; // 30% экрана для срабатывания
+    const threshold = window.innerWidth * 0.3;
 
-    if (pan.x > threshold) {
-      processSwipe('like');
-    } else if (pan.x < -threshold) {
-      processSwipe('pass');
-    } else {
-      // Возврат карточки в центр
-      setPan({ x: 0, y: 0 });
-    }
+    if (pan.x > threshold) processSwipe('like');
+    else if (pan.x < -threshold) processSwipe('pass');
+    else setPan({ x: 0, y: 0 }); // Отскок в центр
   };
 
   // ==========================================
   // 3. ЛОГИКА ОЦЕНКИ И МЭТЧА
   // ==========================================
-  const processSwipe = async (action: 'like' | 'pass') => {
-    const swipedUser = profiles[currentIndex];
+  const processSwipe = async (action: 'like' | 'pass', customProfile?: DatingUser) => {
+    const swipedUser = customProfile || profiles[currentIndex];
     if (!swipedUser || !user) return;
 
-    // Анимация вылета карточки
-    setLeaveX(action === 'like' ? 1000 : -1000);
-
-    setTimeout(() => {
-      setCurrentIndex(prev => prev + 1);
-      setPhotoIndex(0); // Сбрасываем фото для следующего юзера
-      setPan({ x: 0, y: 0 });
-      setLeaveX(0);
-    }, 300); // Ждем окончания CSS анимации
+    // Анимация вылета только для карточек из основной ленты
+    if (!customProfile) {
+      setLeaveX(action === 'like' ? 1000 : -1000);
+      setTimeout(() => {
+        setCurrentIndex(prev => prev + 1);
+        setPhotoIndex(0);
+        setPan({ x: 0, y: 0 });
+        setLeaveX(0);
+      }, 300);
+    }
 
     try {
-      // Записываем свайп в базу
       await addDoc(collection(db, 'dating_swipes'), {
         from: user.uid,
         to: swipedUser.id,
@@ -171,26 +182,20 @@ export default function DatingPage() {
         createdAt: serverTimestamp()
       });
 
-      // ПРОВЕРКА НА МЭТЧ
+      // Удаляем из списка входящих лайков, если мы приняли решение
+      setLikedProfilesData(prev => prev.filter(p => p.id !== swipedUser.id));
+
       if (action === 'like' && incomingLikes.has(swipedUser.id)) {
-        // Создаем системное сообщение в чате
         const chatId = [user.uid, swipedUser.id].sort().join('_');
         await addDoc(collection(db, 'messages'), {
-          chatId,
-          type: 'system_status',
-          statusText: '💕 Вы образовали пару! Начните общение прямо сейчас.',
-          senderId: user.uid,
-          receiverId: swipedUser.id,
-          createdAt: serverTimestamp(),
-          isRead: false 
+          chatId, type: 'system_status', statusText: '💕 Вы образовали пару! Начните общение прямо сейчас.',
+          senderId: user.uid, receiverId: swipedUser.id, createdAt: serverTimestamp(), isRead: false 
         });
-
-        // Показываем красивое окно мэтча
         setMatchData(swipedUser);
+        setDetailedProfile(null);
+        setShowLikesModal(false);
       }
-    } catch (error) {
-      console.error("Ошибка сохранения свайпа:", error);
-    }
+    } catch (error) { console.error("Ошибка сохранения свайпа:", error); }
   };
 
   const handleButtonSwipe = (action: 'like' | 'pass') => {
@@ -198,16 +203,23 @@ export default function DatingPage() {
     processSwipe(action);
   };
 
-  // Переключение фото (защита от ложных кликов при свайпе)
-  const handlePhotoClick = (direction: 'next' | 'prev', e: React.MouseEvent) => {
+  const handlePhotoClick = (direction: 'next' | 'prev', e: React.MouseEvent, maxPhotos: number) => {
     e.stopPropagation();
-    if (Math.abs(pan.x) > 10 || Math.abs(pan.y) > 10) return; // Игнорируем, если был свайп
-    
-    if (direction === 'prev') {
-      setPhotoIndex(p => Math.max(0, p - 1));
-    } else {
-      setPhotoIndex(p => Math.min(activeProfile.gallery.length - 1, p + 1));
-    }
+    if (Math.abs(pan.x) > 10 || Math.abs(pan.y) > 10) return;
+    if (direction === 'prev') setPhotoIndex(p => Math.max(0, p - 1));
+    else setPhotoIndex(p => Math.min(maxPhotos - 1, p + 1));
+  };
+
+  // Утилита: Время онлайна
+  const getOnlineStatus = (lastSeen: number) => {
+    if (!lastSeen) return 'Был(а) давно';
+    const now = Date.now();
+    const diffMins = Math.floor((now - lastSeen) / (1000 * 60));
+    if (diffMins < 15) return 'В сети';
+    if (diffMins < 60) return `${diffMins} мин назад`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} ч назад`;
+    return 'Был(а) недавно';
   };
 
   // ==========================================
@@ -227,40 +239,57 @@ export default function DatingPage() {
   const nextProfile = profiles[currentIndex + 1];
 
   return (
-    <div className="flex flex-col h-[100dvh] w-full overflow-hidden bg-gray-50 dark:bg-gray-950 relative select-none">
+    <div className="flex flex-col h-[100dvh] w-full overflow-hidden bg-gray-50 dark:bg-gray-950 relative select-none font-sans">
       
       {/* HEADER */}
-      <div className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-md sticky top-0 z-20 px-6 py-4 flex items-center justify-between shrink-0 shadow-sm border-b border-gray-100 dark:border-gray-800">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-tr from-pink-500 to-rose-400 rounded-xl flex items-center justify-center shadow-md">
-            <Flame size={18} className="text-white" />
+      <div className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl sticky top-0 z-20 px-4 md:px-6 py-3 flex items-center justify-between shrink-0 shadow-sm border-b border-gray-100 dark:border-gray-800">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-rose-400 rounded-[14px] flex items-center justify-center shadow-[0_4px_12px_rgba(236,72,153,0.3)]">
+            <Flame size={20} className="text-white" strokeWidth={2.5} />
           </div>
-          <h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">Знакомства</h1>
+          <h1 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white tracking-tight">Знакомства</h1>
         </div>
-        <button onClick={() => window.location.reload()} className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition-colors">
-          <RefreshCw size={18} />
-        </button>
+        
+        <div className="flex items-center gap-3">
+          {/* Кнопка "Симпатии" (Кто меня лайкнул) */}
+          {likedProfilesData.length > 0 && (
+            <button 
+              onClick={() => setShowLikesModal(true)}
+              className="relative w-10 h-10 rounded-full bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800 flex items-center justify-center transition-transform active:scale-95 group"
+            >
+              <Heart size={20} className="text-pink-500 fill-pink-500/50 group-hover:fill-pink-500 transition-colors" />
+              <div className="absolute -top-1 -right-1 bg-pink-500 text-white text-[10px] font-black w-4 h-4 flex items-center justify-center rounded-full shadow-sm ring-2 ring-white dark:ring-gray-900">
+                {likedProfilesData.length}
+              </div>
+            </button>
+          )}
+          <button onClick={fetchDatingData} className="w-10 h-10 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full flex items-center justify-center text-gray-600 dark:text-gray-300 transition-colors">
+            <RefreshCw size={18} />
+          </button>
+        </div>
       </div>
 
-      {/* CARDS AREA */}
-      <div className="flex-1 relative overflow-hidden flex justify-center items-center p-4">
+      {/* ОСНОВНАЯ ЗОНА (КАРТОЧКИ) */}
+      <div className="flex-1 relative overflow-hidden flex justify-center items-center p-4 pb-2">
         
-        {/* ЕСЛИ АНКЕТЫ ЗАКОНЧИЛИСЬ */}
         {!activeProfile && (
           <div className="flex flex-col items-center justify-center text-center animate-fade-in p-6">
-            <div className="w-24 h-24 bg-pink-50 dark:bg-pink-500/10 rounded-full flex items-center justify-center mb-6">
-              <Sparkles size={40} className="text-pink-500" />
+            <div className="w-24 h-24 bg-pink-50 dark:bg-pink-500/10 rounded-[24px] rotate-12 flex items-center justify-center mb-6">
+              <Sparkles size={40} className="text-pink-500 -rotate-12" />
             </div>
-            <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-2">Анкеты закончились</h2>
-            <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 max-w-xs">
-              Вы просмотрели всех пользователей поблизости. Загляните сюда чуть позже!
+            <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-2 tracking-tight">Пока что всё!</h2>
+            <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 max-w-xs mb-8">
+              Вы просмотрели всех пользователей. Загляните сюда чуть позже или начните сначала.
             </p>
+            <button onClick={() => setCurrentIndex(0)} className="px-6 py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold rounded-2xl active:scale-95 transition-transform shadow-lg">
+              Смотреть снова
+            </button>
           </div>
         )}
 
         {/* СЛЕДУЮЩАЯ КАРТОЧКА (Подложка) */}
         {nextProfile && (
-          <div className="absolute inset-4 md:inset-x-auto md:w-[400px] bg-white dark:bg-gray-900 rounded-[32px] shadow-sm border border-gray-200/50 dark:border-gray-800 overflow-hidden transform scale-95 opacity-50 z-0">
+          <div className="absolute inset-4 bottom-2 md:inset-y-4 md:inset-x-auto md:w-[420px] bg-gray-200 dark:bg-gray-800 rounded-[32px] shadow-sm overflow-hidden transform scale-[0.95] translate-y-4 opacity-60 z-0">
             <img src={nextProfile.gallery[0] || nextProfile.avatar} className="w-full h-full object-cover" />
           </div>
         )}
@@ -268,9 +297,9 @@ export default function DatingPage() {
         {/* АКТИВНАЯ КАРТОЧКА */}
         {activeProfile && (
           <div 
-            className="absolute inset-4 md:inset-x-auto md:w-[400px] bg-white dark:bg-gray-900 rounded-[32px] shadow-2xl overflow-hidden z-10 cursor-grab active:cursor-grabbing border border-gray-200/50 dark:border-gray-700"
+            className="absolute inset-4 bottom-2 md:inset-y-4 md:inset-x-auto md:w-[420px] bg-white dark:bg-gray-900 rounded-[32px] shadow-[0_20px_40px_rgba(0,0,0,0.15)] overflow-hidden z-10 cursor-grab active:cursor-grabbing border border-gray-200/50 dark:border-gray-800"
             style={{
-              transform: `translate(${leaveX || pan.x}px, ${pan.y}px) rotate(${(leaveX || pan.x) * 0.05}deg)`,
+              transform: `translate(${leaveX || pan.x}px, ${pan.y}px) rotate(${(leaveX || pan.x) * 0.04}deg)`,
               transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)'
             }}
             onMouseDown={(e) => handleTouchStart(e.clientX, e.clientY)}
@@ -282,11 +311,11 @@ export default function DatingPage() {
             onTouchEnd={handleTouchEnd}
           >
             {/* ФОТО ГАЛЕРЕИ */}
-            <div className="relative w-full h-full bg-gray-200 dark:bg-gray-800">
+            <div className="relative w-full h-full bg-gray-900">
               
-              {/* Индикаторы слайдов (точки) */}
+              {/* Индикаторы слайдов */}
               {activeProfile.gallery.length > 1 && (
-                <div className="absolute top-4 left-4 right-4 flex gap-1 z-30 pointer-events-none">
+                <div className="absolute top-4 left-4 right-4 flex gap-1.5 z-30 pointer-events-none">
                   {activeProfile.gallery.map((_, i) => (
                     <div 
                       key={i} 
@@ -300,63 +329,66 @@ export default function DatingPage() {
                 </div>
               )}
 
-              {/* Зоны клика для смены фото */}
+              {/* Зоны клика */}
               <div className="absolute inset-0 z-20 flex">
-                <div className="w-1/2 h-full" onClick={(e) => handlePhotoClick('prev', e)} />
-                <div className="w-1/2 h-full" onClick={(e) => handlePhotoClick('next', e)} />
+                <div className="w-1/2 h-full" onClick={(e) => handlePhotoClick('prev', e, activeProfile.gallery.length)} />
+                <div className="w-1/2 h-full" onClick={(e) => handlePhotoClick('next', e, activeProfile.gallery.length)} />
               </div>
 
-              {/* Сама картинка */}
+              {/* Картинка */}
               <img 
                 src={activeProfile.gallery[photoIndex]} 
                 alt="Photo" 
+                draggable={false}
                 className="w-full h-full object-cover pointer-events-none transition-opacity duration-200" 
               />
-              <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/90 pointer-events-none" />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/90 pointer-events-none" />
               
-              {/* STAMPS (Лайк / Скип поверх фото) */}
-              <div className="absolute top-14 left-6 pointer-events-none z-30" style={{ opacity: pan.x > 0 ? pan.x / 100 : 0 }}>
-                <div className="border-4 border-green-500 text-green-500 text-4xl font-black px-4 py-1 rounded-xl transform -rotate-12 tracking-widest bg-black/20 backdrop-blur-sm">LIKE</div>
+              {/* STAMPS */}
+              <div className="absolute top-20 left-8 pointer-events-none z-30" style={{ opacity: pan.x > 0 ? pan.x / 100 : 0 }}>
+                <div className="border-[5px] border-green-400 text-green-400 text-5xl font-black px-6 py-2 rounded-[20px] transform -rotate-[15deg] tracking-widest bg-black/20 backdrop-blur-md shadow-2xl">LIKE</div>
               </div>
-              <div className="absolute top-14 right-6 pointer-events-none z-30" style={{ opacity: pan.x < 0 ? Math.abs(pan.x) / 100 : 0 }}>
-                <div className="border-4 border-red-500 text-red-500 text-4xl font-black px-4 py-1 rounded-xl transform rotate-12 tracking-widest bg-black/20 backdrop-blur-sm">NOPE</div>
+              <div className="absolute top-20 right-8 pointer-events-none z-30" style={{ opacity: pan.x < 0 ? Math.abs(pan.x) / 100 : 0 }}>
+                <div className="border-[5px] border-rose-500 text-rose-500 text-5xl font-black px-6 py-2 rounded-[20px] transform rotate-[15deg] tracking-widest bg-black/20 backdrop-blur-md shadow-2xl">NOPE</div>
               </div>
 
               {/* ИНФОРМАЦИЯ О ПОЛЬЗОВАТЕЛЕ */}
-              <div className="absolute bottom-0 left-0 right-0 p-6 pointer-events-none z-30">
-                <div className="flex items-end justify-between mb-2">
+              <div className="absolute bottom-0 left-0 right-0 p-6 pt-20 pointer-events-none z-30 bg-gradient-to-t from-gray-950 via-gray-950/80 to-transparent">
+                <div className="flex items-end justify-between mb-3">
                   <div>
-                    <h2 className="text-3xl font-black text-white drop-shadow-md flex items-center gap-2">
+                    <h2 className="text-3xl font-black text-white drop-shadow-lg flex items-center gap-2 tracking-tight leading-none mb-1">
                       {activeProfile.name}
-                      {activeProfile.age ? <span className="font-light text-white/90">, {activeProfile.age}</span> : ''}
-                      {activeProfile.type === 'business' && <Star size={20} className="text-amber-400 fill-amber-400 ml-1" />}
+                      {activeProfile.age ? <span className="font-medium text-white/80">, {activeProfile.age}</span> : ''}
+                      {activeProfile.type === 'business' && <Star size={20} className="text-amber-400 fill-amber-400 ml-1 drop-shadow-md" />}
                     </h2>
-                    <p className="text-[14px] font-medium text-white/80 flex items-center gap-1.5 mt-1 drop-shadow-md">
-                      <MapPin size={14} /> Рядом с вами
-                    </p>
+                    <div className="flex items-center gap-3 mt-2">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white/10 backdrop-blur-md rounded-lg text-[12px] font-bold text-white border border-white/10">
+                        <div className={`w-2 h-2 rounded-full ${getOnlineStatus(activeProfile.lastSeen!) === 'В сети' ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`} />
+                        {getOnlineStatus(activeProfile.lastSeen!)}
+                      </div>
+                      <div className="flex items-center gap-1 text-[13px] font-medium text-white/80 drop-shadow-md">
+                        <MapPin size={14} /> Поблизости
+                      </div>
+                    </div>
                   </div>
-                  <button className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white pointer-events-auto hover:bg-white/40 transition-colors shadow-lg">
-                    <Info size={20} />
+                  
+                  {/* Кнопка открытия профиля */}
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setDetailedProfile(activeProfile); }}
+                    className="w-12 h-12 rounded-full bg-white/10 border border-white/20 backdrop-blur-lg flex items-center justify-center text-white pointer-events-auto hover:bg-white/20 hover:scale-105 transition-all shadow-xl"
+                  >
+                    <ChevronDown size={24} className="transform rotate-180" />
                   </button>
                 </div>
                 
                 {/* Теги (Интересы) */}
                 {activeProfile.interests && activeProfile.interests.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-3">
+                  <div className="flex flex-wrap gap-2 mt-4 pointer-events-none">
                     {activeProfile.interests.slice(0, 4).map((tag, idx) => (
-                      <span key={idx} className="bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-lg text-[11px] font-bold text-white tracking-wide border border-white/10 shadow-sm">
+                      <span key={idx} className="bg-gray-950/50 backdrop-blur-md px-3 py-1.5 rounded-xl text-[12px] font-bold text-white border border-white/10 shadow-sm">
                         {tag}
                       </span>
                     ))}
-                  </div>
-                )}
-
-                {/* О себе (Роль) */}
-                {activeProfile.role && (
-                  <div className="bg-black/40 backdrop-blur-md rounded-2xl p-3 border border-white/10 mt-3 shadow-lg">
-                    <p className="text-[13px] text-white/95 leading-relaxed font-medium line-clamp-2">
-                      {activeProfile.role}
-                    </p>
                   </div>
                 )}
               </div>
@@ -365,26 +397,146 @@ export default function DatingPage() {
         )}
       </div>
 
-      {/* КОНТРОЛЛЫ (Кнопки) */}
-      <div className="pb-safe shrink-0 px-6 py-6 flex justify-center items-center gap-6 md:gap-10 z-20">
+      {/* КОНТРОЛЛЫ (Кнопки Свайпа) */}
+      <div className="pb-safe shrink-0 px-6 py-4 md:py-6 flex justify-center items-center gap-6 md:gap-10 z-20 bg-gray-50 dark:bg-gray-950">
         <button 
           onClick={() => handleButtonSwipe('pass')}
           disabled={!activeProfile || isDragging}
-          className="w-16 h-16 md:w-20 md:h-20 bg-white dark:bg-gray-800 rounded-full shadow-[0_10px_30px_rgba(0,0,0,0.05)] border border-gray-100 dark:border-gray-700 flex items-center justify-center text-red-500 hover:scale-110 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all disabled:opacity-50 disabled:hover:scale-100"
+          className="w-16 h-16 md:w-20 md:h-20 bg-white dark:bg-gray-900 rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.08)] border border-gray-100 dark:border-gray-800 flex items-center justify-center text-rose-500 hover:scale-110 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all disabled:opacity-50 disabled:hover:scale-100 group"
         >
-          <X size={32} strokeWidth={3} />
+          <X size={32} strokeWidth={3} className="group-hover:rotate-90 transition-transform duration-300" />
         </button>
         <button 
           onClick={() => handleButtonSwipe('like')}
           disabled={!activeProfile || isDragging}
-          className="w-16 h-16 md:w-20 md:h-20 bg-white dark:bg-gray-800 rounded-full shadow-[0_10px_30px_rgba(0,0,0,0.05)] border border-gray-100 dark:border-gray-700 flex items-center justify-center text-green-500 hover:scale-110 hover:bg-green-50 dark:hover:bg-green-500/10 transition-all disabled:opacity-50 disabled:hover:scale-100"
+          className="w-16 h-16 md:w-20 md:h-20 bg-white dark:bg-gray-900 rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.08)] border border-gray-100 dark:border-gray-800 flex items-center justify-center text-green-500 hover:scale-110 hover:bg-green-50 dark:hover:bg-green-500/10 transition-all disabled:opacity-50 disabled:hover:scale-100 group"
         >
-          <Heart size={32} strokeWidth={3} className="fill-green-500/20" />
+          <Heart size={32} strokeWidth={3} className="fill-green-500/20 group-hover:scale-110 transition-transform duration-300" />
         </button>
       </div>
 
       {/* ========================================== */}
-      {/* МОДАЛКА МЭТЧА */}
+      {/* МОДАЛКА: ПОЛНЫЙ ПРОФИЛЬ */}
+      {/* ========================================== */}
+      {detailedProfile && (
+        <div className="fixed inset-0 z-[150] bg-gray-950/80 backdrop-blur-sm flex justify-center items-end md:items-center p-0 md:p-4 animate-fade-in" onClick={() => setDetailedProfile(null)}>
+          <div className="bg-white dark:bg-gray-900 w-full md:w-[460px] h-[90vh] md:h-auto md:max-h-[90vh] overflow-y-auto custom-scrollbar rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col relative animate-slide-up" onClick={e => e.stopPropagation()}>
+            
+            {/* Галерея */}
+            <div className="relative h-[50vh] bg-gray-100 dark:bg-gray-800 shrink-0">
+              <img src={detailedProfile.gallery[photoIndex]} className="w-full h-full object-cover" />
+              <button onClick={() => setDetailedProfile(null)} className="absolute top-4 right-4 w-10 h-10 bg-black/30 hover:bg-black/50 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-md z-10"><ChevronDown size={24} /></button>
+              
+              {detailedProfile.gallery.length > 1 && (
+                <>
+                  <div className="absolute top-4 left-4 right-16 flex gap-1 z-10">
+                    {detailedProfile.gallery.map((_, i) => (
+                      <div key={i} className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${i === photoIndex ? 'bg-white shadow-sm' : 'bg-white/30'}`} />
+                    ))}
+                  </div>
+                  <button onClick={(e) => handlePhotoClick('prev', e, detailedProfile.gallery.length)} className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/20 rounded-full flex items-center justify-center text-white backdrop-blur-sm z-10"><ChevronLeft size={24}/></button>
+                  <button onClick={(e) => handlePhotoClick('next', e, detailedProfile.gallery.length)} className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/20 rounded-full flex items-center justify-center text-white backdrop-blur-sm z-10"><ChevronRight size={24}/></button>
+                </>
+              )}
+            </div>
+            
+            <div className="p-6 relative">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h2 className="text-[28px] font-black text-gray-900 dark:text-white flex items-center gap-2 leading-none">
+                    {detailedProfile.name}
+                    {detailedProfile.age ? <span className="font-medium text-gray-500">{detailedProfile.age}</span> : ''}
+                  </h2>
+                  <div className="flex items-center gap-1.5 text-[14px] font-semibold text-gray-500 dark:text-gray-400 mt-2">
+                    <div className={`w-2 h-2 rounded-full ${getOnlineStatus(detailedProfile.lastSeen!) === 'В сети' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+                    {getOnlineStatus(detailedProfile.lastSeen!)}
+                  </div>
+                </div>
+                
+                {/* Кнопка отправки сообщения прямо из анкеты */}
+                <button onClick={() => navigate('/chats', { state: { selectedUserId: detailedProfile.id } })} className="w-12 h-12 bg-blue-500 hover:bg-blue-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-500/30 transition-transform active:scale-95 shrink-0">
+                  <MessageCircle size={22} className="fill-white" />
+                </button>
+              </div>
+
+              {detailedProfile.role && (
+                <div className="mb-6">
+                  <h3 className="text-[13px] font-bold text-gray-400 uppercase tracking-widest mb-2">О себе</h3>
+                  <p className="text-[16px] text-gray-800 dark:text-gray-200 leading-relaxed bg-gray-50 dark:bg-gray-800/50 p-4 rounded-[20px]">{detailedProfile.role}</p>
+                </div>
+              )}
+              
+              {detailedProfile.interests && detailedProfile.interests.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-[13px] font-bold text-gray-400 uppercase tracking-widest mb-2">Интересы</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {detailedProfile.interests.map((tag, idx) => (
+                      <span key={idx} className="bg-white dark:bg-gray-800 px-4 py-2 rounded-xl text-[14px] font-bold text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 shadow-sm">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Если профиль активен в ленте (не из лайков) - показываем большие кнопки свайпа внизу модалки */}
+              {detailedProfile.id === activeProfile?.id && (
+                <div className="flex gap-4 pt-6 border-t border-gray-100 dark:border-gray-800 mt-4">
+                  <button onClick={() => { setDetailedProfile(null); handleButtonSwipe('pass'); }} className="flex-1 py-4 bg-gray-100 dark:bg-gray-800 hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-500 rounded-2xl font-black flex justify-center items-center gap-2 transition-colors">
+                    <X size={20} /> Пропустить
+                  </button>
+                  <button onClick={() => { setDetailedProfile(null); handleButtonSwipe('like'); }} className="flex-1 py-4 bg-gray-100 dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-900/30 text-green-500 rounded-2xl font-black flex justify-center items-center gap-2 transition-colors">
+                    <Heart size={20} className="fill-green-500/20" /> Лайк
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* МОДАЛКА "СИМПАТИИ" (Кто лайкнул) */}
+      {/* ========================================== */}
+      {showLikesModal && (
+        <div className="fixed inset-0 z-[160] bg-gray-950/80 backdrop-blur-sm flex justify-center items-end md:items-center p-0 md:p-4 animate-fade-in" onClick={() => setShowLikesModal(false)}>
+          <div className="bg-white dark:bg-gray-900 w-full md:w-[420px] max-h-[85vh] overflow-y-auto custom-scrollbar rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col relative animate-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="p-6 pb-4 flex items-center justify-between border-b border-gray-100 dark:border-gray-800 sticky top-0 bg-white/90 dark:bg-gray-900/90 backdrop-blur z-10">
+              <h2 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                Симпатии <span className="bg-pink-100 text-pink-500 text-[12px] px-2 py-0.5 rounded-lg">{likedProfilesData.length}</span>
+              </h2>
+              <button onClick={() => setShowLikesModal(false)} className="w-8 h-8 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-500"><X size={18} /></button>
+            </div>
+            
+            <div className="p-4 grid grid-cols-2 gap-3">
+              {likedProfilesData.map(p => (
+                <div key={p.id} onClick={() => setDetailedProfile(p)} className="bg-gray-50 dark:bg-gray-800 rounded-2xl overflow-hidden cursor-pointer group border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all">
+                  <div className="relative h-40">
+                    <img src={p.gallery[0] || p.avatar} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-transparent to-transparent opacity-80" />
+                    <div className="absolute bottom-2 left-2 right-2">
+                      <h4 className="text-white font-bold text-[14px] truncate">{p.name} {p.age && <span className="font-normal opacity-80">{p.age}</span>}</h4>
+                    </div>
+                  </div>
+                  <div className="p-2 flex gap-1">
+                    <button onClick={(e) => { e.stopPropagation(); processSwipe('pass', p); }} className="flex-1 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-500 hover:text-rose-500 rounded-lg flex justify-center transition-colors"><X size={16} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); processSwipe('like', p); }} className="flex-1 py-1.5 bg-pink-100 dark:bg-pink-900/30 text-pink-500 hover:bg-pink-500 hover:text-white rounded-lg flex justify-center transition-colors"><Heart size={16} className="fill-current" /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {likedProfilesData.length === 0 && (
+              <div className="p-10 text-center text-gray-500 dark:text-gray-400">
+                <Heart size={40} className="mx-auto mb-3 opacity-20" />
+                <p className="font-medium text-[15px]">Пока новых симпатий нет. Продолжайте свайпать!</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* МОДАЛКА МЭТЧА (Пара совпала) */}
       {/* ========================================== */}
       {matchData && (
         <div className="fixed inset-0 z-[200] bg-gray-950/90 backdrop-blur-xl flex flex-col items-center justify-center p-6 animate-fade-in">
@@ -394,15 +546,12 @@ export default function DatingPage() {
           </h2>
 
           <div className="flex items-center justify-center mb-12 relative animate-scale-up">
-            {/* Твоя аватарка */}
             <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-gray-950 overflow-hidden relative z-10 transform translate-x-4 shadow-2xl">
               <img src={user?.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.displayName || 'Я')}`} className="w-full h-full object-cover" />
             </div>
-            {/* Аватарка Мэтча */}
             <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-gray-950 overflow-hidden relative z-0 transform -translate-x-4 shadow-2xl">
               <img src={matchData.avatar} className="w-full h-full object-cover" />
             </div>
-            
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 bg-gray-950 rounded-full p-2 shadow-xl">
               <div className="w-12 h-12 bg-gradient-to-tr from-pink-500 to-rose-500 rounded-full flex items-center justify-center shadow-inner">
                 <Heart size={24} className="text-white fill-white" />
@@ -419,7 +568,7 @@ export default function DatingPage() {
               onClick={() => navigate('/chats', { state: { selectedUserId: matchData.id } })}
               className="w-full bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-lg shadow-pink-500/25"
             >
-              <MessageCircle size={20} /> Написать сообщение
+              <MessageCircle size={20} className="fill-white" /> Написать сообщение
             </button>
             <button 
               onClick={() => setMatchData(null)}
@@ -428,7 +577,6 @@ export default function DatingPage() {
               Продолжить поиск
             </button>
           </div>
-          
         </div>
       )}
     </div>

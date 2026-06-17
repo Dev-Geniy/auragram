@@ -59,7 +59,6 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
   const [profile, setProfile] = useState<any>(null);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   
-  // Состояние для компактного режима сайдбара (сохраняем в localStorage)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebarCollapsed');
     return saved === 'true';
@@ -69,7 +68,6 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
     localStorage.setItem('sidebarCollapsed', isSidebarCollapsed.toString());
   }, [isSidebarCollapsed]);
 
-  // Слушаем профиль пользователя в реальном времени для динамического меню
   useEffect(() => {
     if (!user) return;
     const unsubscribe = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
@@ -84,7 +82,19 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
     try { await signOut(auth); } catch (error) { console.error(error); }
   };
 
-  // 1. Формируем все ДОСТУПНЫЕ пункты меню на основе настроек профиля
+  // Если пользователя нет (гостевой режим для магазина), не рендерим меню
+  if (!user) {
+    return (
+      <div className="flex h-[100dvh] bg-white dark:bg-gray-950 overflow-hidden font-sans antialiased text-gray-900 dark:text-gray-100 transition-colors duration-300">
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative bg-white dark:bg-gray-950 transition-colors duration-300 z-10">
+          <Suspense fallback={<GlobalLoader />}>
+            {children}
+          </Suspense>
+        </main>
+      </div>
+    );
+  }
+
   const availableItems = [];
   
   if (profile?.goals?.includes('dating')) {
@@ -95,7 +105,9 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
   availableItems.push({ id: 'market', path: '/market', icon: <Store size={24} strokeWidth={2} />, label: 'Маркет' });
   
   if (profile?.type === 'business') {
-    availableItems.push({ id: 'myshop', path: `/shop/${user?.uid}`, icon: <ShoppingBag size={24} strokeWidth={2} />, label: 'Мой магазин' });
+    // Если у пользователя есть customUrl, используем его в меню, иначе id
+    const shopLink = profile.customUrl ? profile.customUrl : user.uid;
+    availableItems.push({ id: 'myshop', path: `/shop/${shopLink}`, icon: <ShoppingBag size={24} strokeWidth={2} />, label: 'Мой магазин' });
     availableItems.push({ id: 'crm', path: '/crm', icon: <LineChart size={24} strokeWidth={2} />, label: 'Smart CRM' });
   }
 
@@ -105,7 +117,6 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
 
   availableItems.push({ id: 'profile', path: '/profile', icon: <Settings size={24} strokeWidth={2} />, label: 'Настройки' });
 
-  // 2. СОРТИРОВКА
   if (profile?.menuOrder && Array.isArray(profile.menuOrder)) {
     availableItems.sort((a, b) => {
       const idxA = profile.menuOrder.indexOf(a.id);
@@ -117,7 +128,6 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
     });
   }
 
-  // 3. РАЗБИВКА ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ
   const isMobileOverflow = availableItems.length > 4;
   const mobileNavItems = isMobileOverflow ? availableItems.slice(0, 3) : availableItems;
   const mobileMoreItems = isMobileOverflow ? availableItems.slice(3) : [];
@@ -133,7 +143,6 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
       >
         <div className="flex flex-col h-full overflow-hidden">
           
-          {/* Логотип и переключатель с состоянием */}
           <div 
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             className={`h-16 flex items-center mx-3 mb-4 mt-2 cursor-pointer hover:bg-gray-200/50 dark:hover:bg-gray-800/50 rounded-2xl transition-all duration-200 ${
@@ -144,7 +153,6 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
             <div className="w-10 h-10 bg-gray-900 dark:bg-gray-800 rounded-xl flex items-center justify-center shadow-sm shrink-0 transition-transform hover:scale-105">
               <Hexagon size={22} className="text-white" strokeWidth={2.5} />
             </div>
-            {/* Текст Aura (скрывается плавно) */}
             <span 
               className={`ml-3 font-black text-xl tracking-tight text-gray-900 dark:text-white truncate transition-all duration-300 ${
                 isSidebarCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100 hidden lg:block'
@@ -154,7 +162,6 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
             </span>
           </div>
 
-          {/* Десктопное меню */}
           <nav className="flex-1 px-3 space-y-1 overflow-y-auto custom-scrollbar pb-4">
             {availableItems.map((item) => {
               const isActive = location.pathname.startsWith(item.path);
@@ -188,7 +195,6 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
             })}
           </nav>
 
-          {/* Профиль и кнопка выхода */}
           <div className="p-3 border-t border-gray-200 dark:border-gray-800 shrink-0">
             {user && (
               <div className={`flex items-center mb-2 p-2 rounded-2xl transition-all ${
@@ -358,7 +364,9 @@ export default function App() {
           <Route path="/chats" element={<RequireAuth><MainLayout><ChatsPage /></MainLayout></RequireAuth>} />
           <Route path="/market" element={<RequireAuth><MainLayout><MarketPage /></MainLayout></RequireAuth>} />
           <Route path="/profile" element={<RequireAuth><MainLayout><ProfilePage /></MainLayout></RequireAuth>} />
-          <Route path="/shop/:id" element={<RequireAuth><MainLayout><ShopPage /></MainLayout></RequireAuth>} />
+          
+          {/* РОУТ МАГАЗИНА: ТЕПЕРЬ ОН ДОСТУПЕН ДЛЯ ВСЕХ (БЕЗ RequireAuth) */}
+          <Route path="/shop/:id" element={<MainLayout><ShopPage /></MainLayout>} />
           
           <Route path="/dating" element={<RequireAuth><MainLayout><DatingPage /></MainLayout></RequireAuth>} />
           <Route path="/crm" element={<RequireAuth><MainLayout><CRMPage /></MainLayout></RequireAuth>} />

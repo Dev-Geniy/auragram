@@ -1028,7 +1028,7 @@ export default function ChatsPage() {
             </div>
             
             {/* КОНТЕЙНЕР СООБЩЕНИЙ */}
-            <div className="flex-1 relative flex flex-col overflow-hidden bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] dark:bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-fixed" style={{ backgroundBlendMode: 'overlay', backgroundColor: isDark ? '#111827' : '#F3F4F6' }}>
+            <div className="flex-1 relative flex flex-col overflow-hidden bg-[#F3F4F6] dark:bg-[#111827] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] dark:bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-fixed" style={{ backgroundBlendMode: 'overlay' }}>
               
               {showScrollButton && (
                 <button onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })} className="absolute bottom-4 right-4 z-30 w-11 h-11 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all animate-fade-in">

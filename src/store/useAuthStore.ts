@@ -1,16 +1,70 @@
 import { create } from 'zustand';
-import { User } from 'firebase/auth';
+import { 
+  User, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signOut as firebaseSignOut, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { auth, db } from '../services/firebase';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 interface AuthState {
   user: User | null;
-  isLoading: boolean;
+  loading: boolean;
+  loginWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
   setUser: (user: User | null) => void;
-  setLoading: (loading: boolean) => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  user: null, // Изначально пользователь не авторизован
-  isLoading: true, // При загрузке приложения мы проверяем статус
-  setUser: (user) => set({ user }),
-  setLoading: (isLoading) => set({ isLoading }),
-}));
+export const useAuthStore = create<AuthState>((set) => {
+  // Инициализация прослушивателя состояний
+  onAuthStateChanged(auth, async (currentUser) => {
+    if (currentUser) {
+      // Обновляем данные пользователя в Firestore при каждом входе
+      const userRef = doc(db, 'users', currentUser.uid);
+      const userSnap = await getDoc(userRef);
+      
+      if (!userSnap.exists()) {
+        // Создаем профиль для нового пользователя
+        await setDoc(userRef, {
+          name: currentUser.displayName || 'Аноним',
+          email: currentUser.email,
+          avatar: currentUser.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || 'U')}&background=random`,
+          type: 'personal',
+          createdAt: serverTimestamp(),
+          lastSeen: serverTimestamp()
+        });
+      } else {
+        // Обновляем lastSeen
+        await setDoc(userRef, { lastSeen: serverTimestamp() }, { merge: true });
+      }
+    }
+    set({ user: currentUser, loading: false });
+  });
+
+  return {
+    user: null,
+    loading: true,
+    setUser: (user) => set({ user }),
+    
+    loginWithGoogle: async () => {
+      const provider = new GoogleAuthProvider();
+      try {
+        await signInWithPopup(auth, provider);
+        // Firebase Auth automatically triggers onAuthStateChanged
+        // The page redirect logic is handled inside components (e.g., ShopPage)
+      } catch (error) {
+        console.error("Ошибка входа через Google:", error);
+      }
+    },
+    
+    logout: async () => {
+      try {
+        await firebaseSignOut(auth);
+      } catch (error) {
+        console.error("Ошибка при выходе:", error);
+      }
+    },
+  };
+});

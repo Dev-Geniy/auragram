@@ -140,6 +140,9 @@ export default function MarketPage() {
     setDisplayLimit(20);
   }, [searchQuery, activeCategory]);
 
+  // ВОТ ЭТА СТРОКА ВАЖНА (ОНА ЛОМАЛА БИЛД)
+  const displayedProducts = filteredProducts.slice(0, displayLimit);
+
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, clientHeight, scrollHeight } = e.currentTarget;
     if (scrollHeight - scrollTop <= clientHeight + 100) {
@@ -149,7 +152,7 @@ export default function MarketPage() {
     }
   };
 
-  // ФУНКЦИЯ "ЗАКАЗАТЬ В 1 КЛИК" (Передает товар прямо в чат)
+  // ФУНКЦИЯ "ЗАКАЗАТЬ В 1 КЛИК"
   const handleDirectOrder = () => {
     if (!selectedProduct) return;
     
@@ -158,7 +161,6 @@ export default function MarketPage() {
       return;
     }
 
-    // Имитируем корзину с 1 товаром для передачи в ChatsPage
     const singleItemCart = [{
       id: selectedProduct.id,
       name: selectedProduct.name,
@@ -308,7 +310,6 @@ export default function MarketPage() {
                       <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
                     </div>
                     
-                    {/* Информация в карточке (НИКАКИХ КНОПОК) */}
                     <div className="px-2 flex flex-col flex-1 pb-1">
                       <h3 className="font-bold text-gray-900 dark:text-white text-[13px] sm:text-[14px] leading-snug line-clamp-2 mb-2 group-hover:text-blue-500 transition-colors">
                         {product.name}
@@ -362,9 +363,6 @@ export default function MarketPage() {
         </div>
       </div>
 
-      {/* ========================================== */}
-      {/* МОДАЛКА: ПРОСМОТР ТОВАРА */}
-      {/* ========================================== */}
       {selectedProduct && (
         <div 
           className="fixed inset-0 z-[150] bg-gray-950/80 backdrop-blur-sm flex justify-center items-end md:items-center p-0 md:p-4 animate-fade-in"
@@ -374,7 +372,6 @@ export default function MarketPage() {
             className="bg-white dark:bg-[#0A0A0B] w-full md:w-[480px] max-h-[95vh] overflow-y-auto custom-scrollbar rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col relative animate-slide-up transition-colors"
             onClick={e => e.stopPropagation()}
           >
-            {/* Картинка товара */}
             <div className="relative w-full h-[40vh] md:h-[45vh] bg-gray-50 dark:bg-gray-900/50 shrink-0 md:rounded-t-[32px] overflow-hidden">
               {selectedProduct.imageUrl ? (
                 <img src={selectedProduct.imageUrl} className="w-full h-full object-cover" />
@@ -404,12 +401,14 @@ export default function MarketPage() {
                 </div>
               </div>
 
-              {/* Карточка продавца */}
-              <div className="flex flex-col p-4 bg-gray-50 dark:bg-[#151518] rounded-[24px] border border-gray-100 dark:border-gray-800/50 mb-6 group">
+              <div 
+                onClick={() => navigate(`/shop/${selectedProduct.shopId}`)}
+                className="flex flex-col p-4 bg-gray-50 dark:bg-[#151518] rounded-[24px] border border-gray-100 dark:border-gray-800/50 mb-6 group cursor-pointer hover:border-gray-200 dark:hover:border-gray-700 transition-colors"
+              >
                 <div className="flex items-center gap-4">
                   <img src={selectedProduct.shopAvatar} className="w-14 h-14 rounded-full object-cover shadow-sm border border-gray-200 dark:border-gray-700 bg-white" />
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-[16px] font-black text-gray-900 dark:text-white flex items-center gap-1.5 truncate">
+                    <h4 className="text-[16px] font-black text-gray-900 dark:text-white flex items-center gap-1.5 truncate group-hover:text-blue-500 transition-colors">
                       {selectedProduct.shopName}
                     </h4>
                     <div className="flex items-center gap-2 mt-1">
@@ -426,6 +425,7 @@ export default function MarketPage() {
                       )}
                     </div>
                   </div>
+                  <ChevronRight size={20} className="text-gray-400 group-hover:translate-x-1 transition-transform" />
                 </div>
                 
                 <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-800/50 flex items-center gap-1.5 text-[13px] font-medium text-gray-500 dark:text-gray-400">
@@ -433,7 +433,6 @@ export default function MarketPage() {
                 </div>
               </div>
 
-              {/* Описание */}
               <div className="mb-6">
                 <h3 className="text-[13px] font-black text-gray-400 uppercase tracking-widest mb-3">Описание</h3>
                 <p className="text-[15px] text-gray-800 dark:text-gray-300 leading-relaxed whitespace-pre-wrap bg-gray-50 dark:bg-[#151518] p-5 rounded-[24px] border border-gray-100 dark:border-gray-800/50">
@@ -441,7 +440,6 @@ export default function MarketPage() {
                 </p>
               </div>
 
-              {/* УПРОЩЕННЫЕ КНОПКИ ДЕЙСТВИЙ */}
               <div className="mt-auto sticky bottom-0 bg-white/95 dark:bg-[#0A0A0B]/95 backdrop-blur-xl border-t border-gray-100 dark:border-gray-800/80 pt-4 pb-[calc(env(safe-area-inset-bottom)+16px)] flex gap-3 z-20">
                 <button 
                   onClick={() => {

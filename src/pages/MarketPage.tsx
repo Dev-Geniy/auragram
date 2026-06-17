@@ -25,7 +25,7 @@ interface BusinessProfile {
   products: Product[];
 }
 
-// ДОБАВЛЕНА КАТЕГОРИЯ "ДРУГОЕ"
+// СИНХРОНИЗИРОВАННЫЕ КАТЕГОРИИ С ПРОФИЛЕМ
 export const BUSINESS_CATEGORIES = [
   'Все',
   'IT & Разработка',
@@ -34,6 +34,8 @@ export const BUSINESS_CATEGORIES = [
   'Консалтинг & Услуги',
   'E-commerce & Товары',
   'Образование',
+  'Недвижимость (Аренда/Продажа)',
+  'Цифровая инфо (Курсы, Книги)',
   'Другое', 
 ];
 
@@ -139,37 +141,34 @@ export default function MarketPage() {
   return (
     <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden select-none font-sans relative">
       
-      {/* HEADER */}
+      {/* СОВРЕМЕННЫЙ МИНИМАЛИСТИЧНЫЙ HEADER */}
       <div className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl sticky top-0 z-20 pt-3 pb-2 px-4 border-b border-gray-100 dark:border-gray-800 shrink-0 shadow-sm transition-colors">
         <div className="max-w-5xl mx-auto flex flex-col gap-3">
           
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-[14px] flex items-center justify-center shadow-[0_4px_12px_rgba(59,130,246,0.3)]">
-                <ShoppingBag size={20} className="text-white" strokeWidth={2.5} />
-              </div>
-              <h1 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-                Маркетплейс
-              </h1>
+          <div className="flex items-center gap-3">
+            {/* Иконка-логотип раздела */}
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-[14px] flex items-center justify-center shadow-[0_4px_12px_rgba(59,130,246,0.3)] shrink-0">
+              <ShoppingBag size={20} className="text-white" strokeWidth={2.5} />
+            </div>
+            
+            {/* Строка поиска на всю ширину */}
+            <div className="relative flex-1 flex items-center bg-gray-100/80 dark:bg-gray-800/80 rounded-2xl px-3 py-2 transition-all focus-within:ring-2 ring-blue-500/50">
+              <Search className="text-gray-400 dark:text-gray-500 shrink-0" size={18} />
+              <input 
+                type="text" 
+                placeholder="Поиск по маркетплейсу..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-transparent pl-3 pr-8 py-0.5 text-[15px] focus:outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-3 w-6 h-6 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                  <X size={14} />
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Строка поиска */}
-          <div className="relative flex items-center bg-gray-100/80 dark:bg-gray-800/80 rounded-2xl px-3 py-2 transition-all focus-within:ring-2 ring-blue-500/50">
-            <Search className="text-gray-400 dark:text-gray-500 shrink-0" size={18} />
-            <input 
-              type="text" 
-              placeholder="Поиск товаров и магазинов..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-transparent pl-3 pr-8 py-1.5 text-[15px] focus:outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-3 w-6 h-6 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
-                <X size={14} />
-              </button>
-            )}
-          </div>
         </div>
 
         {/* КАТЕГОРИИ (Горизонтальный скролл) */}
@@ -204,10 +203,10 @@ export default function MarketPage() {
               {/* Баннер 1: Экосистема */}
               <div className="min-w-[280px] sm:min-w-[320px] lg:min-w-0 flex-1 shrink-0 snap-start bg-gradient-to-br from-blue-600 to-indigo-600 rounded-[24px] p-5 text-white shadow-lg shadow-blue-500/20 flex flex-col justify-between relative overflow-hidden group">
                 <div className="relative z-10">
-                  <span className="bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest mb-2.5 inline-block border border-white/20 shadow-sm">Экосистема Aura</span>
-                  <h3 className="text-xl font-black mb-1.5 leading-tight tracking-tight">Локальный<br/>Маркет</h3>
-                  <p className="text-[12px] font-medium text-blue-100 max-w-[200px] leading-relaxed">
-                    Доступ к предложениям от частных лиц и бизнеса в вашем регионе.
+                  <span className="bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest mb-2.5 inline-block border border-white/20 shadow-sm">Торговая площадка</span>
+                  <h3 className="text-[18px] md:text-xl font-black mb-1.5 leading-tight tracking-tight">Экосистема Aura</h3>
+                  <p className="text-[12px] font-medium text-blue-100 max-w-[220px] leading-relaxed">
+                    Доступ к предложениям от частных лиц и бизнеса. Все товары вашего региона в одном месте.
                   </p>
                 </div>
                 <Users size={90} className="absolute -bottom-4 -right-4 text-white opacity-10 group-hover:scale-110 transition-transform duration-500" />
@@ -216,10 +215,10 @@ export default function MarketPage() {
               {/* Баннер 2: Безопасность */}
               <div className="min-w-[280px] sm:min-w-[320px] lg:min-w-0 flex-1 shrink-0 snap-start bg-gradient-to-br from-emerald-500 to-teal-600 rounded-[24px] p-5 text-white shadow-lg shadow-emerald-500/20 flex flex-col justify-between relative overflow-hidden group">
                 <div className="relative z-10">
-                  <span className="bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest mb-2.5 inline-block border border-white/20 shadow-sm">Доверие</span>
-                  <h3 className="text-xl font-black mb-1.5 leading-tight tracking-tight">Прямой<br/>Контакт</h3>
-                  <p className="text-[12px] font-medium text-emerald-100 max-w-[200px] leading-relaxed">
-                    Связывайтесь с продавцами напрямую через защищенные чаты.
+                  <span className="bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest mb-2.5 inline-block border border-white/20 shadow-sm">Безопасность</span>
+                  <h3 className="text-[18px] md:text-xl font-black mb-1.5 leading-tight tracking-tight">Прямой Контакт</h3>
+                  <p className="text-[12px] font-medium text-emerald-100 max-w-[220px] leading-relaxed">
+                    Без посредников и комиссий. Связывайтесь с продавцами напрямую через защищенные чаты.
                   </p>
                 </div>
                 <ShieldCheck size={90} className="absolute -bottom-4 -right-4 text-white opacity-10 group-hover:scale-110 transition-transform duration-500" />
@@ -229,9 +228,9 @@ export default function MarketPage() {
               <div className="min-w-[280px] sm:min-w-[320px] lg:min-w-0 flex-1 shrink-0 snap-start bg-gradient-to-br from-orange-500 to-amber-500 rounded-[24px] p-5 text-white shadow-lg shadow-amber-500/20 flex flex-col justify-between relative overflow-hidden group">
                 <div className="relative z-10">
                   <span className="bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest mb-2.5 inline-block border border-white/20 shadow-sm">Бизнесу</span>
-                  <h3 className="text-xl font-black mb-1.5 leading-tight tracking-tight">Продавайте<br/>Легко</h3>
-                  <p className="text-[12px] font-medium text-orange-100 max-w-[200px] leading-relaxed">
-                    Создайте профиль магазина и находите клиентов абсолютно бесплатно.
+                  <h3 className="text-[18px] md:text-xl font-black mb-1.5 leading-tight tracking-tight">Продавайте Легко</h3>
+                  <p className="text-[12px] font-medium text-orange-100 max-w-[220px] leading-relaxed">
+                    Откройте магазин в настройках профиля, добавляйте товары и находите клиентов бесплатно.
                   </p>
                 </div>
                 <Store size={90} className="absolute -bottom-4 -right-4 text-white opacity-10 group-hover:scale-110 transition-transform duration-500" />
@@ -319,7 +318,7 @@ export default function MarketPage() {
               )}
             </>
           ) : (
-            // ПУСТОЕ СОСТОЯНИЕ (Задействован Package)
+            // ПУСТОЕ СОСТОЯНИЕ
             <div className="flex flex-col items-center justify-center h-[40vh] text-center px-4 animate-fade-in">
               <div className="w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-6">
                 <Package size={40} className="text-gray-300 dark:text-gray-600" />
@@ -399,7 +398,7 @@ export default function MarketPage() {
                   <ChevronRight size={20} className="text-gray-400 group-hover:translate-x-1 transition-transform" />
                 </div>
                 
-                {/* Локация (MapPin задействован) */}
+                {/* Локация (MapPin) */}
                 <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700/50 flex items-center gap-1.5 text-[13px] font-medium text-gray-500 dark:text-gray-400">
                   <MapPin size={14} className="text-blue-500" /> {selectedProduct.shopLocation}
                 </div>

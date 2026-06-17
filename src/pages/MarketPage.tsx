@@ -139,34 +139,32 @@ export default function MarketPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden select-none font-sans relative">
+    <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden select-none font-sans relative transition-colors">
       
-      {/* СОВРЕМЕННЫЙ МИНИМАЛИСТИЧНЫЙ HEADER */}
+      {/* СОВРЕМЕННЫЙ УЛЬТРА-МИНИМАЛИСТИЧНЫЙ HEADER */}
       <div className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl sticky top-0 z-20 pt-3 pb-2 px-4 border-b border-gray-100 dark:border-gray-800 shrink-0 shadow-sm transition-colors">
-        <div className="max-w-5xl mx-auto flex flex-col gap-3">
+        <div className="max-w-5xl mx-auto flex items-center gap-3">
           
-          <div className="flex items-center gap-3">
-            {/* Иконка-логотип раздела */}
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-[14px] flex items-center justify-center shadow-[0_4px_12px_rgba(59,130,246,0.3)] shrink-0">
-              <ShoppingBag size={20} className="text-white" strokeWidth={2.5} />
-            </div>
-            
-            {/* Строка поиска на всю ширину */}
-            <div className="relative flex-1 flex items-center bg-gray-100/80 dark:bg-gray-800/80 rounded-2xl px-3 py-2 transition-all focus-within:ring-2 ring-blue-500/50">
-              <Search className="text-gray-400 dark:text-gray-500 shrink-0" size={18} />
-              <input 
-                type="text" 
-                placeholder="Поиск по маркетплейсу..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-transparent pl-3 pr-8 py-0.5 text-[15px] focus:outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="absolute right-3 w-6 h-6 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
-                  <X size={14} />
-                </button>
-              )}
-            </div>
+          {/* Иконка-логотип раздела (без текстового заголовка) */}
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-[14px] flex items-center justify-center shadow-[0_4px_12px_rgba(59,130,246,0.3)] shrink-0 transition-transform hover:scale-105 cursor-default">
+            <ShoppingBag size={20} className="text-white" strokeWidth={2.5} />
+          </div>
+          
+          {/* Строка поиска на всю ширину */}
+          <div className="relative flex-1 flex items-center bg-gray-100/80 dark:bg-gray-800/80 rounded-2xl px-3 py-2 transition-all focus-within:ring-2 ring-blue-500/50">
+            <Search className="text-gray-400 dark:text-gray-500 shrink-0" size={18} />
+            <input 
+              type="text" 
+              placeholder="Поиск по товарам и услугам..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-transparent pl-3 pr-8 py-0.5 text-[15px] font-medium focus:outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute right-3 w-6 h-6 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                <X size={14} />
+              </button>
+            )}
           </div>
 
         </div>
@@ -196,7 +194,7 @@ export default function MarketPage() {
       >
         <div className="max-w-5xl mx-auto p-3 sm:p-4">
           
-          {/* ПРОМО БАННЕРЫ (Скрываются при поиске) */}
+          {/* ПРОМО БАННЕРЫ (Скрываются при поиске или фильтрации) */}
           {!searchQuery && activeCategory === 'Все' && (
             <div className="flex overflow-x-auto lg:grid lg:grid-cols-3 gap-3 sm:gap-4 pb-4 mb-2 scrollbar-none snap-x">
               
@@ -318,10 +316,10 @@ export default function MarketPage() {
               )}
             </>
           ) : (
-            // ПУСТОЕ СОСТОЯНИЕ
+            // ПУСТОЕ СОСТОЯНИЕ (Ничего не найдено)
             <div className="flex flex-col items-center justify-center h-[40vh] text-center px-4 animate-fade-in">
-              <div className="w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-6">
-                <Package size={40} className="text-gray-300 dark:text-gray-600" />
+              <div className="w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-6 border border-gray-200/50 dark:border-gray-700/50 shadow-inner">
+                <Package size={40} className="text-gray-400 dark:text-gray-500" />
               </div>
               <h2 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white mb-2 tracking-tight">Ничего не найдено</h2>
               <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 max-w-[280px]">
@@ -346,7 +344,7 @@ export default function MarketPage() {
           onClick={() => setSelectedProduct(null)}
         >
           <div 
-            className="bg-white dark:bg-gray-900 w-full md:w-[480px] max-h-[95vh] overflow-y-auto custom-scrollbar rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col relative animate-slide-up"
+            className="bg-white dark:bg-gray-900 w-full md:w-[480px] max-h-[95vh] overflow-y-auto custom-scrollbar rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col relative animate-slide-up transition-colors"
             onClick={e => e.stopPropagation()}
           >
             {/* Картинка товара */}
@@ -398,7 +396,7 @@ export default function MarketPage() {
                   <ChevronRight size={20} className="text-gray-400 group-hover:translate-x-1 transition-transform" />
                 </div>
                 
-                {/* Локация (MapPin) */}
+                {/* Локация */}
                 <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700/50 flex items-center gap-1.5 text-[13px] font-medium text-gray-500 dark:text-gray-400">
                   <MapPin size={14} className="text-blue-500" /> {selectedProduct.shopLocation}
                 </div>
@@ -413,7 +411,7 @@ export default function MarketPage() {
               </div>
 
               {/* Кнопки действий (Sticky bottom) */}
-              <div className="mt-auto sticky bottom-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-t border-gray-100 dark:border-gray-800 pt-4 pb-[calc(env(safe-area-inset-bottom)+16px)] flex gap-3 z-20">
+              <div className="mt-auto sticky bottom-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-t border-gray-100 dark:border-gray-800 pt-4 pb-[calc(env(safe-area-inset-bottom)+16px)] flex gap-3 z-20 transition-colors">
                 {selectedProduct.shopId !== user?.uid && (
                   <button 
                     onClick={() => navigate('/chats', { state: { selectedUserId: selectedProduct.shopId } })}

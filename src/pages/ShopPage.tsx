@@ -5,7 +5,7 @@ import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useCartStore } from '../store/useCartStore';
 import { 
-  MessageCircle, Share2, Phone, Mail, 
+  MessageCircle, Phone, Mail, 
   Package, Loader2, CheckCircle, ShoppingCart, 
   Plus, Minus, MapPin, Sparkles, LogIn, Link2
 } from 'lucide-react';

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { updateProfile, signOut } from 'firebase/auth'; // <-- Добавили signOut
+import { updateProfile, signOut } from 'firebase/auth';
 import { db, auth } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
 
@@ -8,8 +8,9 @@ import {
   Camera, User, Briefcase, 
   Phone, Globe, Package, Plus, Trash2, Image as ImageIcon, 
   Loader2, Edit2, Moon, Sun, Zap, MessageSquareText,
-  Target, LayoutList, GripVertical, Heart, Store, MessageCircle, ShoppingBag, LineChart, LayoutDashboard, Settings, X, Check, LogOut
-} from 'lucide-react'; // <-- Добавили LogOut
+  Target, LayoutList, GripVertical, Heart, Store, MessageCircle, ShoppingBag, LineChart, LayoutDashboard, Settings, X, Check, LogOut,
+  MapPin, Wifi
+} from 'lucide-react';
 
 interface Product {
   id: string;
@@ -26,6 +27,8 @@ const BUSINESS_CATEGORIES = [
   'Консалтинг & Услуги',
   'E-commerce & Товары',
   'Образование',
+  'Недвижимость (Аренда/Продажа)', // <-- НОВАЯ КАТЕГОРИЯ
+  'Цифровая инфо (Курсы, Книги)',  // <-- НОВАЯ КАТЕГОРИЯ
   'Другое', 
 ];
 
@@ -95,8 +98,12 @@ export default function ProfilePage() {
   const [newProduct, setNewProduct] = useState<Product>({ id: '', name: '', price: '', description: '', imageUrl: '' });
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  // Стейты для модалки бизнеса (Многошаговая)
+  const [showBusinessSetupModal, setShowBusinessSetupModal] = useState(false);
+  const [businessSetupStep, setBusinessSetupStep] = useState<1 | 2>(1);
   const [tempCategory, setTempCategory] = useState<string>('');
+  const [tempLocationType, setTempLocationType] = useState<'online' | 'offline' | ''>('');
+  const [tempCity, setTempCity] = useState<string>('');
 
   const [originalProfile, setOriginalProfile] = useState<any>(null); // Храним оригинал для сравнения
   const [profile, setProfile] = useState({
@@ -105,6 +112,7 @@ export default function ProfilePage() {
     role: '',
     avatar: '',
     category: '', 
+    location: '', // <-- Добавили локальное поле локации
     contacts: { phone: '', email: '', website: '' },
     products: [] as Product[],
     goals: [] as string[],
@@ -146,6 +154,7 @@ export default function ProfilePage() {
             ...data,
             avatar: data.avatar || user.photoURL || '',
             category: data.category || '',
+            location: data.location || '',
             contacts: data.contacts || { phone: '', email: '', website: '' },
             products: data.products || [],
             goals: data.goals || [],
@@ -293,19 +302,45 @@ export default function ProfilePage() {
     }
   };
 
+  // ЛОГИКА НАСТРОЙКИ БИЗНЕСА (Многошаговая модалка)
+  const openBusinessSetup = () => {
+    setTempCategory(profile.category || BUSINESS_CATEGORIES[0]);
+    
+    // Если уже было сохранено "Онлайн-магазин", выставляем как online
+    if (profile.location === 'Онлайн-магазин' || !profile.location) {
+      setTempLocationType('online');
+      setTempCity('');
+    } else {
+      setTempLocationType('offline');
+      setTempCity(profile.location);
+    }
+    
+    setBusinessSetupStep(1);
+    setShowBusinessSetupModal(true);
+  };
+
   const handleTypeChange = (newType: string) => {
     if (newType === 'business' && profile.type !== 'business') {
-      setTempCategory(profile.category || BUSINESS_CATEGORIES[0]);
-      setShowCategoryModal(true); 
+      openBusinessSetup();
     } else if (newType === 'personal') {
       setProfile({ ...profile, type: 'personal' });
     }
   };
 
-  const confirmBusinessCategory = () => {
-    if (!tempCategory) return;
-    setProfile({ ...profile, type: 'business', category: tempCategory });
-    setShowCategoryModal(false);
+  const confirmBusinessSetup = () => {
+    if (!tempCategory || !tempLocationType) return;
+    
+    const finalLocation = tempLocationType === 'online' ? 'Онлайн-магазин' : tempCity.trim();
+    if (tempLocationType === 'offline' && !finalLocation) return; // Город обязателен для офлайна
+
+    setProfile({ 
+      ...profile, 
+      type: 'business', 
+      category: tempCategory,
+      location: finalLocation
+    });
+    
+    setShowBusinessSetupModal(false);
   };
 
   const handleAddProduct = () => {
@@ -417,14 +452,18 @@ export default function ProfilePage() {
         {/* БЛОК ДЛЯ БИЗНЕСА */}
         {profile.type === 'business' && (
           <div className="animate-fade-in">
-            {/* Выбор Категории бизнеса */}
+            {/* Настройка Категории и Локации бизнеса */}
             <div className={`${blockClass} mt-4`}>
-              <div className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={() => setShowCategoryModal(true)}>
-                <div>
-                  <span className="text-[15px] font-bold text-gray-900 dark:text-white block">Категория магазина</span>
-                  <span className="text-[12px] font-medium text-blue-500 block mt-0.5">{profile.category || 'Не выбрана'}</span>
+              <div className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={openBusinessSetup}>
+                <div className="flex-1 min-w-0 pr-4">
+                  <span className="text-[15px] font-bold text-gray-900 dark:text-white block truncate">Настройки магазина</span>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[12px] font-medium text-blue-500 truncate">{profile.category || 'Без категории'}</span>
+                    <span className="text-gray-300 dark:text-gray-600">•</span>
+                    <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400 truncate">{profile.location || 'Онлайн-магазин'}</span>
+                  </div>
                 </div>
-                <Edit2 size={16} className="text-gray-400" />
+                <Edit2 size={16} className="text-gray-400 shrink-0" />
               </div>
             </div>
             
@@ -628,51 +667,113 @@ export default function ProfilePage() {
       </div>
 
       {/* ========================================== */}
-      {/* МОДАЛКА ВЫБОРА КАТЕГОРИИ БИЗНЕСА           */}
+      {/* МНОГОШАГОВАЯ МОДАЛКА НАСТРОЙКИ БИЗНЕСА      */}
       {/* ========================================== */}
-      {showCategoryModal && (
-        <div className="fixed inset-0 z-[200] bg-gray-950/80 backdrop-blur-sm flex justify-center items-center p-4 animate-fade-in" onClick={() => setShowCategoryModal(false)}>
-          <div className="bg-white dark:bg-gray-900 w-full max-w-sm rounded-[32px] shadow-2xl flex flex-col animate-scale-up" onClick={e => e.stopPropagation()}>
-            <div className="p-6 text-center border-b border-gray-100 dark:border-gray-800">
-              <div className="w-16 h-16 bg-blue-50 dark:bg-blue-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Briefcase size={32} className="text-blue-500" />
+      {showBusinessSetupModal && (
+        <div className="fixed inset-0 z-[200] bg-gray-950/80 backdrop-blur-sm flex justify-center items-center p-4 animate-fade-in" onClick={() => setShowBusinessSetupModal(false)}>
+          <div className="bg-white dark:bg-gray-900 w-full max-w-sm rounded-[32px] shadow-2xl flex flex-col animate-scale-up overflow-hidden" onClick={e => e.stopPropagation()}>
+            
+            <div className="p-6 text-center border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
+              <div className="w-16 h-16 bg-blue-50 dark:bg-blue-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-inner">
+                {businessSetupStep === 1 ? <Briefcase size={32} className="text-blue-500" /> : <MapPin size={32} className="text-blue-500" />}
               </div>
-              <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight mb-2">Настройка Магазина</h2>
+              <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight mb-2">
+                {businessSetupStep === 1 ? 'Настройка Магазина' : 'Формат работы'}
+              </h2>
               <p className="text-[14px] font-medium text-gray-500 dark:text-gray-400">
-                Выберите категорию вашего бизнеса. Это поможет покупателям быстрее найти вас в Маркете.
+                {businessSetupStep === 1 
+                  ? 'Выберите категорию вашего бизнеса. Это поможет покупателям быстрее найти вас.' 
+                  : 'Укажите, как вы работаете с клиентами: онлайн или имеете физическую точку.'}
               </p>
             </div>
             
-            <div className="p-4 max-h-[40vh] overflow-y-auto custom-scrollbar flex flex-col gap-2">
-              {BUSINESS_CATEGORIES.map(cat => (
-                <button
-                  key={cat}
-                  onClick={() => setTempCategory(cat)}
-                  className={`w-full text-left px-4 py-3 rounded-xl font-bold text-[15px] transition-all flex items-center justify-between ${
-                    tempCategory === cat 
-                      ? 'bg-blue-500 text-white shadow-md' 
-                      : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {cat}
-                  {tempCategory === cat && <Check size={18} className="text-white" />}
-                </button>
-              ))}
-            </div>
+            {/* ШАГ 1: ВЫБОР КАТЕГОРИИ */}
+            {businessSetupStep === 1 && (
+              <div className="p-4 max-h-[40vh] overflow-y-auto custom-scrollbar flex flex-col gap-2">
+                {BUSINESS_CATEGORIES.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setTempCategory(cat)}
+                    className={`w-full text-left px-4 py-3.5 rounded-xl font-bold text-[14px] transition-all flex items-center justify-between ${
+                      tempCategory === cat 
+                        ? 'bg-blue-500 text-white shadow-md' 
+                        : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    {cat}
+                    {tempCategory === cat && <Check size={18} className="text-white" />}
+                  </button>
+                ))}
+              </div>
+            )}
 
-            <div className="p-6 pt-2 flex gap-3">
+            {/* ШАГ 2: ВЫБОР ФОРМАТА (ОНЛАЙН / ОФЛАЙН + ГОРОД) */}
+            {businessSetupStep === 2 && (
+              <div className="p-5 max-h-[40vh] overflow-y-auto custom-scrollbar flex flex-col gap-4">
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setTempLocationType('online')}
+                    className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${
+                      tempLocationType === 'online'
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                        : 'border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 text-gray-500'
+                    }`}
+                  >
+                    <Wifi size={24} />
+                    <span className="text-[13px] font-bold text-center leading-tight">Онлайн<br/>Сервис</span>
+                  </button>
+
+                  <button
+                    onClick={() => setTempLocationType('offline')}
+                    className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${
+                      tempLocationType === 'offline'
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                        : 'border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 text-gray-500'
+                    }`}
+                  >
+                    <MapPin size={24} />
+                    <span className="text-[13px] font-bold text-center leading-tight">Офлайн<br/>(Офис/Город)</span>
+                  </button>
+                </div>
+
+                {/* Если выбран ОФЛАЙН, требуем ввести город */}
+                {tempLocationType === 'offline' && (
+                  <div className="animate-fade-in mt-2">
+                    <span className="text-[12px] font-bold text-gray-400 uppercase tracking-widest ml-1 mb-1.5 block">Укажите город или адрес *</span>
+                    <input 
+                      type="text" 
+                      value={tempCity}
+                      onChange={(e) => setTempCity(e.target.value)}
+                      placeholder="Например: г. Киев"
+                      className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-4 py-3.5 rounded-xl text-[15px] font-semibold text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500/50 transition-shadow"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* НАВИГАЦИОННЫЕ КНОПКИ МОДАЛКИ */}
+            <div className="p-6 pt-2 flex gap-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
               <button 
-                onClick={() => setShowCategoryModal(false)}
-                className="flex-1 py-3.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-bold transition-colors"
+                onClick={() => {
+                  if (businessSetupStep === 2) setBusinessSetupStep(1);
+                  else setShowBusinessSetupModal(false);
+                }}
+                className="flex-1 py-3.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl font-bold transition-colors shadow-sm"
               >
-                Отмена
+                {businessSetupStep === 2 ? 'Назад' : 'Отмена'}
               </button>
+              
               <button 
-                onClick={confirmBusinessCategory}
-                disabled={!tempCategory}
-                className="flex-1 py-3.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-500/25 active:scale-95 transition-all disabled:opacity-50"
+                onClick={() => {
+                  if (businessSetupStep === 1) setBusinessSetupStep(2);
+                  else confirmBusinessSetup();
+                }}
+                disabled={businessSetupStep === 1 ? !tempCategory : (tempLocationType === 'offline' && !tempCity.trim()) || !tempLocationType}
+                className="flex-1 py-3.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-500/25 active:scale-95 transition-all disabled:opacity-50 disabled:shadow-none"
               >
-                Продолжить
+                {businessSetupStep === 1 ? 'Далее' : 'Сохранить'}
               </button>
             </div>
           </div>

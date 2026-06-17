@@ -185,7 +185,7 @@ const SwipeableContact = ({ contact, isSelected, isPinned, onClick, onContextMen
             {unreadCount > 0 && !isSelected && <span className="ml-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-sm shrink-0">{unreadCount}</span>}
           </h4>
           <p className={`text-[13px] truncate ${isSelected ? 'text-white/80' : 'text-gray-500 dark:text-gray-400'}`}>
-            {contact.typingTo === currentUserId ? <span className="text-blue-500 dark:text-blue-400 italic animate-pulse">печатает...</span> : (contact.isSaved ? 'Сохраненные сообщения' : contact.type === 'business' ? 'Бизнес-аккаунт' : 'Клиент')}
+            {contact.typingTo === currentUserId ? <span className="text-blue-500 dark:text-blue-400 italic animate-pulse">печатает...</span> : (contact.isSaved ? 'Сохраненные сообщения' : contact.type === 'business' ? 'Бизнес-аккаунт' : 'Пользователь')}
           </p>
         </div>
       </div>
@@ -427,7 +427,7 @@ export default function ChatsPage() {
       setReplyingTo(null); 
       setEditingMessage(null);
       setIsProfileModalOpen(false);
-      setIsExpanded(false); // Сворачиваем клавиатуру при смене чата
+      setIsExpanded(false); 
       currentChatRef.current = chatId;
       
       const savedDraft = localStorage.getItem(`draft_${user.uid}_${selectedContact.id}`);
@@ -531,7 +531,7 @@ export default function ChatsPage() {
     setNewMessage('');
     setAttachedImage('');
     setReplyingTo(null);
-    if (isExpanded) setIsExpanded(false);
+    if (isExpanded) setIsExpanded(false); 
     localStorage.removeItem(`draft_${user.uid}_${selectedContact.id}`);
 
     setChatActivity(prev => ({ ...prev, [selectedContact.id]: Date.now() }));
@@ -655,7 +655,6 @@ export default function ChatsPage() {
         const deletePromises = snap.docs.map(docSnap => deleteDoc(docSnap.ref));
         await Promise.all(deletePromises);
         
-        // Очищаем локальные стейты
         setPinnedChats(prev => prev.filter(id => id !== contactId));
         setArchivedContacts(prev => prev.filter(id => id !== contactId));
         setChatActivity(prev => {
@@ -679,7 +678,7 @@ export default function ChatsPage() {
     
     // Предотвращение выхода меню за пределы экрана
     if (window.innerWidth - x < 220) x = window.innerWidth - 220;
-    if (window.innerHeight - y < 160) y = window.innerHeight - 160;
+    if (window.innerHeight - y < 250) y = window.innerHeight - 250;
 
     setContextMenu({ type, x, y, data });
   };
@@ -1003,7 +1002,7 @@ export default function ChatsPage() {
             {/* ШАПКА ЧАТА */}
             <div className={`h-[60px] bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200/60 dark:border-gray-800 flex items-center justify-between px-4 shrink-0 shadow-sm z-10 transition-colors ${isOffline ? 'mt-6' : ''}`}>
               <div className="flex items-center gap-3">
-                <button onClick={() => setSelectedContact(null)} className="md:hidden text-blue-500 dark:text-blue-400 p-1"><ArrowLeft size={24} /></button>
+                <button onClick={() => setSelectedContact(null)} className="md:hidden text-blue-500 dark:text-blue-400 p-1 -ml-2"><ArrowLeft size={24} /></button>
                 <div className={`flex items-center gap-3 transition-opacity ${!selectedContact.isSaved ? 'cursor-pointer hover:opacity-80' : ''}`} onClick={() => !selectedContact.isSaved && setIsProfileModalOpen(true)}>
                   {selectedContact.isSaved ? (
                     <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center"><Bookmark size={18} /></div>
@@ -1179,7 +1178,7 @@ export default function ChatsPage() {
             
             {/* ОТОБРАЖЕНИЕ ОТВЕТА И РЕДАКТИРОВАНИЯ */}
             {(replyingTo || editingMessage) && (
-              <div className="mx-3 mt-1 bg-gray-100 dark:bg-gray-800 rounded-t-2xl border-l-[3px] border-blue-500 flex items-center justify-between px-4 py-2 animate-fade-in shadow-sm">
+              <div className="mx-3 mt-1 bg-gray-100 dark:bg-gray-800 rounded-t-2xl border-l-[3px] border-blue-500 flex items-center justify-between px-4 py-2 animate-fade-in shadow-sm z-20 relative">
                 <div className="flex flex-col min-w-0 pr-4">
                   <span className="text-[12px] font-bold text-blue-500 dark:text-blue-400">
                     {editingMessage ? 'Редактирование' : (replyingTo?.senderId === user?.uid ? 'Ответ себе' : `Ответ ${selectedContact.name}`)}
@@ -1201,8 +1200,10 @@ export default function ChatsPage() {
               </div>
             )}
 
-            {/* ОБНОВЛЕННАЯ НИЖНЯЯ ПАНЕЛЬ С ПОЛНОЭКРАННЫМ РЕЖИМОМ */}
-            <div className={`bg-white dark:bg-gray-900 px-2 sm:px-4 py-2 pb-[calc(env(safe-area-inset-bottom)+8px)] md:pb-4 border-t border-gray-100 dark:border-gray-800 shrink-0 transition-all duration-300 flex flex-col relative z-20 ${(replyingTo || editingMessage) ? 'pt-2' : ''}`}>
+            {/* ОБНОВЛЕННАЯ НИЖНЯЯ ПАНЕЛЬ (ЭТАП 3) */}
+            <div className={`bg-white dark:bg-gray-900 px-2 sm:px-4 py-2 border-t border-gray-100 dark:border-gray-800 shrink-0 transition-all duration-300 flex flex-col relative z-20 
+              ${(replyingTo || editingMessage) ? 'pt-2' : ''} 
+              ${isExpanded ? 'h-[50dvh] shadow-[0_-20px_60px_rgba(0,0,0,0.1)] pb-[calc(env(safe-area-inset-bottom)+12px)]' : 'pb-[calc(env(safe-area-inset-bottom)+8px)] md:pb-4'}`}>
               
               {/* ШАБЛОНЫ ОТВЕТОВ */}
               {isTemplatesAllowed && !replyingTo && !editingMessage && (
@@ -1213,16 +1214,25 @@ export default function ChatsPage() {
               )}
 
               {/* ФОРМА ОТПРАВКИ */}
-              <form onSubmit={handleSendMessage} className="flex items-end gap-2 max-w-4xl mx-auto relative w-full">
+              <form onSubmit={handleSendMessage} className={`flex items-end gap-2 max-w-4xl mx-auto relative w-full ${isExpanded ? 'flex-col items-stretch h-full' : ''}`}>
                 <input type="file" ref={fileInputRef} onChange={handleImageAttach} accept="image/*" className="hidden" />
                 
                 {/* Скрепка */}
-                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isOffline} className="p-2.5 text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors shrink-0 mb-0.5 disabled:opacity-50">
-                  <Paperclip size={24} />
-                </button>
+                {!isExpanded ? (
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isOffline} className="p-2.5 text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors shrink-0 mb-0.5 disabled:opacity-50">
+                    <Paperclip size={24} />
+                  </button>
+                ) : (
+                  <div className="flex justify-between items-center px-2 py-1 mb-1">
+                    <span className="text-[12px] font-bold text-gray-400 uppercase tracking-widest ml-2">Расширенный ввод</span>
+                    <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isOffline} className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-lg text-[13px] font-semibold text-gray-600 dark:text-gray-300 transition-colors">
+                      <Paperclip size={16} /> Прикрепить файл
+                    </button>
+                  </div>
+                )}
 
                 {/* Умный контейнер ввода текста */}
-                <div className={`relative flex-1 flex flex-col bg-gray-100/80 dark:bg-gray-800/80 rounded-3xl border border-transparent focus-within:border-gray-200 dark:focus-within:border-gray-700 transition-all duration-300 ${isExpanded ? 'h-[40vh] shadow-inner' : ''}`}>
+                <div className={`relative flex flex-col bg-gray-100/80 dark:bg-gray-800/80 rounded-[24px] border border-transparent focus-within:border-gray-200 dark:focus-within:border-gray-700 transition-all duration-300 ${isExpanded ? 'flex-1 shadow-inner' : 'flex-1'}`}>
 
                   {/* Иконка Расширения прямо внутри поля */}
                   <button
@@ -1251,14 +1261,14 @@ export default function ChatsPage() {
                     }} 
                     placeholder={editingMessage ? "Отредактируйте сообщение..." : isExpanded ? "Введите длинный текст... (Ctrl + Enter для отправки)" : "Сообщение..."} 
                     disabled={isOffline} 
-                    className={`w-full bg-transparent text-[15px] outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none custom-scrollbar disabled:opacity-50 pt-3 pb-3 pl-4 ${isExpanded ? 'h-full pr-4' : 'min-h-[44px] max-h-[120px] pr-10'}`} 
+                    className={`w-full bg-transparent text-[15px] outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none custom-scrollbar disabled:opacity-50 pt-3 pb-3 pl-4 ${isExpanded ? 'flex-1 pr-4' : 'min-h-[44px] max-h-[120px] pr-10'}`} 
                   />
 
                   {/* Кнопка отправки внутри поля для расширенного режима */}
                   {isExpanded && (
-                    <div className="flex items-center justify-between p-2 mt-auto border-t border-gray-200/50 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-900/20 rounded-b-3xl">
+                    <div className="flex items-center justify-between p-2 mt-auto border-t border-gray-200/50 dark:border-gray-700/50 bg-white/50 dark:bg-gray-900/50 rounded-b-[24px]">
                       <span className="text-[11px] font-medium text-gray-400 ml-2 hidden sm:block">Ctrl + Enter для отправки</span>
-                      <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isOffline} className={`px-5 py-2 shrink-0 rounded-2xl transition-all font-bold flex items-center gap-2 text-[14px] ${ (newMessage.trim() || attachedImage) && !isOffline ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-md' : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 disabled:opacity-50'}`}>
+                      <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isOffline} className={`px-5 py-2 shrink-0 rounded-xl transition-all font-bold flex items-center gap-2 text-[14px] ${ (newMessage.trim() || attachedImage) && !isOffline ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-md' : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 disabled:opacity-50'}`}>
                         {editingMessage ? <Check size={16} /> : <Send size={16} />}
                         {editingMessage ? 'Сохранить' : 'Отправить'}
                       </button>

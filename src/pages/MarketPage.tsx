@@ -443,9 +443,9 @@ export default function MarketPage() {
               <div className="mt-auto sticky bottom-0 bg-white/95 dark:bg-[#0A0A0B]/95 backdrop-blur-xl border-t border-gray-100 dark:border-gray-800/80 pt-4 pb-[calc(env(safe-area-inset-bottom)+16px)] flex gap-3 z-20">
                 <button 
                   onClick={() => {
-                    setIsModalOpen(false);
+                    setSelectedProduct(null);
                     navigate(`/shop/${selectedProduct.shopId}`);
-                  }}
+                  }} 
                   className="flex-1 py-4 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-white rounded-[20px] font-bold flex justify-center items-center gap-2 transition-colors border border-transparent dark:border-gray-700"
                 >
                   <Store size={20} /> Магазин

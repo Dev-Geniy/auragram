@@ -231,7 +231,7 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
       </aside>
 
       {/* 📱 ОСНОВНОЙ КОНТЕЙНЕР РЕНДЕРА СТРАНИЦ */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative pb-[60px] md:pb-0 transition-colors duration-300 z-10">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative pb-[90px] md:pb-0 bg-white dark:bg-gray-950 transition-colors duration-300">
         <Suspense fallback={<GlobalLoader />}>
           {children}
         </Suspense>

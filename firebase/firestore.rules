@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+
+    // Профили: читать могут все вошедшие (нужно для поиска контактов), менять — только владелец.
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    // Сообщения. chatId = "uidA_uidB" (отсортированная пара) — по нему определяется доступ.
+    match /messages/{messageId} {
+
+      function inChat(chatId) { return request.auth.uid in chatId.split('_'); }
+
+      // реакции: пользователь может менять только свою запись в map reactions
+      function reactionsOk() {
+        return request.resource.data.get('reactions', {}).diff(resource.data.get('reactions', {})).affectedKeys().hasOnly([request.auth.uid]);
+      }
+
+      allow read: if signedIn() && (
+        resource.data.receiverId == request.auth.uid ||
+        resource.data.senderId == request.auth.uid ||
+        inChat(resource.data.chatId)
+      );
+
+      allow create: if signedIn()
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.chatId.split('_').size() == 2
+        && inChat(request.resource.data.chatId)
+        && request.resource.data.receiverId in request.resource.data.chatId.split('_')
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.isRead == false
+        && request.resource.data.get('text', '').size() <= 4000
+        && request.resource.data.keys().hasOnly([
+          'chatId', 'text', 'imageUrl', 'senderId', 'receiverId', 'createdAt', 'isRead',
+          'replyToText', 'replyToSender', 'type', 'cardData', 'statusText',
+          'audioUrl', 'audioDuration', 'fileUrl', 'fileName', 'fileSize', 'forwardedFrom'
+        ]);
+
+      function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+      allow update: if signedIn() && (
+        // автор: правка текста и реакции
+        (resource.data.senderId == request.auth.uid
+          && changed().hasOnly(['text', 'isEdited', 'reactions'])
+          && request.resource.data.get('text', '').size() <= 4000
+          && (!('reactions' in changed()) || reactionsOk()))
+        ||
+        // получатель: пометка «прочитано» и реакции
+        (resource.data.receiverId == request.auth.uid
+          && changed().hasOnly(['isRead', 'reactions'])
+          && (!('isRead' in changed()) || request.resource.data.isRead == true)
+          && (!('reactions' in changed()) || reactionsOk()))
+      );
+
+      allow delete: if signedIn() && (
+        resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid
+      );
+    }
+
+    // Всё остальное закрыто
+    match /{document=**} { allow read, write: if false; }
+  }
+}

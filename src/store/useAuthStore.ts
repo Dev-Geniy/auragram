@@ -30,7 +30,6 @@ export const useAuthStore = create<AuthState>((set) => {
         // Создаем профиль для нового пользователя
         await setDoc(userRef, {
           name: currentUser.displayName || 'Аноним',
-          email: currentUser.email,
           avatar: currentUser.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || 'U')}&background=random`,
           type: 'personal',
           createdAt: serverTimestamp(),

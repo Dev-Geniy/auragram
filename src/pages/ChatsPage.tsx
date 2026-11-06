@@ -1,18 +1,36 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, deleteField, doc, getDocs, Timestamp, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuthStore } from '../store/useAuthStore';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { useCartStore } from '../store/useCartStore';
+import { compressImage, uploadToImgBB, uploadToStorage } from '../services/upload';
+import { notifyReceiver } from '../services/push';
 import { 
   Send, Search, X, ShieldCheck, 
   Loader2, Paperclip, Check, CheckCheck, 
   Bookmark, ArrowLeft, Image as ExternalLink,
-  ShoppingBag, Truck, CheckCircle2, Package, 
-  Users, Zap, Clock, Archive, ArchiveRestore, Reply,
+  Users, Archive, ArchiveRestore, Reply,
   Trash2, Edit2, ChevronDown, WifiOff, Volume2, Bell,
-  Phone, Globe, Store, MessageSquare, Pin, PinOff, Maximize2, Minimize2, Info
+  Phone, Globe, MessageSquare, Pin, PinOff, Maximize2, Minimize2, Info,
+  Mic, Forward, FileText, Download, Copy
 } from 'lucide-react';
+
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+const URL_RE = /(https?:\/\/[^\s<]+)/g;
+
+// Делает ссылки в тексте кликабельными (только http/https)
+const linkify = (text: string): React.ReactNode[] =>
+  text.split(URL_RE).map((part, i) =>
+    /^https?:\/\//.test(part)
+      ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 break-all">{part}</a>
+      : part
+  );
+
+const formatDuration = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+const formatFileSize = (bytes?: number) => {
+  if (!bytes) return '';
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} КБ`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
+};
 
 // ==========================================
 // 1. ИНТЕРФЕЙСЫ
@@ -27,7 +45,6 @@ interface UserProfile {
   typingTo?: string | null;
   role?: string;
   contacts?: { phone?: string; website?: string; email?: string; };
-  products?: { id: string; name: string; price: string; description: string; imageUrl: string; }[];
 }
 
 interface Message {
@@ -39,13 +56,19 @@ interface Message {
   createdAt: any;
   isRead?: boolean;
   isEdited?: boolean;
-  type?: 'share_card' | 'order_receipt' | 'system_status' | string;
+  type?: 'share_card' | 'system_status' | string;
   cardData?: any;
-  orderData?: any;
   statusText?: string;
   replyToText?: string;
   replyToSender?: string;
   chatId?: string;
+  reactions?: Record<string, string>;
+  audioUrl?: string;
+  audioDuration?: number;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  forwardedFrom?: string;
 }
 
 interface ToastNotification {
@@ -59,40 +82,6 @@ interface ToastNotification {
 // ==========================================
 // 2. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (УТИЛИТЫ)
 // ==========================================
-const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const scaleSize = maxWidth / img.width;
-        canvas.width = img.width > maxWidth ? maxWidth : img.width;
-        canvas.height = img.width > maxWidth ? img.height * scaleSize : img.height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob((blob) => {
-          if (blob) resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
-          else reject(new Error('Ошибка сжатия'));
-        }, 'image/jpeg', 0.8);
-      };
-    };
-    reader.onerror = error => reject(error);
-  });
-};
-
-const uploadToImgBB = async (file: File): Promise<string> => {
-  const formData = new FormData();
-  formData.append('image', file);
-  const API_KEY = '22de10db6eb1f3ec3fca012dcc566961'; 
-  const res = await fetch(`https://api.imgbb.com/1/upload?key=${API_KEY}`, { method: 'POST', body: formData });
-  const data = await res.json();
-  if (data.success) return data.data.url;
-  throw new Error('Ошибка загрузки');
-};
-
 const playNotificationSound = () => {
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -198,16 +187,12 @@ const SwipeableContact = ({ contact, isSelected, isPinned, onClick, onContextMen
 // ==========================================
 export default function ChatsPage() {
   const { user } = useAuthStore();
-  const location = useLocation(); 
-  const navigate = useNavigate();
-  const { clearCart } = useCartStore(); 
   
   // Стейты контактов и интерфейса
   const [globalUsers, setGlobalUsers] = useState<UserProfile[]>([]);
   const [selectedContact, setSelectedContact] = useState<UserProfile | null>(null);
-  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'personal' | 'business' | 'clients'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'unread'>('all');
   const [isArchiveMode, setIsArchiveMode] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   
@@ -252,14 +237,23 @@ export default function ChatsPage() {
   const chatSoundPrefsRef = useRef(chatSoundPrefs);
   const chatPushPrefsRef = useRef(chatPushPrefs);
   
-  const checkoutProcessedRef = useRef(false);
   const isSendingRef = useRef(false);
-  const actionProcessingRef = useRef(false);
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
+  const [forwardingMsg, setForwardingMsg] = useState<Message | null>(null);
+  const [chatSearch, setChatSearch] = useState('');
+  const [isChatSearchOpen, setIsChatSearchOpen] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Закрытие контекстного меню при клике в любое место
   useEffect(() => {
@@ -318,7 +312,6 @@ export default function ChatsPage() {
       const loadedUsers: UserProfile[] = [];
       snapshot.forEach((doc) => {
         if (doc.id === user.uid) {
-          setCurrentUserProfile(doc.data());
           loadedUsers.unshift({ id: doc.id, name: 'Избранное', avatar: '', type: 'personal', isSaved: true });
         } else {
           loadedUsers.push({ id: doc.id, ...doc.data() } as UserProfile);
@@ -376,52 +369,6 @@ export default function ChatsPage() {
 
     return () => { unsubscribeUsers(); unsubscribeUnread(); };
   }, [user]);
-
-  // Обработка чекаута из корзины (СВЯЗЬ С МАРКЕТОМ И МАГАЗИНОМ)
-  useEffect(() => {
-    const processCheckout = async () => {
-      if (!location.state?.checkoutCart) {
-        checkoutProcessedRef.current = false;
-        return;
-      }
-      if (checkoutProcessedRef.current) return;
-
-      if (globalUsers.length > 0 && location.state?.selectedUserId) {
-        const contact = globalUsers.find(c => c.id === location.state.selectedUserId);
-        if (contact) {
-          setSelectedContact(contact);
-          
-          if (location.state.checkoutCart.length > 0) {
-            checkoutProcessedRef.current = true; 
-            
-            const cartItems = location.state.checkoutCart;
-            const chatId = [user!.uid, contact.id].sort().join('_');
-            
-            let totalPrice = 0;
-            const itemsList = cartItems.map((item: any) => {
-              const numPrice = parseFloat(item.price.replace(/[^\d.-]/g, '')) || 0;
-              totalPrice += numPrice * item.quantity;
-              return `${item.name} (${item.quantity} шт)`;
-            }).join('\n');
-
-            try {
-              await addDoc(collection(db, 'messages'), {
-                chatId, text: '🛒 Оформлен новый заказ!', type: 'order_receipt',
-                orderData: { items: itemsList, total: totalPrice, status: 'new' },
-                senderId: user!.uid, receiverId: contact.id, createdAt: serverTimestamp(), isRead: false
-              });
-              setChatActivity(prev => ({ ...prev, [contact.id]: Date.now() }));
-              clearCart(contact.id);
-              navigate('.', { replace: true, state: {} }); 
-            } catch (err) {
-              checkoutProcessedRef.current = false; 
-            }
-          }
-        }
-      }
-    };
-    processCheckout();
-  }, [globalUsers, location.state, user, navigate, clearCart]);
 
   // ОСНОВНОЙ ЭФФЕКТ ЗАГРУЗКИ СООБЩЕНИЙ
   useEffect(() => {
@@ -566,11 +513,12 @@ export default function ChatsPage() {
         };
 
         if (replyToSend) {
-          messageData.replyToText = replyToSend.text || (replyToSend.imageUrl ? 'Фотография' : 'Вложение');
+          messageData.replyToText = replyToSend.text || (replyToSend.imageUrl ? 'Фотография' : replyToSend.audioUrl ? 'Голосовое сообщение' : replyToSend.fileName || 'Вложение');
           messageData.replyToSender = replyToSend.senderId === user.uid ? 'Вы' : selectedContact.name;
         }
 
         await addDoc(collection(db, 'messages'), messageData);
+        notifyReceiver(selectedContact.id, textToSend || (imageToSend ? '📷 Фото' : ''));
       }
     } catch (error) {
       console.error("Ошибка при отправке сообщения:", error);
@@ -585,30 +533,114 @@ export default function ChatsPage() {
     }
   };
 
-  const insertQuickReply = () => {
-    if (!currentUserProfile?.aiSettings?.contextPrompt) return alert("Сначала добавьте текст быстрого ответа в настройках профиля!");
-    setNewMessage(currentUserProfile.aiSettings.contextPrompt);
+  // ---- Общая отправка сообщения с произвольными полями ----
+  const sendExtraMessage = async (extra: Record<string, any>, toId?: string) => {
+    if (!user) return;
+    const targetId = toId || selectedContact?.id;
+    if (!targetId) return;
+    const chatId = [user.uid, targetId].sort().join('_');
+    await addDoc(collection(db, 'messages'), {
+      chatId, text: '', senderId: user.uid, receiverId: targetId,
+      createdAt: serverTimestamp(), isRead: false, ...extra
+    });
+    setChatActivity(prev => ({ ...prev, [targetId]: Date.now() }));
+    notifyReceiver(targetId, extra.audioUrl ? '🎤 Голосовое сообщение' : extra.fileUrl ? `📎 ${extra.fileName || 'Файл'}` : (extra.text || '📷 Фото'));
   };
-  const insertFollowUp = () => setNewMessage("Здравствуйте! 👋 Вы ранее интересовались нашими товарами. Подскажите, актуален ли еще ваш запрос? Буду рад(а) помочь!");
 
-  const handleOrderStatusUpdate = async (msgId: string, newStatus: string, statusText: string) => {
-    if (!user || !selectedContact || actionProcessingRef.current) return;
-    
-    actionProcessingRef.current = true; 
-    const chatId = [user.uid, selectedContact.id].sort().join('_');
-    
+  // ---- Реакции ----
+  const toggleReaction = async (msg: Message, emoji: string) => {
+    if (!user) return;
+    const mine = msg.reactions?.[user.uid];
     try {
-      await updateDoc(doc(db, 'messages', msgId), { 'orderData.status': newStatus });
-      await addDoc(collection(db, 'messages'), {
-        chatId, type: 'system_status', statusText, senderId: user.uid, receiverId: selectedContact.id,
-        createdAt: serverTimestamp(), isRead: false 
-      });
-      setChatActivity(prev => ({ ...prev, [selectedContact.id]: Date.now() }));
-    } catch (error) {
-      console.error(error);
-    } finally {
-      actionProcessingRef.current = false; 
-    }
+      await updateDoc(doc(db, 'messages', msg.id), { [`reactions.${user.uid}`]: mine === emoji ? deleteField() : emoji });
+    } catch (e) { console.error('Ошибка реакции:', e); }
+  };
+
+  // ---- Пересылка ----
+  const forwardTo = async (target: UserProfile) => {
+    if (!forwardingMsg || !user) return;
+    const m = forwardingMsg;
+    setForwardingMsg(null);
+    const originalAuthor = m.senderId === user.uid
+      ? (user.displayName || 'Пользователь')
+      : (globalUsers.find(u => u.id === m.senderId)?.name || 'Пользователь');
+    try {
+      await sendExtraMessage({
+        text: m.text || '',
+        imageUrl: m.imageUrl || '',
+        ...(m.audioUrl ? { audioUrl: m.audioUrl, audioDuration: m.audioDuration || 0 } : {}),
+        ...(m.fileUrl ? { fileUrl: m.fileUrl, fileName: m.fileName || '', fileSize: m.fileSize || 0 } : {}),
+        forwardedFrom: m.forwardedFrom || originalAuthor,
+      }, target.id);
+    } catch (e) { console.error(e); alert('Не удалось переслать сообщение.'); }
+  };
+
+  // ---- Файлы ----
+  const handleFileAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user || !selectedContact) return;
+    if (file.size > 25 * 1024 * 1024) { alert('Файл больше 25 МБ.'); e.target.value = ''; return; }
+    setIsUploadingFile(true);
+    try {
+      const safeName = file.name.replace(/[^\w.\-]+/g, '_');
+      const url = await uploadToStorage(file, `files/${user.uid}/${Date.now()}_${safeName}`);
+      await sendExtraMessage({ fileUrl: url, fileName: file.name, fileSize: file.size });
+    } catch (err) { console.error(err); alert('Не удалось загрузить файл.'); }
+    finally { setIsUploadingFile(false); if (docInputRef.current) docInputRef.current.value = ''; }
+  };
+
+  // ---- Голосовые сообщения ----
+  const startRecording = async () => {
+    if (isRecording || isOffline || !selectedContact) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = ['audio/webm', 'audio/mp4'].find(t => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t));
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      audioChunksRef.current = [];
+      rec.ondataavailable = (ev) => { if (ev.data.size > 0) audioChunksRef.current.push(ev.data); };
+      rec.start();
+      mediaRecorderRef.current = rec;
+      setRecordSeconds(0);
+      setIsRecording(true);
+      recordTimerRef.current = setInterval(() => setRecordSeconds(sec => sec + 1), 1000);
+    } catch { alert('Нет доступа к микрофону.'); }
+  };
+
+  const stopRecording = (send: boolean) => {
+    const rec = mediaRecorderRef.current;
+    if (!rec) return;
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    const duration = recordSeconds;
+    const targetId = selectedContact?.id;
+    rec.onstop = async () => {
+      rec.stream.getTracks().forEach(t => t.stop());
+      if (!send || !user || !targetId || duration < 1) return;
+      try {
+        const type = rec.mimeType || 'audio/webm';
+        const blob = new Blob(audioChunksRef.current, { type });
+        const ext = type.includes('mp4') ? 'm4a' : 'webm';
+        const url = await uploadToStorage(blob, `voice/${user.uid}/${Date.now()}.${ext}`);
+        await sendExtraMessage({ audioUrl: url, audioDuration: duration }, targetId);
+      } catch (e) { console.error(e); alert('Не удалось отправить голосовое сообщение.'); }
+    };
+    rec.stop();
+    mediaRecorderRef.current = null;
+    setIsRecording(false);
+  };
+
+  // Смена чата: сбрасываем поиск и отменяем запись
+  useEffect(() => {
+    setChatSearch('');
+    setIsChatSearchOpen(false);
+    if (mediaRecorderRef.current) stopRecording(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedContact?.id]);
+
+  // Долгое нажатие по сообщению на телефоне = контекстное меню
+  const openMessageMenuAt = (x: number, y: number, msg: Message) => {
+    const maxX = Math.max(8, window.innerWidth - 240);
+    const maxY = Math.max(8, window.innerHeight - 380);
+    setContextMenu({ type: 'message', x: Math.min(x, maxX), y: Math.min(y, maxY), data: msg });
   };
 
   const handleImageAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -717,9 +749,7 @@ export default function ChatsPage() {
     const isPinned = pinnedChats.includes(c.id);
     if (!hasActivity && !isPinned) return false;
 
-    if (activeTab === 'personal') return c.type !== 'business' || c.isSaved;
-    if (activeTab === 'business') return c.type === 'business';
-    if (activeTab === 'clients') return c.type !== 'business' && !c.isSaved;
+    if (activeTab === 'unread') return (unreadCounts[c.id] || 0) > 0;
     return true; 
   }).sort((a, b) => {
     const aPinned = pinnedChats.includes(a.id);
@@ -732,8 +762,12 @@ export default function ChatsPage() {
     return bTime - aTime;
   });
 
-  const isTemplatesAllowed = currentUserProfile?.type === 'business' && currentUserProfile?.aiSettings?.isEnabled && activeTab === 'clients' && selectedContact && !selectedContact.isSaved;
   const activeContactData = globalUsers.find(u => u.id === selectedContact?.id) || selectedContact;
+
+  const chatQuery = chatSearch.trim().toLowerCase();
+  const visibleMessages = chatQuery
+    ? messages.filter(m => (m.text || '').toLowerCase().includes(chatQuery) || (m.fileName || '').toLowerCase().includes(chatQuery))
+    : messages;
 
   const formatTime = (timestamp: any) => {
     if (!timestamp) return '';
@@ -780,6 +814,28 @@ export default function ChatsPage() {
         </div>
       )}
 
+      {/* ПЕРЕСЫЛКА */}
+      {forwardingMsg && (
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex justify-center items-center p-4 animate-fade-in" onClick={() => setForwardingMsg(null)}>
+          <div className="bg-white dark:bg-gray-900 w-full max-w-[420px] max-h-[75vh] rounded-[28px] shadow-2xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between shrink-0">
+              <h3 className="font-black text-[17px] text-gray-900 dark:text-white">Переслать</h3>
+              <button onClick={() => setForwardingMsg(null)} className="p-1.5 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-500"><X size={16} /></button>
+            </div>
+            <div className="overflow-y-auto custom-scrollbar">
+              {[...globalUsers].sort((a, b) => (chatActivity[b.id] || 0) - (chatActivity[a.id] || 0)).map(u => (
+                <button key={u.id} onClick={() => forwardTo(u)} className="w-full flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 text-left transition-colors">
+                  {u.isSaved
+                    ? <div className="w-10 h-10 rounded-[14px] bg-gradient-to-tr from-blue-500 to-indigo-500 text-white flex items-center justify-center shrink-0"><Bookmark size={18} /></div>
+                    : <img src={u.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}`} alt="" loading="lazy" className="w-10 h-10 rounded-[14px] object-cover shrink-0" />}
+                  <span className="font-bold text-[15px] text-gray-900 dark:text-white truncate">{u.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* КАСТОМНОЕ КОНТЕКСТНОЕ МЕНЮ (ПКМ) */}
       {contextMenu.type && (
         <div 
@@ -790,7 +846,17 @@ export default function ChatsPage() {
         >
           {contextMenu.type === 'message' && (
             <>
+              <div className="flex items-center justify-between px-3 py-2 gap-1">
+                {QUICK_REACTIONS.map(em => (
+                  <button key={em} onClick={() => { toggleReaction(contextMenu.data, em); setContextMenu({type:null,x:0,y:0,data:null}); }} className="text-[22px] hover:scale-125 transition-transform active:scale-95">{em}</button>
+                ))}
+              </div>
+              <div className="h-px bg-gray-100 dark:bg-gray-700 my-1 mx-2"></div>
               <button onClick={() => { setReplyingTo(contextMenu.data); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-800 dark:text-gray-200 flex items-center gap-3 transition-colors"><Reply size={18} className="text-gray-500 dark:text-gray-400"/> Ответить</button>
+              <button onClick={() => { setForwardingMsg(contextMenu.data); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-800 dark:text-gray-200 font-semibold text-[14px] flex items-center gap-3 transition-colors"><Forward size={18} className="text-gray-500 dark:text-gray-400"/> Переслать</button>
+              {contextMenu.data.text && (
+                <button onClick={() => { navigator.clipboard?.writeText(contextMenu.data.text).catch(() => {}); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-800 dark:text-gray-200 font-semibold text-[14px] flex items-center gap-3 transition-colors"><Copy size={18} className="text-gray-500 dark:text-gray-400"/> Копировать</button>
+              )}
               {contextMenu.data.senderId === user?.uid && (
                 <>
                   <button onClick={() => { setEditingMessage(contextMenu.data); setNewMessage(contextMenu.data.text||''); setContextMenu({type:null,x:0,y:0,data:null}); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-800 dark:text-gray-200 flex items-center gap-3 transition-colors"><Edit2 size={18} className="text-gray-500 dark:text-gray-400"/> Редактировать</button>
@@ -863,7 +929,7 @@ export default function ChatsPage() {
               <div className="mt-3 w-full text-center">
                 <h2 className="text-[22px] font-black text-gray-900 dark:text-white flex items-center justify-center gap-2">
                   {activeContactData.name}
-                  {activeContactData.type === 'business' && <ShieldCheck size={20} className="text-blue-500" />}
+                  
                 </h2>
                 <p className={`text-[13px] font-semibold mt-1 ${getOnlineStatus(activeContactData.lastSeen) === 'в сети' ? 'text-blue-500' : 'text-gray-500'}`}>
                   {getOnlineStatus(activeContactData.lastSeen)}
@@ -915,37 +981,6 @@ export default function ChatsPage() {
                   </div>
                 )}
 
-                {activeContactData.type === 'business' && (
-                  <div className="mt-6 text-left w-full">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-[13px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><Store size={16}/> Витрина ({activeContactData.products?.length || 0})</h3>
-                      {activeContactData.products && activeContactData.products.length > 0 && (
-                        <button onClick={(e) => { e.stopPropagation(); setIsProfileModalOpen(false); navigate(`/shop/${activeContactData.id}`); }} className="text-[13px] font-bold text-blue-500 hover:text-blue-600">Все товары</button>
-                      )}
-                    </div>
-                    
-                    {activeContactData.products && activeContactData.products.length > 0 ? (
-                      <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-none snap-x">
-                        {activeContactData.products.slice(0, 5).map((product: any) => (
-                          <div key={product.id} className="min-w-[140px] max-w-[140px] bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group flex flex-col snap-start cursor-pointer" onClick={(e) => { e.stopPropagation(); setIsProfileModalOpen(false); navigate(`/shop/${activeContactData.id}`); }}>
-                            <div className="relative h-[120px] overflow-hidden bg-gray-50 dark:bg-gray-900">
-                              {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" /> : <div className="w-full h-full flex items-center justify-center text-gray-300 dark:text-gray-600"><ShoppingBag size={24}/></div>}
-                            </div>
-                            <div className="p-3 flex flex-col flex-1 bg-gray-50/50 dark:bg-gray-800/50">
-                              <h4 className="font-bold text-[13px] text-gray-900 dark:text-white line-clamp-1 mb-1">{product.name}</h4>
-                              <p className="text-blue-500 font-black text-[13px] mt-auto">{product.price}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-6 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 border-dashed">
-                        <Store size={28} className="mx-auto text-gray-300 dark:text-gray-600 mb-2 opacity-50" />
-                        <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400">Товаров пока нет</p>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -978,11 +1013,7 @@ export default function ChatsPage() {
             {/* ТАБЫ */}
             <div className="flex px-4 pb-2 gap-2 overflow-x-auto scrollbar-none">
               <button onClick={() => setActiveTab('all')} className={`px-4 py-1.5 rounded-full text-[13px] font-bold transition-colors shrink-0 shadow-sm ${activeTab === 'all' ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>Все</button>
-              <button onClick={() => setActiveTab('personal')} className={`px-4 py-1.5 rounded-full text-[13px] font-bold transition-colors shrink-0 shadow-sm ${activeTab === 'personal' ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>Личные</button>
-              <button onClick={() => setActiveTab('business')} className={`px-4 py-1.5 rounded-full text-[13px] font-bold transition-colors shrink-0 shadow-sm ${activeTab === 'business' ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>Магазины</button>
-              {currentUserProfile?.type === 'business' && (
-                <button onClick={() => setActiveTab('clients')} className={`px-4 py-1.5 rounded-full text-[13px] font-bold flex items-center gap-1.5 transition-colors shrink-0 shadow-sm ${activeTab === 'clients' ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'}`}><Users size={14} /> Заказы</button>
-              )}
+              <button onClick={() => setActiveTab('unread')} className={`px-4 py-1.5 rounded-full text-[13px] font-bold transition-colors shrink-0 shadow-sm ${activeTab === 'unread' ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>Непрочитанные</button>
             </div>
           </div>
         )}
@@ -1052,8 +1083,18 @@ export default function ChatsPage() {
                   </div>
                 </div>
               </div>
+              <button onClick={() => { setIsChatSearchOpen(v => !v); setChatSearch(''); }} className="p-2.5 text-gray-500 dark:text-gray-400 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors shrink-0" title="Поиск по чату"><Search size={20} /></button>
             </div>
             
+            {isChatSearchOpen && (
+              <div className="px-4 py-2 bg-white/90 dark:bg-gray-900/90 border-b border-gray-200/60 dark:border-gray-800 flex items-center gap-2 z-10">
+                <Search size={16} className="text-gray-400 shrink-0" />
+                <input autoFocus value={chatSearch} onChange={(e) => setChatSearch(e.target.value)} placeholder="Поиск по сообщениям" className="flex-1 bg-transparent outline-none text-[14px] font-medium text-gray-900 dark:text-white placeholder-gray-400" />
+                {chatQuery && <span className="text-[12px] font-bold text-gray-400 tabular-nums">{visibleMessages.length}</span>}
+                <button onClick={() => { setIsChatSearchOpen(false); setChatSearch(''); }} className="p-1 text-gray-400 hover:text-gray-600"><X size={16} /></button>
+              </div>
+            )}
+
             {/* КОНТЕЙНЕР СООБЩЕНИЙ */}
             <div className="flex-1 relative flex flex-col overflow-hidden bg-[#F3F4F6] dark:bg-[#111827] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] dark:bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-fixed" style={{ backgroundBlendMode: 'overlay' }}>
               
@@ -1070,17 +1111,17 @@ export default function ChatsPage() {
                     <div className="w-20 h-20 bg-gray-200/50 dark:bg-gray-800/50 rounded-full flex items-center justify-center mb-4">
                       <ShieldCheck size={32} className="text-gray-400 dark:text-gray-500" />
                     </div>
-                    <p className="text-[13px] font-bold text-gray-500 dark:text-gray-400 bg-white/50 dark:bg-gray-900/50 backdrop-blur-md px-4 py-2 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800">Сообщения защищены сквозным шифрованием</p>
+                    <p className="text-[13px] font-bold text-gray-500 dark:text-gray-400 bg-white/50 dark:bg-gray-900/50 backdrop-blur-md px-4 py-2 rounded-2xl shadow-sm border border-gray-200/50 dark:border-gray-800">Напишите первое сообщение</p>
                   </div>
                 )}
 
                 {messages.length >= messageLimit && <div className="flex justify-center py-4 mb-2"><Loader2 size={24} className="animate-spin text-gray-400 dark:text-gray-600" /></div>}
 
-                {messages.map((msg, index) => {
+                {visibleMessages.map((msg, index) => {
                   const isMine = msg.senderId === user?.uid;
                   
-                  const prevMsg = index > 0 ? messages[index - 1] : null;
-                  const nextMsg = index < messages.length - 1 ? messages[index + 1] : null;
+                  const prevMsg = index > 0 ? visibleMessages[index - 1] : null;
+                  const nextMsg = index < visibleMessages.length - 1 ? visibleMessages[index + 1] : null;
 
                   const currentMsgDateStr = msg.createdAt ? (msg.createdAt.toDate ? msg.createdAt.toDate() : new Date(msg.createdAt)).toDateString() : new Date().toDateString();
                   const prevMsgDateStr = prevMsg?.createdAt ? (prevMsg.createdAt.toDate ? prevMsg.createdAt.toDate() : new Date(prevMsg.createdAt)).toDateString() : null;
@@ -1108,7 +1149,6 @@ export default function ChatsPage() {
                   }
 
                   const isCard = msg.type === 'share_card' && msg.cardData;
-                  const isReceipt = msg.type === 'order_receipt' && msg.orderData;
                   const isSystem = msg.type === 'system_status';
 
                   return (
@@ -1126,14 +1166,23 @@ export default function ChatsPage() {
                           <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md border border-gray-200/50 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-[12px] font-bold px-4 py-2 rounded-2xl shadow-sm">{msg.statusText}</div>
                         </div>
                       ) : (
-                        <div onContextMenu={(e) => openContextMenu(e, 'message', msg)}>
+                        <div
+                          onContextMenu={(e) => openContextMenu(e, 'message', msg)}
+                          onTouchStart={(e) => {
+                            const t = e.touches[0];
+                            if (longPressRef.current) clearTimeout(longPressRef.current);
+                            longPressRef.current = setTimeout(() => openMessageMenuAt(t.clientX, t.clientY, msg), 500);
+                          }}
+                          onTouchMove={() => { if (longPressRef.current) clearTimeout(longPressRef.current); }}
+                          onTouchEnd={() => { if (longPressRef.current) clearTimeout(longPressRef.current); }}
+                        >
                           <SwipeableMessage onReply={() => setReplyingTo(msg)} onDelete={() => handleDeleteMessage(msg.id)} isMine={isMine}>
                             <div className={`relative max-w-[85%] sm:max-w-[70%] flex flex-col shadow-sm ${
                               isMine ? `bg-gradient-to-br from-blue-500 to-indigo-600 text-white ${bubbleRadius}` 
                                      : `bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-100 dark:border-gray-700/50 ${bubbleRadius}`
-                            } ${(isCard || isReceipt) ? 'p-1.5' : 'px-4 pt-2.5 pb-2 text-[15px] leading-relaxed'} ${marginTopClass} group cursor-default select-text transition-colors`}>
+                            } ${isCard ? 'p-1.5' : 'px-4 pt-2.5 pb-2 text-[15px] leading-relaxed'} ${marginTopClass} group cursor-default select-text transition-colors`}>
                               
-                              {isMine && !isCard && !isReceipt && (
+                              {isMine && !isCard && (
                                 <div className="absolute top-1 -left-16 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 hidden md:flex">
                                   <button onClick={() => { setEditingMessage(msg); setNewMessage(msg.text || ''); }} className="p-1.5 bg-white dark:bg-gray-800 rounded-full shadow-md text-gray-500 hover:text-blue-500 transition-colors"><Edit2 size={14}/></button>
                                   <button onClick={() => handleDeleteMessage(msg.id)} className="p-1.5 bg-white dark:bg-gray-800 rounded-full shadow-md text-gray-500 hover:text-red-500 transition-colors"><Trash2 size={14}/></button>
@@ -1147,32 +1196,7 @@ export default function ChatsPage() {
                                 </div>
                               )}
 
-                              {isReceipt ? (
-                                <div className="flex flex-col min-w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm">
-                                  <div className="bg-blue-50 dark:bg-blue-900/30 p-3 border-b border-blue-100 dark:border-blue-800/50 flex items-center justify-between">
-                                    <span className="font-black text-blue-600 dark:text-blue-400 flex items-center gap-1.5"><ShoppingBag size={16}/> ЗАКАЗ</span>
-                                    <span className="text-[10px] font-bold uppercase text-gray-500 bg-white dark:bg-gray-700 px-2 py-0.5 rounded-md shadow-sm border border-gray-100 dark:border-gray-600">
-                                      {msg.orderData.status === 'new' && 'Ожидает'}
-                                      {msg.orderData.status === 'processing' && 'В работе'}
-                                      {msg.orderData.status === 'shipped' && 'Отправлен'}
-                                    </span>
-                                  </div>
-                                  <div className="p-3 text-[13px]">
-                                    <p className="whitespace-pre-wrap text-gray-600 dark:text-gray-300 font-medium mb-3">{msg.orderData.items}</p>
-                                    <div className="flex justify-between items-center pt-2 border-t border-dashed border-gray-200 dark:border-gray-700">
-                                      <span className="font-bold text-gray-400">Итого:</span>
-                                      <span className="font-black text-[15px] text-gray-900 dark:text-white">{msg.orderData.total > 0 ? `${msg.orderData.total}` : 'Уточняется'}</span>
-                                    </div>
-                                  </div>
-                                  {!isMine && (
-                                    <div className="p-2 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 flex gap-2">
-                                      {msg.orderData.status === 'new' && <button onClick={() => handleOrderStatusUpdate(msg.id, 'processing', '🛠 Продавец взял заказ в работу')} className="flex-1 bg-amber-500 text-white py-1.5 rounded-xl text-[12px] font-bold flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-transform"><Package size={14}/> В работу</button>}
-                                      {msg.orderData.status === 'processing' && <button onClick={() => handleOrderStatusUpdate(msg.id, 'shipped', '🚚 Заказ передан в службу доставки')} className="flex-1 bg-blue-500 text-white py-1.5 rounded-xl text-[12px] font-bold flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-transform"><Truck size={14}/> Отправлено</button>}
-                                      {msg.orderData.status === 'shipped' && <div className="flex-1 py-1.5 text-center text-[12px] font-bold text-green-500 flex items-center justify-center gap-1 bg-green-50 dark:bg-green-500/10 rounded-xl"><CheckCircle2 size={14}/> Выполнено</div>}
-                                    </div>
-                                  )}
-                                </div>
-                              ) : isCard ? (
+                              {isCard ? (
                                 <div className="flex flex-col w-[260px] bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-200/50 dark:border-gray-700 shadow-sm">
                                   <img src={msg.cardData!.imageUrl} onClick={() => setViewingImage(msg.cardData!.imageUrl)} loading="lazy" className="w-full h-40 object-cover cursor-pointer hover:opacity-90 transition-opacity" alt="card" />
                                   <div className="p-3">
@@ -1183,12 +1207,37 @@ export default function ChatsPage() {
                                 </div>
                               ) : (
                                 <>
+                                  {msg.forwardedFrom && <span className="text-[12px] font-bold opacity-70 block mb-1">↪ Переслано от {msg.forwardedFrom}</span>}
                                   {msg.imageUrl && <img src={msg.imageUrl} onClick={() => setViewingImage(msg.imageUrl!)} loading="lazy" alt="attachment" className="w-full max-w-[280px] h-auto rounded-[16px] mb-1.5 object-cover cursor-pointer hover:opacity-90 transition-opacity border border-black/5 dark:border-white/5 shadow-sm" />}
-                                  {msg.text && <span className="whitespace-pre-wrap break-words">{msg.text}</span>}
+                                  {msg.audioUrl && (
+                                    <div className="flex flex-col gap-0.5 mb-1">
+                                      <audio controls preload="metadata" src={msg.audioUrl} className="w-[240px] max-w-full h-10" />
+                                      {!!msg.audioDuration && <span className="text-[11px] opacity-70 tabular-nums">🎤 {formatDuration(msg.audioDuration)}</span>}
+                                    </div>
+                                  )}
+                                  {msg.fileUrl && (
+                                    <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer" download={msg.fileName} className={`flex items-center gap-3 p-2.5 mb-1.5 rounded-2xl min-w-[200px] max-w-[280px] transition-colors ${isMine ? 'bg-white/15 hover:bg-white/25' : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700/60 dark:hover:bg-gray-700'}`}>
+                                      <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isMine ? 'bg-white/20' : 'bg-blue-500/10 text-blue-500'}`}><FileText size={20} /></span>
+                                      <span className="min-w-0 flex-1">
+                                        <span className="block text-[14px] font-bold truncate">{msg.fileName || 'Файл'}</span>
+                                        <span className="block text-[11px] opacity-70">{formatFileSize(msg.fileSize)}</span>
+                                      </span>
+                                      <Download size={18} className="shrink-0 opacity-70" />
+                                    </a>
+                                  )}
+                                  {msg.text && <span className="whitespace-pre-wrap break-words">{linkify(msg.text)}</span>}
                                 </>
                               )}
 
-                              <div className={`flex items-center justify-end gap-1 mt-1 float-right ${(isCard || isReceipt) && 'px-2 pb-1.5'}`}>
+                              {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                  {Object.entries(Object.values(msg.reactions).reduce<Record<string, number>>((acc, em) => { acc[em] = (acc[em] || 0) + 1; return acc; }, {})).map(([em, count]) => (
+                                    <button key={em} type="button" onClick={() => toggleReaction(msg, em)} className={`px-2 py-0.5 rounded-full text-[12px] font-bold border transition-colors ${msg.reactions?.[user?.uid || ''] === em ? 'bg-white text-blue-600 border-blue-300' : isMine ? 'bg-white/20 border-white/30 text-white' : 'bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200'}`}>{em} {count}</button>
+                                  ))}
+                                </div>
+                              )}
+
+                              <div className={`flex items-center justify-end gap-1 mt-1 float-right ${isCard && 'px-2 pb-1.5'}`}>
                                 {msg.isEdited && <span className="text-[10px] text-white/50 dark:text-gray-500 italic mr-1">изменено</span>}
                                 <span className={`text-[11px] font-medium ${isMine ? 'text-white/70' : 'text-gray-400 dark:text-gray-500'}`}>{formatTime(msg.createdAt)}</span>
                                 {isMine && !selectedContact.isSaved && (
@@ -1216,7 +1265,7 @@ export default function ChatsPage() {
                     {editingMessage ? 'Редактирование' : (replyingTo?.senderId === user?.uid ? 'Ответ себе' : `Ответ ${selectedContact.name}`)}
                   </span>
                   <span className="text-[13px] font-medium text-gray-600 dark:text-gray-300 truncate mt-0.5">
-                    {editingMessage ? editingMessage.text : (replyingTo?.text || (replyingTo?.imageUrl ? 'Фотография' : 'Вложение'))}
+                    {editingMessage ? editingMessage.text : (replyingTo?.text || (replyingTo?.imageUrl ? 'Фотография' : replyingTo?.audioUrl ? 'Голосовое сообщение' : replyingTo?.fileName || 'Вложение'))}
                   </span>
                 </div>
                 <button onClick={() => { setReplyingTo(null); setEditingMessage(null); setNewMessage(''); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-1.5 bg-gray-100 dark:bg-gray-700 rounded-full"><X size={16}/></button>
@@ -1237,23 +1286,21 @@ export default function ChatsPage() {
               ${(replyingTo || editingMessage) ? 'pt-2' : ''} 
               ${isExpanded ? 'h-[50dvh] shadow-[0_-20px_60px_rgba(0,0,0,0.1)] pb-[calc(env(safe-area-inset-bottom)+12px)]' : 'pb-[calc(env(safe-area-inset-bottom)+8px)] md:pb-4'}`}>
               
-              {/* ШАБЛОНЫ ОТВЕТОВ */}
-              {isTemplatesAllowed && !replyingTo && !editingMessage && (
-                <div className="flex gap-2 mb-2 w-full max-w-4xl mx-auto overflow-x-auto scrollbar-none items-center">
-                  <button type="button" onClick={insertQuickReply} className="shrink-0 flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-xl text-[13px] font-bold transition-colors border border-indigo-100 dark:border-indigo-500/20"><Zap size={14} /> Шаблон ответа</button>
-                  {currentUserProfile?.aiSettings?.followUps && <button type="button" onClick={insertFollowUp} className="shrink-0 flex items-center gap-1.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-500/10 dark:hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 px-3 py-1.5 rounded-xl text-[13px] font-bold transition-colors border border-purple-100 dark:border-purple-500/20"><Clock size={14} /> Напоминание</button>}
-                </div>
-              )}
-
               {/* ФОРМА ОТПРАВКИ */}
               <form onSubmit={handleSendMessage} className={`flex items-end gap-2 max-w-4xl mx-auto relative w-full ${isExpanded ? 'flex-col items-stretch h-full' : ''}`}>
                 <input type="file" ref={fileInputRef} onChange={handleImageAttach} accept="image/*" className="hidden" />
+                <input type="file" ref={docInputRef} onChange={handleFileAttach} className="hidden" />
                 
                 {/* Скрепка */}
                 {!isExpanded ? (
+                  <>
                   <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isOffline} className="p-2.5 text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors shrink-0 mb-0.5 disabled:opacity-50">
                     <Paperclip size={24} />
                   </button>
+                  <button type="button" onClick={() => docInputRef.current?.click()} disabled={isOffline || isUploadingFile} title="Отправить файл" className="p-2.5 text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors shrink-0 mb-0.5 disabled:opacity-50">
+                    {isUploadingFile ? <Loader2 size={24} className="animate-spin" /> : <FileText size={24} />}
+                  </button>
+                  </>
                 ) : (
                   <div className="flex justify-between items-center px-2 py-1 mb-1">
                     <span className="text-[12px] font-bold text-gray-400 uppercase tracking-widest ml-2">Расширенный ввод</span>
@@ -1308,8 +1355,23 @@ export default function ChatsPage() {
                   )}
                 </div>
                 
+                {/* Голосовое сообщение (когда поле пустое) */}
+                {!isExpanded && !(newMessage.trim() || attachedImage || editingMessage) && (
+                  isRecording ? (
+                    <div className="flex items-center gap-2 shrink-0 mb-0.5">
+                      <span className="flex items-center gap-1.5 text-[13px] font-bold text-red-500 tabular-nums">
+                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />{formatDuration(recordSeconds)}
+                      </span>
+                      <button type="button" onClick={() => stopRecording(false)} title="Отменить" className="p-2.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-red-500 transition-colors"><X size={20} /></button>
+                      <button type="button" onClick={() => stopRecording(true)} title="Отправить" className="p-2.5 rounded-full bg-blue-500 hover:bg-blue-600 text-white transition-colors"><Send size={20} className="ml-0.5" /></button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={startRecording} disabled={isOffline} title="Голосовое сообщение" className="p-2.5 shrink-0 mb-0.5 rounded-full bg-blue-500 hover:bg-blue-600 text-white shadow-sm active:scale-95 transition-all disabled:opacity-50"><Mic size={22} /></button>
+                  )
+                )}
+
                 {/* Обычная кнопка отправки справа от поля (если не расширено) */}
-                {!isExpanded && (
+                {!isExpanded && !!(newMessage.trim() || attachedImage || editingMessage) && (
                   <button type="submit" disabled={(!newMessage.trim() && !attachedImage) || isOffline} className={`p-2.5 shrink-0 mb-0.5 rounded-full transition-all shadow-sm ${ (newMessage.trim() || attachedImage) && !isOffline ? 'bg-blue-500 hover:bg-blue-600 text-white active:scale-95' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 disabled:opacity-50'}`}>
                     {editingMessage ? <Check size={22} /> : <Send size={22} className="ml-0.5" />}
                   </button>

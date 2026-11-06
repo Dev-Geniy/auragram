@@ -1,855 +1,198 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { updateProfile, signOut } from 'firebase/auth';
+import { Camera, Loader2, Moon, Sun, Volume2, Bell, Check, LogOut, Phone } from 'lucide-react';
 import { db, auth } from '../services/firebase';
+import { compressImage, uploadToImgBB } from '../services/upload';
 import { useAuthStore } from '../store/useAuthStore';
+import { useChatStore } from '../store/useChatStore';
+import { enablePush, isPushConfigured, PushStatus } from '../services/push';
 
-import { 
-  Camera, User, Briefcase, 
-  Phone, Globe, Package, Plus, Trash2, Image as ImageIcon, 
-  Loader2, Edit2, Moon, Sun, Zap, MessageSquareText,
-  Target, LayoutList, GripVertical, Heart, Store, MessageCircle, ShoppingBag, LineChart, LayoutDashboard, Settings, Check, LogOut,
-  MapPin, Wifi, Users, Link2
-} from 'lucide-react';
-
-interface Product {
-  id: string;
+interface Profile {
   name: string;
-  price: string;
-  description: string;
-  imageUrl: string;
+  role: string; // «О себе»
+  avatar: string;
+  contacts: { phone: string };
 }
 
-const BUSINESS_CATEGORIES = [
-  'IT & Разработка',
-  'Дизайн & Графика',
-  'Маркетинг & PR',
-  'Консалтинг & Услуги',
-  'E-commerce & Товары',
-  'Образование',
-  'Недвижимость (Аренда/Продажа)', 
-  'Цифровая инфо (Курсы, Книги)',  
-  'Другое', 
-];
+const EMPTY: Profile = { name: '', role: '', avatar: '', contacts: { phone: '' } };
 
-const compressImage = (file: File, maxWidth: number = 800): Promise<File> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const scaleSize = maxWidth / img.width;
-        const width = img.width > maxWidth ? maxWidth : img.width;
-        const height = img.width > maxWidth ? img.height * scaleSize : img.height;
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-        canvas.toBlob((blob) => {
-          if (blob) {
-            resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
-          } else {
-            reject(new Error('Ошибка сжатия изображения'));
-          }
-        }, 'image/jpeg', 0.8);
-      };
-    };
-    reader.onerror = error => reject(error);
-  });
-};
-
-const uploadToImgBB = async (file: File): Promise<string> => {
-  const formData = new FormData();
-  formData.append('image', file);
-  const API_KEY = '22de10db6eb1f3ec3fca012dcc566961';
-  const res = await fetch(`https://api.imgbb.com/1/upload?key=${API_KEY}`, { method: 'POST', body: formData });
-  const data = await res.json();
-  if (data.success) return data.data.url;
-  throw new Error('Ошибка загрузки на ImgBB');
-};
-
-const ALL_MENU_ITEMS = [
-  { id: 'chats', label: 'Чаты', icon: MessageCircle },
-  { id: 'market', label: 'Маркет', icon: Store },
-  { id: 'dating', label: 'Знакомства', icon: Heart },
-  { id: 'myshop', label: 'Мой магазин', icon: ShoppingBag },
-  { id: 'crm', label: 'Smart CRM', icon: LineChart },
-  { id: 'productivity', label: 'Продуктивность', icon: LayoutDashboard },
-  { id: 'profile', label: 'Настройки', icon: Settings },
-];
+const Toggle = ({ on }: { on: boolean }) => (
+  <div className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${on ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+    <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${on ? 'translate-x-6' : 'translate-x-0'}`} />
+  </div>
+);
 
 export default function ProfilePage() {
   const { user, setUser } = useAuthStore();
+  const { soundEnabled, pushEnabled, setSoundEnabled, setPushEnabled } = useChatStore();
+  const [profile, setProfile] = useState<Profile>(EMPTY);
+  const [original, setOriginal] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [isDark, setIsDark] = useState(false);
-
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const [isUploadingProductImg, setIsUploadingProductImage] = useState(false);
-  const avatarInputRef = useRef<HTMLInputElement>(null);
-  const productImgInputRef = useRef<HTMLInputElement>(null);
-  const editProductImgInputRef = useRef<HTMLInputElement>(null);
-
-  const [isAddingProduct, setIsAddingProduct] = useState(false);
-  const [newProduct, setNewProduct] = useState<Product>({ id: '', name: '', price: '', description: '', imageUrl: '' });
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-
-  // Стейты для модалки бизнеса (Многошаговая)
-  const [showBusinessSetupModal, setShowBusinessSetupModal] = useState(false);
-  const [businessSetupStep, setBusinessSetupStep] = useState<1 | 2>(1);
-  const [tempCategory, setTempCategory] = useState<string>('');
-  const [tempLocationType, setTempLocationType] = useState<'online' | 'offline' | ''>('');
-  const [tempCity, setTempCity] = useState<string>('');
-
-  const [originalProfile, setOriginalProfile] = useState<any>(null); // Храним оригинал для сравнения
-  const [profile, setProfile] = useState({
-    name: '',
-    type: 'personal', 
-    role: '',
-    avatar: '',
-    category: '', 
-    location: '', 
-    gender: '', 
-    age: '' as number | string,
-    customUrl: '', // <--- НОВОЕ ПОЛЕ (Ссылка магазина)
-    contacts: { phone: '', email: '', website: '' },
-    products: [] as Product[],
-    goals: [] as string[],
-    menuOrder: [] as string[],
-    aiSettings: { isEnabled: false, contextPrompt: '', followUps: true }
-  });
-
-  const dragItem = useRef<number | null>(null);
-  const dragOverItem = useRef<number | null>(null);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null); 
+  const [isUploading, setIsUploading] = useState(false);
+  const [isDark, setIsDark] = useState(document.documentElement.classList.contains('dark'));
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [pushState, setPushState] = useState<PushStatus | 'idle' | 'loading'>('idle');
 
   useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
-  }, []);
-
-  const toggleTheme = () => {
-    const html = document.documentElement;
-    if (html.classList.contains('dark')) {
-      html.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-      setIsDark(false);
-    } else {
-      html.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-      setIsDark(true);
-    }
-  };
-
-  useEffect(() => {
-    const fetchProfile = async () => {
-      if (!user) return;
+    if (!user) return;
+    (async () => {
       try {
-        const docRef = doc(db, 'users', user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          const loadedProfile = { 
-            ...profile, 
-            ...data,
-            avatar: data.avatar || user.photoURL || '',
-            category: data.category || '',
-            location: data.location || '',
-            gender: data.gender || '',
-            age: data.age || '',
-            customUrl: data.customUrl || '', // Загрузка ссылки
-            contacts: data.contacts || { phone: '', email: '', website: '' },
-            products: data.products || [],
-            goals: data.goals || [],
-            menuOrder: data.menuOrder || ['chats', 'market', 'profile'],
-            aiSettings: data.aiSettings || { isEnabled: false, contextPrompt: '', followUps: true }
-          };
-          setProfile(loadedProfile);
-          setOriginalProfile(loadedProfile); 
-        } else {
-          const fallbackProfile = {
-            ...profile,
-            name: user.displayName || '',
-            avatar: user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'User')}&background=random`
-          };
-          setProfile(fallbackProfile);
-          setOriginalProfile(fallbackProfile);
-        }
-      } catch (error) {
-        console.error('Ошибка загрузки профиля:', error);
+        const snap = await getDoc(doc(db, 'users', user.uid));
+        const d = snap.exists() ? snap.data() : {};
+        const loaded: Profile = {
+          name: d.name || user.displayName || '',
+          role: d.role || '',
+          avatar: d.avatar || user.photoURL || '',
+          contacts: { phone: d.contacts?.phone || '' },
+        };
+        setProfile(loaded);
+        setOriginal(loaded);
+      } catch (e) {
+        console.error('Ошибка загрузки профиля:', e);
       } finally {
         setIsLoading(false);
       }
-    };
-    fetchProfile();
+    })();
   }, [user]);
 
-  const isDirty = useMemo(() => {
-    if (!originalProfile) return false;
-    return JSON.stringify(profile) !== JSON.stringify(originalProfile);
-  }, [profile, originalProfile]);
+  const isDirty = useMemo(() => !!original && JSON.stringify(profile) !== JSON.stringify(original), [profile, original]);
 
-  const activeMenuItems = useMemo(() => {
-    let items = ['chats', 'market', 'profile'];
-    if (profile.goals.includes('dating')) items.push('dating');
-    if (profile.goals.includes('productivity')) items.push('productivity');
-    if (profile.type === 'business') {
-      items.push('myshop');
-      items.push('crm');
-    }
-    
-    let currentOrder = profile.menuOrder.filter(id => items.includes(id));
-    items.forEach(id => {
-      if (!currentOrder.includes(id)) currentOrder.push(id);
-    });
-
-    return currentOrder.map(id => ALL_MENU_ITEMS.find(item => item.id === id)).filter(Boolean) as typeof ALL_MENU_ITEMS;
-  }, [profile.goals, profile.type, profile.menuOrder]);
-
-  const swapItems = () => {
-    if (dragItem.current !== null && dragOverItem.current !== null && dragItem.current !== dragOverItem.current) {
-      let _menuOrder = [...activeMenuItems.map(i => i.id)];
-      const draggedItemContent = _menuOrder.splice(dragItem.current, 1)[0];
-      _menuOrder.splice(dragOverItem.current, 0, draggedItemContent);
-      setProfile(prev => ({ ...prev, menuOrder: _menuOrder }));
-      dragItem.current = dragOverItem.current; 
-    }
+  const toggleTheme = () => {
+    const next = !isDark;
+    document.documentElement.classList.toggle('dark', next);
+    localStorage.setItem('theme', next ? 'dark' : 'light');
+    setIsDark(next);
   };
 
-  const handleDragEnd = () => {
-    swapItems();
-    dragItem.current = null;
-    dragOverItem.current = null;
-    setDraggedIndex(null);
-    document.body.style.overflow = ''; 
-  };
-
-  const handleTouchStart = (index: number) => {
-    dragItem.current = index;
-    setDraggedIndex(index);
-    document.body.style.overflow = 'hidden'; 
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (dragItem.current === null) return;
-    const touch = e.touches[0];
-    const target = document.elementFromPoint(touch.clientX, touch.clientY);
-    const itemNode = target?.closest('[data-sort-index]');
-    
-    if (itemNode) {
-      const hoverIndex = Number(itemNode.getAttribute('data-sort-index'));
-      if (hoverIndex !== dragItem.current) {
-        dragOverItem.current = hoverIndex;
-        swapItems();
-        setDraggedIndex(hoverIndex); 
-      }
-    }
-  };
-
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setIsUploadingAvatar(true);
+    setIsUploading(true);
     try {
-      const compressedFile = await compressImage(file, 800);
-      const url = await uploadToImgBB(compressedFile);
-      setProfile(prev => ({ ...prev, avatar: url }));
-    } catch (error) {
-      alert('Ошибка при загрузке фото.');
+      const url = await uploadToImgBB(await compressImage(file, 800));
+      setProfile((p) => ({ ...p, avatar: url }));
+    } catch {
+      alert('Не удалось загрузить фото.');
     } finally {
-      setIsUploadingAvatar(false);
+      setIsUploading(false);
     }
   };
 
-  const handleProductImageChange = async (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean = false) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsUploadingProductImage(true);
-    try {
-      const compressedFile = await compressImage(file, 800);
-      const url = await uploadToImgBB(compressedFile);
-      if (isEdit) {
-        setEditingProduct(prev => prev ? { ...prev, imageUrl: url } : null);
-      } else {
-        setNewProduct(prev => ({ ...prev, imageUrl: url }));
-      }
-    } catch (error) {
-      alert('Ошибка при загрузке фото.');
-    } finally {
-      setIsUploadingProductImage(false);
-    }
+  const handleEnablePush = async () => {
+    if (!user) return;
+    setPushState('loading');
+    try { setPushState(await enablePush(user.uid)); }
+    catch (e) { console.error('Ошибка push:', e); setPushState('unsupported'); }
   };
 
-  const handleSaveProfile = async () => {
+  const handleSave = async () => {
     if (!user || !isDirty) return;
-
-    // ВАЛИДАЦИЯ ССЫЛКИ МАГАЗИНА (Только латиница и дефис)
-    if (profile.type === 'business' && profile.customUrl) {
-      const urlRegex = /^[a-z0-9-]+$/i;
-      if (!urlRegex.test(profile.customUrl)) {
-        alert("Ссылка магазина может содержать только латинские буквы, цифры и дефис без пробелов!");
-        return;
-      }
-      // Приводим к нижнему регистру
-      profile.customUrl = profile.customUrl.toLowerCase();
-    }
-
     setIsSaving(true);
     try {
-      await setDoc(doc(db, 'users', user.uid), {
-        ...profile,
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-
+      await setDoc(doc(db, 'users', user.uid), { ...profile, updatedAt: new Date().toISOString() }, { merge: true });
       if (auth.currentUser) {
         await updateProfile(auth.currentUser, { displayName: profile.name, photoURL: profile.avatar });
         setUser({ ...auth.currentUser });
       }
-
-      setOriginalProfile(profile); 
+      setOriginal(profile);
       setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
-    } catch (error) {
-      console.error('Ошибка сохранения профиля:', error);
+      setTimeout(() => setShowSuccess(false), 2500);
+    } catch (e) {
+      console.error('Ошибка сохранения профиля:', e);
     } finally {
       setIsSaving(false);
     }
   };
 
-  const openBusinessSetup = () => {
-    setTempCategory(profile.category || BUSINESS_CATEGORIES[0]);
-    if (profile.location === 'Онлайн-магазин' || !profile.location) {
-      setTempLocationType('online');
-      setTempCity('');
-    } else {
-      setTempLocationType('offline');
-      setTempCity(profile.location);
-    }
-    setBusinessSetupStep(1);
-    setShowBusinessSetupModal(true);
-  };
-
-  const handleTypeChange = (newType: string) => {
-    if (newType === 'business' && profile.type !== 'business') {
-      openBusinessSetup();
-    } else if (newType === 'personal') {
-      setProfile({ ...profile, type: 'personal' });
-    }
-  };
-
-  const confirmBusinessSetup = () => {
-    if (!tempCategory || !tempLocationType) return;
-    const finalLocation = tempLocationType === 'online' ? 'Онлайн-магазин' : tempCity.trim();
-    if (tempLocationType === 'offline' && !finalLocation) return; 
-
-    setProfile({ 
-      ...profile, 
-      type: 'business', 
-      category: tempCategory,
-      location: finalLocation
-    });
-    setShowBusinessSetupModal(false);
-  };
-
-  const handleAddProduct = () => {
-    if (!newProduct.name || !newProduct.price) return;
-    const productToAdd = { ...newProduct, id: Date.now().toString() };
-    setProfile({ ...profile, products: [productToAdd, ...profile.products] });
-    setNewProduct({ id: '', name: '', price: '', description: '', imageUrl: '' });
-    setIsAddingProduct(false);
-  };
-
-  const handleRemoveProduct = (productId: string) => {
-    if (window.confirm('Удалить этот товар?')) {
-      setProfile({ ...profile, products: profile.products.filter(p => p.id !== productId) });
-    }
-  };
-
-  const handleSaveEditProduct = () => {
-    if (!editingProduct || !editingProduct.name || !editingProduct.price) return;
-    setProfile({
-      ...profile,
-      products: profile.products.map(p => p.id === editingProduct.id ? editingProduct : p)
-    });
-    setEditingProduct(null);
-  };
-
-  const toggleGoal = (goalId: string) => {
-    setProfile(prev => {
-      const newGoals = prev.goals.includes(goalId) 
-        ? prev.goals.filter(g => g !== goalId) 
-        : [...prev.goals, goalId];
-      return { ...prev, goals: newGoals };
-    });
-  };
-
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.error('Ошибка при выходе:', error);
-    }
-  };
-
-  const blockClass = "bg-white dark:bg-gray-900 rounded-[24px] overflow-hidden border border-gray-200/50 dark:border-gray-800 mb-6 transition-colors shadow-sm";
-  const inputRowClass = "flex items-center px-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0";
-  const inputClass = "flex-1 bg-transparent text-[15px] font-medium text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none ml-3 w-full";
+  const block = 'bg-white dark:bg-gray-900 rounded-[24px] overflow-hidden border border-gray-200/50 dark:border-gray-800 mb-6';
+  const row = 'flex items-center justify-between px-4 py-4 border-b border-gray-100 dark:border-gray-800 last:border-0 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors';
+  const input = 'w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-[15px] font-medium text-gray-900 dark:text-white outline-none focus:border-blue-500';
 
   if (isLoading) {
-    return <div className="flex-1 bg-gray-50 dark:bg-gray-950 flex justify-center items-center transition-colors"><Loader2 className="animate-spin text-gray-400" size={32} /></div>;
+    return <div className="flex-1 flex justify-center items-center bg-gray-50 dark:bg-gray-950"><Loader2 className="animate-spin text-blue-500" size={32} /></div>;
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950 select-none pb-[calc(env(safe-area-inset-bottom)+80px)] custom-scrollbar transition-colors relative">
-      
-      <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl sticky top-0 z-20 border-b border-gray-200/60 dark:border-gray-800 px-4 pt-[calc(env(safe-area-inset-top)+12px)] pb-3 flex items-center justify-between transition-colors shadow-sm">
+    <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950 pb-[calc(env(safe-area-inset-bottom)+80px)]">
+      <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl sticky top-0 z-20 border-b border-gray-200/60 dark:border-gray-800 px-4 pt-[calc(env(safe-area-inset-top)+12px)] pb-3 flex items-center justify-between">
         <h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight ml-2">Настройки</h1>
-        <button 
-          onClick={handleSaveProfile} 
-          disabled={!isDirty || isSaving} 
-          className={`text-[14px] font-bold px-5 py-2 rounded-full transition-all duration-300 flex items-center gap-1.5 ${
-            showSuccess 
-              ? 'bg-green-500 text-white shadow-md' 
-              : isDirty 
-                ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/30 scale-100' 
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed scale-95'
+        <button
+          onClick={handleSave}
+          disabled={!isDirty || isSaving}
+          className={`text-[14px] font-bold px-5 py-2 rounded-full transition-all flex items-center gap-1.5 ${
+            showSuccess ? 'bg-green-500 text-white' : isDirty ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed'
           }`}
         >
           {isSaving ? <Loader2 size={16} className="animate-spin" /> : showSuccess ? <><Check size={16} /> Сохранено</> : 'Сохранить'}
         </button>
       </div>
 
-      <div className="max-w-2xl mx-auto p-4 md:p-6 space-y-8">
-        
-        {/* ИНФОРМАЦИЯ О ПРОФИЛЕ */}
-        <div className="bg-white dark:bg-gray-900 rounded-[32px] p-5 shadow-sm border border-gray-200/50 dark:border-gray-800 flex flex-col md:flex-row gap-5 items-center md:items-start transition-colors relative overflow-hidden">
-          <div className="flex flex-col items-center shrink-0 z-10">
-            <div className="relative group cursor-pointer w-24 h-24 md:w-28 md:h-28" onClick={() => avatarInputRef.current?.click()}>
-              <img src={profile.avatar} alt="Avatar" loading="lazy" className="w-full h-full rounded-[24px] object-cover shadow-sm bg-gray-100 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 transition-colors" />
-              <div className="absolute inset-0 bg-black/40 rounded-[24px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <Camera size={24} className="text-white" />
-              </div>
-              {isUploadingAvatar && <div className="absolute inset-0 bg-white/60 dark:bg-black/60 rounded-[24px] flex items-center justify-center"><Loader2 size={24} className="animate-spin text-gray-900 dark:text-white" /></div>}
-              <input type="file" ref={avatarInputRef} onChange={handleAvatarChange} accept="image/*" className="hidden" />
+      <div className="max-w-2xl mx-auto p-4 md:p-6 space-y-2">
+        <div className={`${block} p-5 flex flex-col items-center gap-4`}>
+          <div className="relative group cursor-pointer w-28 h-28" onClick={() => fileRef.current?.click()}>
+            <img
+              src={profile.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name || 'U')}&background=random`}
+              alt="Avatar"
+              className="w-full h-full rounded-[28px] object-cover bg-gray-100 dark:bg-gray-800"
+            />
+            <div className="absolute inset-0 bg-black/40 rounded-[28px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <Camera size={24} className="text-white" />
             </div>
+            {isUploading && <div className="absolute inset-0 bg-white/60 dark:bg-black/60 rounded-[28px] flex items-center justify-center"><Loader2 className="animate-spin text-blue-500" /></div>}
+            <input type="file" ref={fileRef} onChange={handleAvatar} accept="image/*" className="hidden" />
           </div>
-          <div className="flex flex-col flex-1 space-y-3 w-full z-10">
-            <div>
-              <span className="text-[12px] font-bold text-gray-400 uppercase tracking-widest ml-1 mb-1 block">Имя / Бренд</span>
-              <input type="text" value={profile.name} onChange={(e) => setProfile({...profile, name: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 px-4 py-3 rounded-2xl text-[16px] font-black text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500/50 transition-shadow" placeholder="Название..." />
-            </div>
-            <div>
-              <span className="text-[12px] font-bold text-gray-400 uppercase tracking-widest ml-1 mb-1 block">Описание (SEO Description)</span>
-              <textarea value={profile.role} onChange={(e) => setProfile({...profile, role: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 px-4 py-3 rounded-2xl text-[14px] font-medium text-gray-900 dark:text-white placeholder-gray-400 outline-none resize-none h-20 custom-scrollbar focus:ring-2 focus:ring-blue-500/50 transition-shadow" placeholder="Расскажите о себе или своем бизнесе..." />
+          <div className="w-full space-y-3">
+            <input className={input} placeholder="Имя" value={profile.name} maxLength={50} onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
+            <textarea className={`${input} resize-none`} rows={3} placeholder="О себе" value={profile.role} maxLength={200} onChange={(e) => setProfile({ ...profile, role: e.target.value })} />
+            <div className="relative">
+              <Phone size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input className={`${input} pl-11`} placeholder="Телефон (необязательно)" value={profile.contacts.phone} onChange={(e) => setProfile({ ...profile, contacts: { phone: e.target.value } })} />
             </div>
           </div>
         </div>
 
-        {/* АНКЕТНЫЕ ДАННЫЕ */}
-        <div>
-          <h2 className="text-[13px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-3">Анкетные данные</h2>
-          <div className={blockClass}>
-            <div className={inputRowClass}>
-              <MapPin size={18} className="text-gray-400 dark:text-gray-500 shrink-0" />
-              <input type="text" placeholder="Город (например: Киев)" value={profile.location} onChange={(e) => setProfile({...profile, location: e.target.value})} className={inputClass} />
+        <h2 className="text-[13px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-3">Уведомления и вид</h2>
+        <div className={block}>
+          <div className={row} onClick={() => setSoundEnabled(!soundEnabled)}>
+            <span className="flex items-center gap-3 text-[15px] font-bold text-gray-900 dark:text-white"><Volume2 size={18} /> Звук сообщений</span>
+            <Toggle on={soundEnabled} />
+          </div>
+          <div className={row} onClick={() => setPushEnabled(!pushEnabled)}>
+            <span className="flex items-center gap-3 text-[15px] font-bold text-gray-900 dark:text-white"><Bell size={18} /> Всплывающие уведомления</span>
+            <Toggle on={pushEnabled} />
+          </div>
+          {isPushConfigured() && (
+            <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100 dark:border-gray-800">
+              <span className="text-[15px] font-bold text-gray-900 dark:text-white">
+                Push, когда приложение закрыто
+                <span className="block text-[12px] font-medium text-gray-500 dark:text-gray-400 mt-0.5">
+                  {pushState === 'granted' || (pushState === 'idle' && typeof Notification !== 'undefined' && Notification.permission === 'granted') ? 'Включено на этом устройстве'
+                    : pushState === 'denied' ? 'Запрещено в настройках браузера'
+                    : pushState === 'unsupported' ? 'Не поддерживается этим браузером'
+                    : 'Выключено'}
+                </span>
+              </span>
+              <button onClick={handleEnablePush} disabled={pushState === 'loading'} className="px-4 py-2 rounded-full bg-blue-500 hover:bg-blue-600 text-white text-[13px] font-bold disabled:opacity-50 flex items-center gap-1.5">
+                {pushState === 'loading' ? <Loader2 size={14} className="animate-spin" /> : 'Включить'}
+              </button>
             </div>
-            <div className="flex items-center px-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
-              <Users size={18} className="text-gray-400 dark:text-gray-500 shrink-0" />
-              <div className="flex-1 ml-3 flex gap-2">
-                <button onClick={() => setProfile({...profile, gender: 'Мужской'})} className={`flex-1 py-2.5 rounded-xl text-[13px] font-bold transition-all ${profile.gender === 'Мужской' ? 'bg-blue-500 text-white shadow-md shadow-blue-500/20' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200'}`}>Мужской</button>
-                <button onClick={() => setProfile({...profile, gender: 'Женский'})} className={`flex-1 py-2.5 rounded-xl text-[13px] font-bold transition-all ${profile.gender === 'Женский' ? 'bg-pink-500 text-white shadow-md shadow-pink-500/20' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200'}`}>Женский</button>
-              </div>
-            </div>
-            <div className={inputRowClass}>
-              <div className="w-[18px] text-center font-black text-gray-400 dark:text-gray-500 shrink-0 text-[12px]">18+</div>
-              <input type="number" placeholder="Возраст" value={profile.age || ''} onChange={(e) => setProfile({...profile, age: e.target.value ? Number(e.target.value) : ''})} className={inputClass} />
-            </div>
+          )}
+          <div className={row} onClick={toggleTheme}>
+            <span className="flex items-center gap-3 text-[15px] font-bold text-gray-900 dark:text-white">{isDark ? <Moon size={18} /> : <Sun size={18} />} Тёмная тема</span>
+            <Toggle on={isDark} />
           </div>
         </div>
 
-        {/* ТИП АККАУНТА */}
-        <div>
-          <h2 className="text-[13px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-3">Тип аккаунта</h2>
-          <div className={blockClass}>
-            <div className="flex bg-gray-50 dark:bg-gray-800/50 p-1.5 m-2 rounded-[16px] transition-colors">
-              <button onClick={() => handleTypeChange('personal')} className={`flex-1 flex justify-center items-center gap-2 py-2.5 rounded-xl text-[14px] font-bold transition-all shadow-sm ${profile.type === 'personal' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-200/50 dark:border-gray-600' : 'text-gray-500 dark:text-gray-400 shadow-none'}`}><User size={16} /> Обычный</button>
-              <button onClick={() => handleTypeChange('business')} className={`flex-1 flex justify-center items-center gap-2 py-2.5 rounded-xl text-[14px] font-bold transition-all shadow-sm ${profile.type === 'business' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-200/50 dark:border-gray-600' : 'text-gray-500 dark:text-gray-400 shadow-none'}`}><Briefcase size={16} /> Бизнес</button>
-            </div>
-          </div>
-        </div>
-
-        {/* БЛОК ДЛЯ БИЗНЕСА */}
-        {profile.type === 'business' && (
-          <div className="animate-fade-in space-y-8">
-            
-            {/* Настройка Категории и Локации бизнеса */}
-            <div className={blockClass}>
-              <div className="flex items-center justify-between px-4 py-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors border-b border-gray-100 dark:border-gray-800" onClick={openBusinessSetup}>
-                <div className="flex-1 min-w-0 pr-4">
-                  <span className="text-[15px] font-black text-gray-900 dark:text-white block truncate">Настройки магазина</span>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="bg-blue-50 dark:bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded-md text-[11px] font-bold truncate">{profile.category || 'Без категории'}</span>
-                    <span className="bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-md text-[11px] font-bold truncate">{profile.location || 'Онлайн-магазин'}</span>
-                  </div>
-                </div>
-                <Edit2 size={18} className="text-gray-400 shrink-0" />
-              </div>
-              
-              {/* НАСТРОЙКА УНИКАЛЬНОЙ ССЫЛКИ (URL) */}
-              <div className="px-4 py-4">
-                <span className="text-[12px] font-bold text-gray-400 uppercase tracking-widest block mb-2">Ссылка на ваш магазин</span>
-                <div className="flex items-center bg-gray-50 dark:bg-gray-800 rounded-xl px-3 py-2 border border-gray-200 dark:border-gray-700 focus-within:ring-2 focus-within:ring-blue-500/50">
-                  <Link2 size={16} className="text-gray-400 mr-2 shrink-0" />
-                  <span className="text-[13px] font-medium text-gray-500 shrink-0">auragram.com/#/shop/</span>
-                  <input 
-                    type="text" 
-                    placeholder="mysuperstore" 
-                    value={profile.customUrl} 
-                    onChange={(e) => setProfile({...profile, customUrl: e.target.value.replace(/[^a-zA-Z0-9-]/g, '')})} 
-                    className="flex-1 bg-transparent border-none outline-none text-[14px] font-bold text-blue-500 placeholder-gray-300 dark:placeholder-gray-600 min-w-[100px]" 
-                  />
-                </div>
-                <p className="text-[11px] text-gray-400 mt-2">Придумайте красивую ссылку (только латиница и дефис). Оставьте пустым, чтобы использовать системный ID.</p>
-              </div>
-            </div>
-            
-            {/* AI Assistant */}
-            <div>
-              <h2 className="text-[13px] font-black text-indigo-500 dark:text-indigo-400 uppercase tracking-widest px-4 mb-3 flex items-center gap-1.5"><Zap size={16}/> ИИ-Автоматизация</h2>
-              <div className={`${blockClass} border-indigo-100 dark:border-indigo-900/50`}>
-                <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100 dark:border-gray-800 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={() => setProfile({...profile, aiSettings: {...profile.aiSettings, isEnabled: !profile.aiSettings.isEnabled}})}>
-                  <div>
-                    <span className="text-[15px] font-bold text-gray-900 dark:text-white block">ИИ Ассистент продаж</span>
-                    <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400 block mt-0.5">Включить автоматические ответы для клиентов</span>
-                  </div>
-                  <div className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${profile.aiSettings.isEnabled ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                    <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${profile.aiSettings.isEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
-                  </div>
-                </div>
-                
-                {profile.aiSettings.isEnabled && (
-                  <>
-                    <div className="flex flex-col px-4 py-4 border-b border-gray-100 dark:border-gray-800">
-                      <span className="text-[13px] font-bold text-gray-900 dark:text-gray-100 mb-1">Промпт контекста магазина</span>
-                      <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-3">Опишите условия доставки, возврата, цены и гарантии. ИИ будет использовать это для ответов.</span>
-                      <textarea 
-                        value={profile.aiSettings.contextPrompt} 
-                        onChange={(e) => setProfile({...profile, aiSettings: {...profile.aiSettings, contextPrompt: e.target.value}})} 
-                        className="w-full bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/50 rounded-2xl p-4 text-[14px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none h-24 custom-scrollbar focus:ring-2 focus:ring-indigo-500/50 transition-shadow" 
-                        placeholder="Например: Доставка Новой Почтой, гарантия 15 дней. Мы продаем только оригинальную обувь..." 
-                      />
-                    </div>
-                    <div className="flex items-center justify-between px-4 py-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={() => setProfile({...profile, aiSettings: {...profile.aiSettings, followUps: !profile.aiSettings.followUps}})}>
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center text-indigo-500 shrink-0"><MessageSquareText size={16} /></div>
-                        <div>
-                          <span className="text-[14px] font-bold text-gray-900 dark:text-white block">Шаблоны Follow-up</span>
-                          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 block mt-0.5">Предлагать готовые варианты продолжения диалога</span>
-                        </div>
-                      </div>
-                      <div className={`w-10 h-5 rounded-full flex items-center p-1 transition-colors ${profile.aiSettings.followUps ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                        <div className={`w-3 h-3 bg-white rounded-full shadow-sm transform transition-transform ${profile.aiSettings.followUps ? 'translate-x-5' : 'translate-x-0'}`} />
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <h2 className="text-[13px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-3">Контакты бизнеса</h2>
-              <div className={blockClass}>
-                <div className={inputRowClass}>
-                  <Phone size={18} className="text-gray-400 dark:text-gray-500 shrink-0" />
-                  <input type="text" placeholder="Телефон" value={profile.contacts.phone} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, phone: e.target.value}})} className={inputClass} />
-                </div>
-                <div className={inputRowClass}>
-                  <Globe size={18} className="text-gray-400 dark:text-gray-500 shrink-0" />
-                  <input type="text" placeholder="Сайт или ссылка" value={profile.contacts.website} onChange={(e) => setProfile({...profile, contacts: {...profile.contacts, website: e.target.value}})} className={inputClass} />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between px-4 mb-3">
-                <h2 className="text-[13px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">Витрина ({profile.products.length})</h2>
-                <button onClick={() => { setIsAddingProduct(!isAddingProduct); setEditingProduct(null); }} className="text-[13px] font-bold text-blue-500 flex items-center gap-1 hover:text-blue-600 transition-colors bg-blue-50 dark:bg-blue-500/10 px-3 py-1.5 rounded-lg shadow-sm">
-                  {isAddingProduct ? 'Отменить' : <><Plus size={14} /> Товар</>}
-                </button>
-              </div>
-
-              {(isAddingProduct || editingProduct) && (
-                <div className="bg-white dark:bg-gray-900 rounded-[32px] p-5 border border-gray-200 dark:border-gray-800 shadow-lg mb-6 transition-colors animate-slide-up">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div onClick={() => (editingProduct ? editProductImgInputRef : productImgInputRef).current?.click()} className="w-20 h-20 bg-gray-50 dark:bg-gray-800 rounded-2xl flex items-center justify-center cursor-pointer border border-dashed border-gray-300 dark:border-gray-700 shrink-0 overflow-hidden relative hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                      {(editingProduct ? editingProduct.imageUrl : newProduct.imageUrl) ? <img src={editingProduct ? editingProduct.imageUrl : newProduct.imageUrl} loading="lazy" className="w-full h-full object-cover" /> : <ImageIcon size={24} className="text-gray-400 dark:text-gray-500" />}
-                      {isUploadingProductImg && <div className="absolute inset-0 bg-white/70 dark:bg-black/60 flex items-center justify-center"><Loader2 size={18} className="animate-spin text-gray-900 dark:text-white" /></div>}
-                    </div>
-                    <div className="flex-1 space-y-2">
-                      <input type="text" placeholder="Название товара" value={editingProduct ? editingProduct.name : newProduct.name} onChange={e => editingProduct ? setEditingProduct({...editingProduct, name: e.target.value}) : setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 px-4 py-2.5 rounded-xl text-[15px] outline-none font-bold transition-colors focus:ring-2 focus:ring-blue-500/50" />
-                      <input type="text" placeholder="Цена (напр: 1500 ₴)" value={editingProduct ? editingProduct.price : newProduct.price} onChange={e => editingProduct ? setEditingProduct({...editingProduct, price: e.target.value}) : setNewProduct({...newProduct, price: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 px-4 py-2.5 rounded-xl text-[14px] font-bold outline-none transition-colors focus:ring-2 focus:ring-blue-500/50" />
-                    </div>
-                  </div>
-                  
-                  <textarea 
-                    placeholder="Описание товара..." 
-                    value={editingProduct ? editingProduct.description : newProduct.description} 
-                    onChange={e => editingProduct ? setEditingProduct({...editingProduct, description: e.target.value}) : setNewProduct({...newProduct, description: e.target.value})} 
-                    className="w-full bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 px-4 py-3 rounded-2xl text-[14px] font-medium outline-none resize-none h-24 custom-scrollbar transition-colors mb-4 focus:ring-2 focus:ring-blue-500/50" 
-                  />
-                  <input type="file" ref={productImgInputRef} onChange={(e) => handleProductImageChange(e, false)} accept="image/*" className="hidden" />
-                  <input type="file" ref={editProductImgInputRef} onChange={(e) => handleProductImageChange(e, true)} accept="image/*" className="hidden" />
-                  <button onClick={editingProduct ? handleSaveEditProduct : handleAddProduct} disabled={!(editingProduct ? editingProduct.name : newProduct.name) || !(editingProduct ? editingProduct.price : newProduct.price)} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3.5 rounded-2xl font-black text-[15px] disabled:opacity-50 transition-all active:scale-[0.98] shadow-md shadow-blue-500/25">
-                    {editingProduct ? 'Сохранить изменения' : 'Добавить в каталог'}
-                  </button>
-                </div>
-              )}
-
-              {profile.products.length > 0 ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {profile.products.map(product => (
-                    <div key={product.id} className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-[24px] overflow-hidden shadow-sm flex flex-col relative group transition-colors hover:shadow-md">
-                      <div className="relative w-full aspect-square bg-gray-50 dark:bg-gray-800 overflow-hidden shrink-0">
-                        {product.imageUrl ? <img src={product.imageUrl} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" /> : <Package className="absolute inset-0 m-auto text-gray-300 dark:text-gray-600" size={32} />}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                        <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                          <button onClick={() => { setEditingProduct(product); setIsAddingProduct(false); }} className="w-8 h-8 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md rounded-full flex items-center justify-center text-gray-700 dark:text-gray-300 shadow-sm hover:scale-110 hover:text-blue-500 transition-all"><Edit2 size={14} /></button>
-                          <button onClick={() => handleRemoveProduct(product.id)} className="w-8 h-8 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md rounded-full flex items-center justify-center text-rose-500 shadow-sm hover:scale-110 transition-all"><Trash2 size={14} /></button>
-                        </div>
-                      </div>
-                      <div className="p-3">
-                        <p className="font-bold text-gray-900 dark:text-white text-[13px] truncate mb-1">{product.name}</p>
-                        <p className="text-[14px] font-black text-blue-500 tracking-tight">{product.price}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                 <div className="text-center py-10 bg-white dark:bg-gray-900 rounded-[24px] border border-gray-200/50 dark:border-gray-800 border-dashed text-gray-400 dark:text-gray-500 transition-colors shadow-sm">
-                   <Package size={32} className="mx-auto mb-3 opacity-50" />
-                   <p className="text-[14px] font-bold">У вас пока нет товаров</p>
-                 </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ТЕМА */}
-        <div>
-          <h2 className="text-[13px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-3 mt-8">Оформление</h2>
-          <div className={blockClass}>
-            <div className="flex items-center justify-between px-4 py-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={toggleTheme}>
-              <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isDark ? 'bg-blue-500/10 text-blue-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                  {isDark ? <Moon size={18} /> : <Sun size={18} />}
-                </div>
-                <span className="text-[15px] font-bold text-gray-900 dark:text-white">Ночная тема</span>
-              </div>
-              <div className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${isDark ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${isDark ? 'translate-x-6' : 'translate-x-0'}`} />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ЦЕЛИ (МОДУЛИ) */}
-        <div>
-          <h2 className="text-[13px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-3 mt-8 flex items-center gap-1.5"><Target size={16}/> Модули системы</h2>
-          <div className={blockClass}>
-            <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100 dark:border-gray-800 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={() => toggleGoal('dating')}>
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${profile.goals.includes('dating') ? 'bg-pink-500/10 text-pink-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
-                  <Heart size={20} className={profile.goals.includes('dating') ? "fill-pink-500/20" : ""} />
-                </div>
-                <div>
-                  <span className="text-[15px] font-bold text-gray-900 dark:text-white block">Знакомства</span>
-                  <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400 block mt-0.5">Классическая Tinder-свайпалка</span>
-                </div>
-              </div>
-              <div className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${profile.goals.includes('dating') ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${profile.goals.includes('dating') ? 'translate-x-6' : 'translate-x-0'}`} />
-              </div>
-            </div>
-            
-            <div className="flex items-center justify-between px-4 py-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onClick={() => toggleGoal('productivity')}>
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${profile.goals.includes('productivity') ? 'bg-indigo-500/10 text-indigo-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
-                  <LayoutDashboard size={20} />
-                </div>
-                <div>
-                  <span className="text-[15px] font-bold text-gray-900 dark:text-white block">Продуктивность</span>
-                  <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400 block mt-0.5">Mind Map, Задачи, Таймер</span>
-                </div>
-              </div>
-              <div className={`w-12 h-6 rounded-full flex items-center p-1 transition-colors ${profile.goals.includes('productivity') ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${profile.goals.includes('productivity') ? 'translate-x-6' : 'translate-x-0'}`} />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* НАСТРОЙКА МЕНЮ (DRAG AND DROP) */}
-        <div>
-          <h2 className="text-[13px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest px-4 mb-2 mt-8 flex items-center gap-1.5"><LayoutList size={16}/> Навигация</h2>
-          <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 px-4 mb-4">Зажмите и потяните пункт, чтобы изменить порядок меню в приложении.</p>
-          <div className={`${blockClass} py-2`}>
-            {activeMenuItems.map((item, index) => (
-              <div 
-                key={item.id}
-                data-sort-index={index}
-                draggable
-                onDragStart={() => { dragItem.current = index; setDraggedIndex(index); }}
-                onDragEnter={() => { dragOverItem.current = index; swapItems(); }}
-                onDragEnd={handleDragEnd}
-                onDragOver={(e) => e.preventDefault()}
-                onTouchStart={() => handleTouchStart(index)}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleDragEnd}
-                className={`flex items-center justify-between px-4 py-3 transition-colors cursor-grab active:cursor-grabbing border-b border-gray-100 dark:border-gray-800 last:border-0 select-none ${
-                  draggedIndex === index ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
-                }`}
-              >
-                <div className="flex items-center gap-3 pointer-events-none">
-                  <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                    <item.icon size={16} className="text-gray-500 dark:text-gray-400" />
-                  </div>
-                  <span className="text-[15px] font-bold text-gray-900 dark:text-white">{item.label}</span>
-                </div>
-                <GripVertical size={20} className="text-gray-300 dark:text-gray-600" />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ВЫХОД ИЗ АККАУНТА */}
-        <div className="mt-10 mb-6">
-          <button 
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 py-4 bg-white dark:bg-gray-900 border border-rose-100 dark:border-rose-900/30 hover:bg-rose-50 dark:hover:bg-rose-500/10 text-rose-500 rounded-[24px] font-black transition-all active:scale-[0.98] shadow-sm text-[15px]"
-          >
-            <LogOut size={20} /> Выйти из аккаунта
-          </button>
-        </div>
-
+        <button
+          onClick={() => signOut(auth).catch((e) => console.error(e))}
+          className="w-full flex items-center justify-center gap-2 py-4 bg-white dark:bg-gray-900 border border-rose-100 dark:border-rose-900/30 hover:bg-rose-50 dark:hover:bg-rose-900/10 text-rose-500 font-bold rounded-[24px] transition-colors"
+        >
+          <LogOut size={20} /> Выйти из аккаунта
+        </button>
       </div>
-
-      {/* ========================================== */}
-      {/* МНОГОШАГОВАЯ МОДАЛКА НАСТРОЙКИ БИЗНЕСА      */}
-      {/* ========================================== */}
-      {showBusinessSetupModal && (
-        <div className="fixed inset-0 z-[200] bg-gray-950/80 backdrop-blur-sm flex justify-center items-center p-4 animate-fade-in" onClick={() => setShowBusinessSetupModal(false)}>
-          <div className="bg-white dark:bg-gray-900 w-full max-w-sm rounded-[32px] shadow-2xl flex flex-col animate-scale-up overflow-hidden" onClick={e => e.stopPropagation()}>
-            
-            <div className="p-6 text-center border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
-              <div className="w-16 h-16 bg-blue-50 dark:bg-blue-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-inner">
-                {businessSetupStep === 1 ? <Briefcase size={32} className="text-blue-500" /> : <MapPin size={32} className="text-blue-500" />}
-              </div>
-              <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight mb-2">
-                {businessSetupStep === 1 ? 'Настройка Магазина' : 'Формат работы'}
-              </h2>
-              <p className="text-[14px] font-medium text-gray-500 dark:text-gray-400">
-                {businessSetupStep === 1 
-                  ? 'Выберите категорию вашего бизнеса. Это поможет покупателям быстрее найти вас.' 
-                  : 'Укажите, как вы работаете с клиентами: онлайн или имеете физическую точку.'}
-              </p>
-            </div>
-            
-            {/* ШАГ 1: ВЫБОР КАТЕГОРИИ */}
-            {businessSetupStep === 1 && (
-              <div className="p-4 max-h-[40vh] overflow-y-auto custom-scrollbar flex flex-col gap-2">
-                {BUSINESS_CATEGORIES.map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setTempCategory(cat)}
-                    className={`w-full text-left px-5 py-3.5 rounded-[16px] font-bold text-[14px] transition-all flex items-center justify-between ${
-                      tempCategory === cat 
-                        ? 'bg-blue-500 text-white shadow-md' 
-                        : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    {cat}
-                    {tempCategory === cat && <Check size={18} className="text-white" />}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* ШАГ 2: ВЫБОР ФОРМАТА (ОНЛАЙН / ОФЛАЙН + ГОРОД) */}
-            {businessSetupStep === 2 && (
-              <div className="p-5 max-h-[40vh] overflow-y-auto custom-scrollbar flex flex-col gap-4">
-                
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setTempLocationType('online')}
-                    className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${
-                      tempLocationType === 'online'
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                        : 'border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 text-gray-500'
-                    }`}
-                  >
-                    <Wifi size={24} />
-                    <span className="text-[13px] font-bold text-center leading-tight">Онлайн<br/>Сервис</span>
-                  </button>
-
-                  <button
-                    onClick={() => setTempLocationType('offline')}
-                    className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${
-                      tempLocationType === 'offline'
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                        : 'border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 text-gray-500'
-                    }`}
-                  >
-                    <MapPin size={24} />
-                    <span className="text-[13px] font-bold text-center leading-tight">Офлайн<br/>(Офис/Город)</span>
-                  </button>
-                </div>
-
-                {/* Если выбран ОФЛАЙН, требуем ввести город */}
-                {tempLocationType === 'offline' && (
-                  <div className="animate-fade-in mt-2">
-                    <span className="text-[12px] font-bold text-gray-400 uppercase tracking-widest ml-1 mb-1.5 block">Укажите город или адрес *</span>
-                    <input 
-                      type="text" 
-                      value={tempCity}
-                      onChange={(e) => setTempCity(e.target.value)}
-                      placeholder="Например: г. Киев"
-                      className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-4 py-3.5 rounded-xl text-[15px] font-bold text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500/50 transition-shadow"
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* НАВИГАЦИОННЫЕ КНОПКИ МОДАЛКИ */}
-            <div className="p-6 pt-2 flex gap-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
-              <button 
-                onClick={() => {
-                  if (businessSetupStep === 2) setBusinessSetupStep(1);
-                  else setShowBusinessSetupModal(false);
-                }}
-                className="flex-1 py-3.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl font-bold transition-colors shadow-sm"
-              >
-                {businessSetupStep === 2 ? 'Назад' : 'Отмена'}
-              </button>
-              
-              <button 
-                onClick={() => {
-                  if (businessSetupStep === 1) setBusinessSetupStep(2);
-                  else confirmBusinessSetup();
-                }}
-                disabled={businessSetupStep === 1 ? !tempCategory : (tempLocationType === 'offline' && !tempCity.trim()) || !tempLocationType}
-                className="flex-1 py-3.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-500/25 active:scale-95 transition-all disabled:opacity-50 disabled:shadow-none"
-              >
-                {businessSetupStep === 1 ? 'Далее' : 'Сохранить'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }

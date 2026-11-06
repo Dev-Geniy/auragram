@@ -5,24 +5,16 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './services/firebase';
 import { useAuthStore } from './store/useAuthStore';
 
-import { 
-  MessageCircle, Store, Settings, Hexagon,
-  Heart, ShoppingBag, LineChart, LayoutDashboard, Menu, X
-} from 'lucide-react';
+import { MessageCircle, Settings, Hexagon } from 'lucide-react';
 
 import GlobalNotifications from './components/GlobalNotifications';
-import ProductivityLayout from './pages/productivity/ProductivityLayout';
 
 // ==========================================
 // ЛЕНИВАЯ ЗАГРУЗКА СТРАНИЦ
 // ==========================================
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const ChatsPage = lazy(() => import('./pages/ChatsPage'));
-const MarketPage = lazy(() => import('./pages/MarketPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
-const ShopPage = lazy(() => import('./pages/ShopPage'));
-const DatingPage = lazy(() => import('./pages/DatingPage'));
-const CRMPage = lazy(() => import('./pages/CRMPage'));
 
 // ==========================================
 // ГЛОБАЛЬНЫЙ ЗАГРУЗЧИК (COSMIC STYLE)
@@ -64,7 +56,6 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const { user } = useAuthStore();
   const [profile, setProfile] = useState<any>(null);
-  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebarCollapsed');
@@ -85,7 +76,7 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
     return () => unsubscribe();
   }, [user]);
 
-  // Если пользователя нет (гостевой режим для магазина), не рендерим меню
+  // Без авторизации меню не показываем
   if (!user) {
     return (
       <div className="flex h-[100dvh] bg-[#F5F5F7] dark:bg-[#030712] overflow-hidden font-sans antialiased text-gray-900 dark:text-gray-100 transition-colors duration-300">
@@ -98,41 +89,12 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  const availableItems = [];
-  
-  if (profile?.goals?.includes('dating')) {
-    availableItems.push({ id: 'dating', path: '/dating', icon: <Heart size={22} strokeWidth={2} />, label: 'Знакомства' });
-  }
-  
-  availableItems.push({ id: 'chats', path: '/chats', icon: <MessageCircle size={22} strokeWidth={2} />, label: 'Чаты' });
-  availableItems.push({ id: 'market', path: '/market', icon: <Store size={22} strokeWidth={2} />, label: 'Маркет' });
-  
-  if (profile?.type === 'business') {
-    const shopLink = profile.customUrl ? profile.customUrl : user.uid;
-    availableItems.push({ id: 'myshop', path: `/shop/${shopLink}`, icon: <ShoppingBag size={22} strokeWidth={2} />, label: 'Мой магазин' });
-    availableItems.push({ id: 'crm', path: '/crm', icon: <LineChart size={22} strokeWidth={2} />, label: 'Smart CRM' });
-  }
+  const availableItems = [
+    { id: 'chats', path: '/chats', icon: <MessageCircle size={22} strokeWidth={2} />, label: 'Чаты' },
+    { id: 'profile', path: '/profile', icon: <Settings size={22} strokeWidth={2} />, label: 'Настройки' },
+  ];
 
-  if (profile?.goals?.includes('productivity')) {
-    availableItems.push({ id: 'productivity', path: '/productivity', icon: <LayoutDashboard size={22} strokeWidth={2} />, label: 'Продуктивность' });
-  }
-
-  availableItems.push({ id: 'profile', path: '/profile', icon: <Settings size={22} strokeWidth={2} />, label: 'Настройки' });
-
-  if (profile?.menuOrder && Array.isArray(profile.menuOrder)) {
-    availableItems.sort((a, b) => {
-      const idxA = profile.menuOrder.indexOf(a.id);
-      const idxB = profile.menuOrder.indexOf(b.id);
-      if (idxA === -1 && idxB === -1) return 0;
-      if (idxA === -1) return 1;
-      if (idxB === -1) return -1;
-      return idxA - idxB;
-    });
-  }
-
-  const isMobileOverflow = availableItems.length > 4;
-  const mobileNavItems = isMobileOverflow ? availableItems.slice(0, 3) : availableItems;
-  const mobileMoreItems = isMobileOverflow ? availableItems.slice(3) : [];
+  const mobileNavItems = availableItems;
 
   return (
     <div className="flex h-[100dvh] bg-[#F5F5F7] dark:bg-[#030712] overflow-hidden font-sans antialiased text-gray-900 dark:text-gray-100 transition-colors duration-300">
@@ -231,47 +193,12 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
       </aside>
 
       {/* 📱 ОСНОВНОЙ КОНТЕЙНЕР РЕНДЕРА СТРАНИЦ */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative pb-[80px] md:pb-0 transition-colors duration-300" z-10">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative pb-[80px] md:pb-0 transition-colors duration-300">
         
         <Suspense fallback={<GlobalLoader />}>
           {children}
         </Suspense>
       </main>
-
-      {/* 📱 ШТОРКА (БОЛЬШЕ ПУНКТов) ДЛЯ МОБИЛОК */}
-      {isMoreMenuOpen && isMobileOverflow && (
-        <div className="md:hidden fixed inset-0 z-[60] bg-gray-950/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end" onClick={() => setIsMoreMenuOpen(false)}>
-          <div 
-            className="bg-white/90 dark:bg-[#0A0A0B]/90 backdrop-blur-2xl rounded-t-[40px] p-6 pb-[100px] shadow-2xl animate-slide-up relative border-t border-white/20 dark:border-white/5"
-            onClick={e => e.stopPropagation()}
-          >
-            <button onClick={() => setIsMoreMenuOpen(false)} className="absolute top-4 right-4 w-10 h-10 bg-gray-100 dark:bg-white/10 rounded-full flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
-              <X size={20} />
-            </button>
-            <h3 className="text-[11px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-6 ml-2">Все сервисы</h3>
-            <div className="grid grid-cols-4 gap-y-6 gap-x-2">
-              {mobileMoreItems.map((item) => {
-                const isActive = location.pathname.startsWith(item.path);
-                return (
-                  <Link
-                    key={item.id}
-                    to={item.path}
-                    onClick={() => setIsMoreMenuOpen(false)}
-                    className="flex flex-col items-center gap-2.5 group"
-                  >
-                    <div className={`w-14 h-14 rounded-[20px] flex items-center justify-center transition-all duration-300 ${isActive ? 'bg-gray-900 dark:bg-white text-white dark:text-black shadow-lg scale-105' : 'bg-gray-50 dark:bg-[#151518] text-gray-600 dark:text-gray-400 group-hover:scale-105'}`}>
-                      {item.icon}
-                    </div>
-                    <span className={`text-[10px] font-bold text-center leading-tight w-full truncate px-1 transition-colors ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
-                      {item.label}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 📱 МОБИЛЬНОЕ НИЖНЕЕ МЕНЮ (GLASSMORPHISM) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-[70px] pb-safe bg-white/80 dark:bg-[#0A0A0B]/80 backdrop-blur-2xl border-t border-gray-200/50 dark:border-white/5 z-50 flex items-center justify-around px-2 transition-colors duration-300 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
@@ -292,20 +219,6 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
             </Link>
           );
         })}
-
-        {isMobileOverflow && (
-          <button
-            onClick={() => setIsMoreMenuOpen(true)}
-            className="flex flex-col items-center justify-center w-full h-full relative group"
-          >
-            <div className={`transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${isMoreMenuOpen ? 'text-gray-900 dark:text-white scale-110 -translate-y-2' : 'text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300'}`}>
-              <Menu size={24} strokeWidth={2.5} />
-            </div>
-            <span className={`absolute bottom-2 text-[10px] font-bold transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${isMoreMenuOpen ? 'text-gray-900 dark:text-white opacity-100 transform translate-y-0' : 'text-gray-400 dark:text-gray-500 opacity-0 transform translate-y-2'}`}>
-              Меню
-            </span>
-          </button>
-        )}
       </nav>
 
     </div>
@@ -353,15 +266,9 @@ export default function App() {
           
           <Route path="/" element={<Navigate to="/chats" replace />} />
           <Route path="/chats" element={<RequireAuth><MainLayout><ChatsPage /></MainLayout></RequireAuth>} />
-          <Route path="/market" element={<RequireAuth><MainLayout><MarketPage /></MainLayout></RequireAuth>} />
           <Route path="/profile" element={<RequireAuth><MainLayout><ProfilePage /></MainLayout></RequireAuth>} />
           
-          {/* РОУТ МАГАЗИНА: ДОСТУПЕН ДЛЯ ВСЕХ */}
-          <Route path="/shop/:id" element={<MainLayout><ShopPage /></MainLayout>} />
           
-          <Route path="/dating" element={<RequireAuth><MainLayout><DatingPage /></MainLayout></RequireAuth>} />
-          <Route path="/crm" element={<RequireAuth><MainLayout><CRMPage /></MainLayout></RequireAuth>} />
-          <Route path="/productivity" element={<RequireAuth><MainLayout><ProductivityLayout /></MainLayout></RequireAuth>} />
           
           <Route path="*" element={<Navigate to="/chats" replace />} />
         </Routes>
